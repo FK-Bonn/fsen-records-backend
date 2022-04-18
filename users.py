@@ -6,6 +6,7 @@ from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from jose import JWTError, jwt
 from pydantic import BaseModel
 from sqlalchemy import delete
+from sqlalchemy.exc import IntegrityError
 from starlette import status
 
 from config import Config
@@ -121,22 +122,28 @@ async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(
 
 @router.post("/user/create", dependencies=[Depends(admin_only)], response_model=UserWithPermissions)
 async def create_user(userdata: UserForCreation):
-    with DBHelper() as session:
-        items = []
-        user = User()
-        user.username = userdata.username
-        user.hashed_password = get_password_hash(userdata.password)
-        user.admin = userdata.admin
-        items.append(user)
-        for fs in userdata.permissions:
-            permission = Permission()
-            permission.user = userdata.username
-            permission.fs = fs
-            items.append(permission)
+    try:
+        with DBHelper() as session:
+            items = []
+            user = User()
+            user.username = userdata.username
+            user.hashed_password = get_password_hash(userdata.password)
+            user.admin = userdata.admin
+            items.append(user)
+            for fs in userdata.permissions:
+                permission = Permission()
+                permission.user = userdata.username
+                permission.fs = fs
+                items.append(permission)
 
-        session.add_all(items)
-        session.commit()
-        return {'username': user.username, 'admin': user.admin, 'permissions': [p.fs for p in user.permissions]}
+            session.add_all(items)
+            session.commit()
+            return {'username': user.username, 'admin': user.admin, 'permissions': [p.fs for p in user.permissions]}
+    except IntegrityError:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Already exists",
+        )
 
 
 @router.post("/user/permissions", dependencies=[Depends(admin_only)], response_model=UserWithPermissions)
