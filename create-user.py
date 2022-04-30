@@ -23,6 +23,7 @@ def main():
     user.username = username
     user.hashed_password = get_password_hash(password)
     user.admin = True
+    user.created_by = 'root'
     session.add_all([user])
     session.commit()
     session.close()

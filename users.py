@@ -7,6 +7,7 @@ from jose import JWTError, jwt
 from pydantic import BaseModel
 from sqlalchemy import delete
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import Session
 from starlette import status
 
 from config import Config
@@ -18,6 +19,16 @@ class Token(BaseModel):
     token_type: str
 
 
+class PermissionsForUser(BaseModel):
+    username: str
+    admin: bool
+    permissions: List[str]
+
+
+class UserWithPermissions(PermissionsForUser):
+    created_by: str
+
+
 class TokenData(BaseModel):
     username: Optional[str] = None
 
@@ -25,12 +36,6 @@ class TokenData(BaseModel):
 class UserForCreation(BaseModel):
     username: str
     password: str
-    admin: bool
-    permissions: List[str]
-
-
-class UserWithPermissions(BaseModel):
-    username: str
     admin: bool
     permissions: List[str]
 
@@ -120,15 +125,32 @@ async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(
     return {"access_token": access_token, "token_type": "bearer"}
 
 
-@router.post("/user/create", dependencies=[Depends(admin_only)], response_model=UserWithPermissions)
-async def create_user(userdata: UserForCreation):
+def check_if_user_may_grant_permissions(current_user: User, userdata: UserForCreation, session: Session):
+    creator: User = session.query(User).get(current_user.username)
+    if creator.admin:
+        return
+
+    creatorpermissions = {p.fs for p in creator.permissions}
+    userpermissions = set(userdata.permissions)
+    if userdata.admin or not userpermissions.issubset(creatorpermissions):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="User is not authorized to grant those permissions",
+        )
+
+
+@router.post("/user/create", response_model=UserWithPermissions)
+async def create_user(userdata: UserForCreation, current_user: User = Depends(get_current_user)):
     try:
         with DBHelper() as session:
+            check_if_user_may_grant_permissions(current_user, userdata, session)
+
             items = []
             user = User()
             user.username = userdata.username
             user.hashed_password = get_password_hash(userdata.password)
             user.admin = userdata.admin
+            user.created_by = current_user.username
             items.append(user)
             for fs in userdata.permissions:
                 permission = Permission()
@@ -138,7 +160,10 @@ async def create_user(userdata: UserForCreation):
 
             session.add_all(items)
             session.commit()
-            return {'username': user.username, 'admin': user.admin, 'permissions': [p.fs for p in user.permissions]}
+            return {'username': user.username,
+                    'admin': user.admin,
+                    'created_by': user.created_by,
+                    'permissions': [p.fs for p in user.permissions]}
     except IntegrityError:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -147,7 +172,7 @@ async def create_user(userdata: UserForCreation):
 
 
 @router.post("/user/permissions", dependencies=[Depends(admin_only)], response_model=UserWithPermissions)
-async def set_user_permissions(userdata: UserWithPermissions):
+async def set_user_permissions(userdata: PermissionsForUser):
     with DBHelper() as session:
         user: User = session.query(User).get(userdata.username)
         if not user:
@@ -164,7 +189,10 @@ async def set_user_permissions(userdata: UserWithPermissions):
             permission.fs = fs
             session.add(permission)
         session.commit()
-        return {'username': user.username, 'admin': user.admin, 'permissions': [p.fs for p in user.permissions]}
+        return {'username': user.username,
+                'admin': user.admin,
+                'created_by': user.created_by,
+                'permissions': [p.fs for p in user.permissions]}
 
 
 @router.get("/user", dependencies=[Depends(admin_only)], response_model=Dict[str, UserWithPermissions])
@@ -176,6 +204,7 @@ async def get_user_list():
             allusers[user.username] = {
                 'username': user.username,
                 'admin': user.admin,
+                'created_by': user.created_by,
                 'permissions': [p.fs for p in user.permissions],
             }
         return allusers
@@ -188,6 +217,7 @@ async def who_am_i(current_user: User = Depends(get_current_user)):
         return {
             'username': user.username,
             'admin': user.admin,
+            'created_by': user.created_by,
             'permissions': [p.fs for p in user.permissions],
         }
 

@@ -27,6 +27,7 @@ class User(Base):
     hashed_password = Column(String(200))
     admin = Column(Boolean(), default=False)
     permissions = relationship('Permission')
+    created_by = Column(String(200))
 
 
 class Permission(Base):

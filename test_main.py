@@ -34,15 +34,18 @@ class DBTestHelper:
         if do_init:
             user = User()
             user.username = "user"
+            user.created_by = "root"
             user.hashed_password = get_password_hash("password")
             user2 = User()
             user2.username = "user2"
+            user2.created_by = "root"
             user2.hashed_password = get_password_hash("password")
             permission = Permission()
             permission.user = user.username
             permission.fs = 'Informatik'
             admin = User()
             admin.username = "admin"
+            admin.created_by = "root"
             admin.hashed_password = get_password_hash("password")
             admin.admin = True
             self._session.add_all([user, permission, user2, admin])
@@ -134,6 +137,53 @@ def test_create_user():
                                  },
                            headers=get_auth_header('admin'))
     assert response.status_code == 200
+    usersresponse = client.get('/api/v1/user', headers=get_auth_header('admin'))
+    users = usersresponse.json()
+    assert users['user-to-create']['created_by'] == 'admin'
+
+
+def test_create_admin():
+    response = client.post('/api/v1/user/create',
+                           json={'username': 'user-to-create',
+                                 'password': 'password',
+                                 'admin': True,
+                                 'permissions': ['Informatik'],
+                                 },
+                           headers=get_auth_header('admin'))
+    assert response.status_code == 200
+
+
+def test_create_user_missing_permission():
+    response = client.post('/api/v1/user/create',
+                           json={'username': 'user-to-create',
+                                 'password': 'password',
+                                 'admin': False,
+                                 'permissions': ['Informatik'],
+                                 },
+                           headers=get_auth_header('user2'))
+    assert response.status_code == 401
+
+
+def test_create_admin_user_missing_permission():
+    response = client.post('/api/v1/user/create',
+                           json={'username': 'user-to-create',
+                                 'password': 'password',
+                                 'admin': True,
+                                 'permissions': [],
+                                 },
+                           headers=get_auth_header('user'))
+    assert response.status_code == 401
+
+
+def test_create_user_no_admin():
+    response = client.post('/api/v1/user/create',
+                           json={'username': 'user-to-create',
+                                 'password': 'password',
+                                 'admin': False,
+                                 'permissions': ['Informatik'],
+                                 },
+                           headers=get_auth_header('user'))
+    assert response.status_code == 200
 
 
 def test_set_user_permissions():
@@ -164,16 +214,16 @@ def test_get_users():
     response = client.get('/api/v1/user/', headers=get_auth_header('admin'))
     assert response.status_code == 200
     assert response.json() == {
-        'admin': {'username': 'admin', 'admin': True, 'permissions': []},
-        'user': {'username': 'user', 'admin': False, 'permissions': ['Informatik']},
-        'user2': {'username': 'user2', 'admin': False, 'permissions': []},
+        'admin': {'username': 'admin', 'admin': True, 'created_by': 'root', 'permissions': []},
+        'user': {'username': 'user', 'admin': False, 'created_by': 'root', 'permissions': ['Informatik']},
+        'user2': {'username': 'user2', 'admin': False, 'created_by': 'root', 'permissions': []},
     }
 
 
 @pytest.mark.parametrize('username,response_data', [
-    ['admin', {'username': 'admin', 'admin': True, 'permissions': []}],
-    ['user', {'username': 'user', 'admin': False, 'permissions': ['Informatik']}],
-    ['user2', {'username': 'user2', 'admin': False, 'permissions': []}],
+    ['admin', {'username': 'admin', 'admin': True, 'created_by': 'root', 'permissions': []}],
+    ['user', {'username': 'user', 'admin': False, 'created_by': 'root', 'permissions': ['Informatik']}],
+    ['user2', {'username': 'user2', 'admin': False, 'created_by': 'root', 'permissions': []}],
 ])
 def test_who_am_i(username: str, response_data: Dict[str, Any]):
     response = client.get('/api/v1/user/me', headers=get_auth_header(username))
