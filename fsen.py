@@ -10,7 +10,7 @@ from users import get_current_user, admin_only
 
 SUBFOLDERS = {
     'HHP-': 'HHP',
-    'HHR-': 'Kassenabrechnungen',
+    'HHR-': 'HHR',
     'KP-': 'Kassenpruefungen',
     'Prot-': 'Protokolle',
     'Wahlergebnis-': 'Wahlergebnisse',
