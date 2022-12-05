@@ -1,5 +1,5 @@
 from datetime import datetime, timedelta
-from typing import Optional, Union, List, Dict
+from typing import Optional, Union, List, Dict, Tuple
 
 from fastapi import HTTPException, Depends, APIRouter
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 from starlette import status
 
 from config import Config
-from database import DBHelper, User, verify_password, Permission, get_password_hash
+from database import DBHelper, User, verify_password, Permission as DbPermission, get_password_hash
 
 
 class Token(BaseModel):
@@ -19,10 +19,15 @@ class Token(BaseModel):
     token_type: str
 
 
+class Permission(BaseModel):
+    fs: str
+    level: int
+
+
 class PermissionsForUser(BaseModel):
     username: str
     admin: bool
-    permissions: List[str]
+    permissions: List[Permission]
 
 
 class UserWithPermissions(PermissionsForUser):
@@ -37,7 +42,7 @@ class UserForCreation(BaseModel):
     username: str
     password: str
     admin: bool
-    permissions: List[str]
+    permissions: List[Permission]
 
 
 class PasswordChangeData(BaseModel):
@@ -130,9 +135,12 @@ def check_if_user_may_grant_permissions(current_user: User, userdata: UserForCre
     if creator.admin:
         return
 
-    creatorpermissions = {p.fs for p in creator.permissions}
-    userpermissions = set(userdata.permissions)
-    if userdata.admin or not userpermissions.issubset(creatorpermissions):
+    creatorpermissions = {p.fs: p.level for p in creator.permissions}
+    is_subset = True
+    for permission in userdata.permissions:
+        if permission.fs not in creatorpermissions or creatorpermissions[permission.fs] < permission.level:
+            is_subset = False
+    if userdata.admin or not is_subset:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="User is not authorized to grant those permissions",
@@ -152,10 +160,11 @@ async def create_user(userdata: UserForCreation, current_user: User = Depends(ge
             user.admin = userdata.admin
             user.created_by = current_user.username
             items.append(user)
-            for fs in userdata.permissions:
-                permission = Permission()
+            for p in userdata.permissions:
+                permission = DbPermission()
                 permission.user = userdata.username
-                permission.fs = fs
+                permission.fs = p.fs
+                permission.level = p.level
                 items.append(permission)
 
             session.add_all(items)
@@ -163,7 +172,7 @@ async def create_user(userdata: UserForCreation, current_user: User = Depends(ge
             return {'username': user.username,
                     'admin': user.admin,
                     'created_by': user.created_by,
-                    'permissions': [p.fs for p in user.permissions]}
+                    'permissions': [{'fs': p.fs, 'level': p.level} for p in user.permissions]}
     except IntegrityError:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -181,18 +190,20 @@ async def set_user_permissions(userdata: PermissionsForUser):
                 detail="User not found",
             )
         user.admin = userdata.admin
-        stmt = delete(Permission).where(Permission.user == user.username).execution_options(synchronize_session="fetch")
+        stmt = delete(DbPermission).where(DbPermission.user == user.username).execution_options(
+            synchronize_session="fetch")
         session.execute(stmt)
-        for fs in userdata.permissions:
-            permission = Permission()
+        for p in userdata.permissions:
+            permission = DbPermission()
             permission.user = userdata.username
-            permission.fs = fs
+            permission.fs = p.fs
+            permission.level = p.level
             session.add(permission)
         session.commit()
         return {'username': user.username,
                 'admin': user.admin,
                 'created_by': user.created_by,
-                'permissions': [p.fs for p in user.permissions]}
+                'permissions': [{'fs': p.fs, 'level': p.level} for p in user.permissions]}
 
 
 @router.get("/user", dependencies=[Depends(admin_only)], response_model=Dict[str, UserWithPermissions])
@@ -205,7 +216,7 @@ async def get_user_list():
                 'username': user.username,
                 'admin': user.admin,
                 'created_by': user.created_by,
-                'permissions': [p.fs for p in user.permissions],
+                'permissions': [{'fs': p.fs, 'level': p.level} for p in user.permissions],
             }
         return allusers
 
@@ -218,7 +229,7 @@ async def who_am_i(current_user: User = Depends(get_current_user)):
             'username': user.username,
             'admin': user.admin,
             'created_by': user.created_by,
-            'permissions': [p.fs for p in user.permissions],
+            'permissions': [{'fs': p.fs, 'level': p.level} for p in user.permissions],
         }
 
 

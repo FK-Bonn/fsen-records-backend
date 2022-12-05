@@ -1,5 +1,7 @@
+from enum import Enum
+
 from passlib.context import CryptContext
-from sqlalchemy import Column, String, Boolean, ForeignKey
+from sqlalchemy import Column, String, Boolean, ForeignKey, Integer
 from sqlalchemy import create_engine
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import Session, relationship
@@ -20,6 +22,11 @@ def get_password_hash(password):
 
 Base = declarative_base()
 
+class PermissionLevel(Enum):
+    NONE = 0
+    READ = 1
+    WRITE = 2
+
 
 class User(Base):
     __tablename__ = "users"
@@ -34,6 +41,7 @@ class Permission(Base):
     __tablename__ = "permissions"
     user = Column(ForeignKey(User.username, ondelete='CASCADE'), primary_key=True)
     fs = Column(String(200), primary_key=True)
+    level = Column(Integer, nullable=False, default=PermissionLevel.NONE)
 
 
 class DBHelper:
