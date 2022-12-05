@@ -1,7 +1,7 @@
 from enum import Enum
 
 from passlib.context import CryptContext
-from sqlalchemy import Column, String, Boolean, ForeignKey, Integer
+from sqlalchemy import Column, String, Boolean, ForeignKey, Integer, Text
 from sqlalchemy import create_engine
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import Session, relationship
@@ -42,6 +42,22 @@ class Permission(Base):
     user = Column(ForeignKey(User.username, ondelete='CASCADE'), primary_key=True)
     fs = Column(String(200), primary_key=True)
     level = Column(Integer, nullable=False, default=PermissionLevel.NONE)
+
+class FsData(Base):
+    __tablename__ = "fs_data"
+    id = Column(Integer, primary_key=True)
+    fs = Column(String(200), nullable=False)
+    data = Column(Text, nullable=False)
+    user = Column(String(200), nullable=False)
+    timestamp = Column(String(200), nullable=False)
+
+class ProtectedFsData(Base):
+    __tablename__ = "protected_fs_data"
+    id = Column(Integer, primary_key=True)
+    fs = Column(String(200), nullable=False)
+    data = Column(Text, nullable=False)
+    user = Column(String(200), nullable=False)
+    timestamp = Column(String(200), nullable=False)
 
 
 class DBHelper:
