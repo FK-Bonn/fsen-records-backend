@@ -38,11 +38,8 @@ class TokenData(BaseModel):
     username: Optional[str] = None
 
 
-class UserForCreation(BaseModel):
-    username: str
+class UserForCreation(PermissionsForUser):
     password: str
-    admin: bool
-    permissions: List[Permission]
 
 
 class PasswordChangeData(BaseModel):
@@ -147,11 +144,24 @@ def check_if_user_may_grant_permissions(current_user: User, userdata: UserForCre
         )
 
 
+def check_permission_list(userdata: PermissionsForUser):
+    seen_permissions = set()
+    for permission in userdata.permissions:
+        t = (userdata.username, permission.fs)
+        if t in seen_permissions:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Conflicting permissions for {userdata.username=} and {permission.fs=}",
+            )
+        seen_permissions.add(t)
+
+
 @router.post("/user/create", response_model=UserWithPermissions)
 async def create_user(userdata: UserForCreation, current_user: User = Depends(get_current_user)):
     try:
         with DBHelper() as session:
             check_if_user_may_grant_permissions(current_user, userdata, session)
+            check_permission_list(userdata)
 
             items = []
             user = User()
@@ -182,6 +192,7 @@ async def create_user(userdata: UserForCreation, current_user: User = Depends(ge
 
 @router.post("/user/permissions", dependencies=[Depends(admin_only)], response_model=UserWithPermissions)
 async def set_user_permissions(userdata: PermissionsForUser):
+    check_permission_list(userdata)
     with DBHelper() as session:
         user: User = session.query(User).get(userdata.username)
         if not user:

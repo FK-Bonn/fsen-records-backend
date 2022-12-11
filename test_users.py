@@ -69,6 +69,20 @@ def test_create_admin_user_missing_permission():
     assert response.status_code == 401
 
 
+def test_create_user_bad_permission_list():
+    response = client.post('/api/v1/user/create',
+                           json={'username': 'user-to-create',
+                                 'password': 'password',
+                                 'admin': True,
+                                 'permissions': [
+                                     {'fs': 'Informatik', 'level': 1},
+                                     {'fs': 'Informatik', 'level': 2},
+                                 ],
+                                 },
+                           headers=get_auth_header(client, 'admin'))
+    assert response.status_code == 400
+
+
 def test_create_user_no_admin():
     response = client.post('/api/v1/user/create',
                            json={'username': 'user-to-create',
@@ -91,6 +105,19 @@ def test_set_user_permissions():
     fsen = [p['fs'] for p in response.json()['permissions']]
     assert 'Informatik' not in fsen
     assert 'Geographie' in fsen
+
+
+def test_set_user_permissions_bad_permission_list():
+    response = client.post('/api/v1/user/permissions',
+                           json={'username': 'user',
+                                 'admin': False,
+                                 'permissions': [
+                                     {'fs': 'Geographie', 'level': 1},
+                                     {'fs': 'Geographie', 'level': 2},
+                                 ],
+                                 },
+                           headers=get_auth_header(client, 'admin'))
+    assert response.status_code == 400
 
 
 def test_promote_user_to_admin():
