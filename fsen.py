@@ -43,6 +43,11 @@ class ProtectedFsDataType(BaseModel):
     other: dict
 
 
+class FsDataTuple(BaseModel):
+    data: Optional[FsDataType]
+    protected_data: Optional[ProtectedFsDataType]
+
+
 def get_subfolder_from_filename(filename: str) -> Optional[str]:
     for key, value in SUBFOLDERS.items():
         if filename.startswith(key):
@@ -78,6 +83,28 @@ async def get_individual_file(fs: str, filename: str, current_user: User = Depen
         status_code=status.HTTP_404_NOT_FOUND,
         detail="File not found",
     )
+
+
+@router.get("/data", response_model=dict[str, FsDataTuple])
+async def get_all_fsdata(current_user: User = Depends(get_current_user)):
+    retval = {}
+    with DBHelper() as session:
+        subquery = session.query(func.max(FsData.id).label('id'), FsData.fs).group_by(FsData.fs).subquery()
+        data = session.query(FsData).join(subquery, FsData.id == subquery.c.id).all()
+        prot_subquery = session.query(func.max(ProtectedFsData.id).label('id'), ProtectedFsData.fs). \
+            group_by(ProtectedFsData.fs).subquery()
+        prot_data = session.query(ProtectedFsData).join(prot_subquery, ProtectedFsData.id == prot_subquery.c.id).all()
+        for row in data:
+            permission = session.query(Permission).get((current_user.username, row.fs))
+            if current_user.admin or (permission and permission.level >= PermissionLevel.READ.value):
+                retval[row.fs] = FsDataTuple(data=json.loads(row.data))
+        for row in prot_data:
+            permission = session.query(Permission).get((current_user.username, row.fs))
+            if current_user.admin or (permission and permission.level >= PermissionLevel.WRITE.value):
+                if row.fs not in retval:
+                    retval[row.fs] = FsDataTuple()
+                retval[row.fs].protected_data = json.loads(row.data)
+        return retval
 
 
 @router.get("/data/{fs}", response_model=FsDataType)
