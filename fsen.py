@@ -28,11 +28,27 @@ class EmailAddress(BaseModel):
     usages: list[str]
 
 
+class ServiceTimes(BaseModel):
+    monday: str
+    tuesday: str
+    wednesday: str
+    thursday: str
+    friday: str
+
+
+class RegularMeeting(BaseModel):
+    dayOfWeek: str
+    time: str
+    location: str
+
+
 class FsDataType(BaseModel):
     email: str
     phone: str
     website: str
     address: str
+    serviceTimes: ServiceTimes
+    regularMeeting: RegularMeeting
     other: dict
 
 

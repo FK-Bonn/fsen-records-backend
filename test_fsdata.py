@@ -11,6 +11,8 @@ SAMPLE_DATA = {
     'phone': '+49228730123',
     'website': 'https://example.org',
     'address': 'Regina-Pacis-Weg 3\n532113 Bonn',
+    'serviceTimes': {'monday': '-', 'tuesday': '-', 'wednesday': '-', 'thursday': '-', 'friday': '-'},
+    'regularMeeting': {'dayOfWeek': '-', 'time': '-', 'location': '-'},
     'other': {},
 }
 
