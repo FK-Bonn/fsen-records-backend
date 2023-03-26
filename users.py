@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 from starlette import status
 
 from config import Config
-from database import DBHelper, User, verify_password, Permission as DbPermission, get_password_hash
+from database import DBHelper, User, verify_password, Permission as DbPermission, get_password_hash, PermissionLevel
 
 
 class Token(BaseModel):
@@ -24,10 +24,13 @@ class Permission(BaseModel):
     level: int
 
 
-class PermissionsForUser(BaseModel):
+class PermissionList(BaseModel):
     username: str
-    admin: bool
     permissions: List[Permission]
+
+
+class PermissionsForUser(PermissionList):
+    admin: bool
 
 
 class UserWithPermissions(PermissionsForUser):
@@ -127,7 +130,7 @@ async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(
     return {"access_token": access_token, "token_type": "bearer"}
 
 
-def check_if_user_may_grant_permissions(current_user: User, userdata: UserForCreation, session: Session):
+def check_if_user_may_grant_permissions(current_user: User, userdata: PermissionsForUser, session: Session):
     creator: User = session.query(User).get(current_user.username)
     if creator.admin:
         return
@@ -144,7 +147,7 @@ def check_if_user_may_grant_permissions(current_user: User, userdata: UserForCre
         )
 
 
-def check_permission_list(userdata: PermissionsForUser):
+def check_permission_list(userdata: PermissionList):
     seen_permissions = set()
     for permission in userdata.permissions:
         t = (userdata.username, permission.fs)
@@ -205,6 +208,8 @@ async def set_user_permissions(userdata: PermissionsForUser):
             synchronize_session="fetch")
         session.execute(stmt)
         for p in userdata.permissions:
+            if p.level == PermissionLevel.NONE.value:
+                continue
             permission = DbPermission()
             permission.user = userdata.username
             permission.fs = p.fs
@@ -217,18 +222,63 @@ async def set_user_permissions(userdata: PermissionsForUser):
                 'permissions': [{'fs': p.fs, 'level': p.level} for p in user.permissions]}
 
 
-@router.get("/user", dependencies=[Depends(admin_only)], response_model=Dict[str, UserWithPermissions])
-async def get_user_list():
+@router.patch("/user/permissions", response_model=UserWithPermissions)
+async def patch_user_permissions(userdata: PermissionList, current_user: User = Depends(get_current_user)):
+    check_permission_list(userdata)
+    with DBHelper() as session:
+        user: User = session.query(User).get(userdata.username)
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="User not found",
+            )
+        userdata_for_check = PermissionsForUser(username=userdata.username, permissions=userdata.permissions, admin=False)
+        check_if_user_may_grant_permissions(current_user=current_user, userdata=userdata_for_check, session=session)
+
+        for permission in userdata.permissions:
+            stmt = delete(DbPermission). \
+                where(DbPermission.user == user.username, DbPermission.fs == permission.fs). \
+                execution_options(synchronize_session="fetch")
+            session.execute(stmt)
+        for p in userdata.permissions:
+            permission = DbPermission()
+            permission.user = userdata.username
+            permission.fs = p.fs
+            permission.level = p.level
+            session.add(permission)
+        session.commit()
+        actor: User = session.query(User).get(current_user.username)
+        managed_fs = set(p.fs for p in actor.permissions if p.level >= PermissionLevel.WRITE.value)
+        return {'username': user.username,
+                'admin': user.admin,
+                'created_by': user.created_by,
+                'permissions': [{'fs': p.fs, 'level': p.level} for p in user.permissions if p.fs in managed_fs]}
+
+
+@router.get("/user", response_model=Dict[str, UserWithPermissions])
+async def get_user_list(current_user: User = Depends(get_current_user)):
     with DBHelper() as session:
         users: List[User] = session.query(User).all()
         allusers = {}
-        for user in users:
-            allusers[user.username] = {
-                'username': user.username,
-                'admin': user.admin,
-                'created_by': user.created_by,
-                'permissions': [{'fs': p.fs, 'level': p.level} for p in user.permissions],
-            }
+        if current_user.admin:
+            for user in users:
+                allusers[user.username] = {
+                    'username': user.username,
+                    'admin': user.admin,
+                    'created_by': user.created_by,
+                    'permissions': [{'fs': p.fs, 'level': p.level} for p in user.permissions],
+                }
+        else:
+            actor: User = session.query(User).get(current_user.username)
+            managed_fs = set(p.fs for p in actor.permissions if p.level >= PermissionLevel.WRITE.value)
+            for user in users:
+                if set(p.fs for p in user.permissions).intersection(managed_fs):
+                    allusers[user.username] = {
+                        'username': user.username,
+                        'admin': user.admin,
+                        'created_by': user.created_by,
+                        'permissions': [{'fs': p.fs, 'level': p.level} for p in user.permissions if p.fs in managed_fs],
+                    }
         return allusers
 
 

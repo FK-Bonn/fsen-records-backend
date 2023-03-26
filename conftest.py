@@ -28,35 +28,35 @@ class DBTestHelper:
         self._session = Session(engine)
 
         if do_init:
-            user = User()
-            user.username = "user"
-            user.created_by = "root"
-            user.hashed_password = get_password_hash("password")
-            user2 = User()
-            user2.username = "user2"
-            user2.created_by = "root"
-            user2.hashed_password = get_password_hash("password")
-            permission2 = Permission()
-            permission2.user = user2.username
-            permission2.fs = 'Informatik'
-            permission2.level = 1
-            user3 = User()
-            user3.username = "user3"
-            user3.created_by = "root"
-            user3.hashed_password = get_password_hash("password")
-            permission3 = Permission()
-            permission3.user = user3.username
-            permission3.fs = 'Informatik'
-            permission3.level = 2
-            admin = User()
-            admin.username = "admin"
-            admin.created_by = "root"
-            admin.hashed_password = get_password_hash("password")
-            admin.admin = True
-            self._session.add_all([user, permission2, user2, permission3, user3, admin])
-
+            self.add_user('user', 'root')
+            self.add_user('user2', 'root')
+            self.add_user('user3', 'root')
+            self.add_user('user4', 'root')
+            self.add_user('user5', 'root')
+            self.add_user('admin', 'root', admin=True)
+            self.add_permission('user2', 'Informatik', 1)
+            self.add_permission('user3', 'Informatik', 2)
+            self.add_permission('user4', 'Informatik', 1)
+            self.add_permission('user4', 'Geographie', 1)
+            self.add_permission('user5', 'Informatik', 2)
+            self.add_permission('user5', 'Geographie', 2)
             self._session.commit()
         return self._session
+
+    def add_user(self, username: str, created_by: str, admin=False):
+        user = User()
+        user.username = username
+        user.created_by = created_by
+        user.hashed_password = get_password_hash("password")
+        user.admin = admin
+        self._session.add(user)
+
+    def add_permission(self, username: str, fs: str, level: int):
+        permission = Permission()
+        permission.user = username
+        permission.fs = fs
+        permission.level = level
+        self._session.add(permission)
 
     def __exit__(self, type, value, traceback):
         self._session.close()
