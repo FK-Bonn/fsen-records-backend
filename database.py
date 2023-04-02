@@ -59,6 +59,21 @@ class ProtectedFsData(Base):
     user = Column(String(200), nullable=False)
     timestamp = Column(String(200), nullable=False)
 
+class PayoutRequest(Base):
+    __tablename__ = "payout_requests"
+    id = Column(Integer, primary_key=True)
+    request_id = Column(String(200), nullable=False)
+    fs = Column(String(200), nullable=False)
+    semester = Column(String(200), nullable=False)
+    status = Column(String(200), nullable=False)
+    status_date = Column(String(200), nullable=False)
+    amount_cents = Column(Integer, nullable=False)
+    comment = Column(Text, nullable=False)
+    request_date = Column(String(200), nullable=False)
+    requester = Column(String(200), nullable=False)
+    last_modified_timestamp = Column(String(200), nullable=False)
+    last_modified_by = Column(String(200), nullable=False)
+
 
 class DBHelper:
     def __init__(self):

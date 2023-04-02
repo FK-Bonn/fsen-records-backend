@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy_utils import database_exists, create_database
 from starlette.testclient import TestClient
 
-from database import Base, User, get_password_hash, Permission
+from database import Base, User, get_password_hash, Permission, PayoutRequest
 
 
 class DBTestHelper:
@@ -40,6 +40,7 @@ class DBTestHelper:
             self.add_permission('user4', 'Geographie', 1)
             self.add_permission('user5', 'Informatik', 2)
             self.add_permission('user5', 'Geographie', 2)
+            self.add_payout_request()
             self._session.commit()
         return self._session
 
@@ -58,6 +59,21 @@ class DBTestHelper:
         permission.level = level
         self._session.add(permission)
 
+    def add_payout_request(self):
+        payout_request = PayoutRequest()
+        payout_request.request_id = 'A22W-0023'
+        payout_request.fs = 'Informatik'
+        payout_request.semester = '2022-WiSe'
+        payout_request.status = 'GESTELLT'
+        payout_request.status_date = '2023-01-07'
+        payout_request.amount_cents = 111100
+        payout_request.comment = 'comment'
+        payout_request.request_date = '2023-01-07'
+        payout_request.requester = 'tim.test'
+        payout_request.last_modified_timestamp = '2023-01-07T22:11:07+00:00'
+        payout_request.last_modified_by = 'tim.test'
+        self._session.add(payout_request)
+
     def __exit__(self, type, value, traceback):
         self._session.close()
         self._session = None
@@ -67,6 +83,7 @@ class DBTestHelper:
 def fake_db(monkeypatch, tmp_path):
     monkeypatch.setattr('users.DBHelper', lambda: DBTestHelper(tmp_path))
     monkeypatch.setattr('fsen.DBHelper', lambda: DBTestHelper(tmp_path))
+    monkeypatch.setattr('payout_requests.DBHelper', lambda: DBTestHelper(tmp_path))
 
 
 def get_token(client: TestClient, user: str):

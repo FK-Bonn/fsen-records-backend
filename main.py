@@ -6,6 +6,7 @@ from starlette.middleware.cors import CORSMiddleware
 
 import fsen
 import users
+import payout_requests
 
 origins = [
     "http://localhost",
@@ -36,6 +37,10 @@ app.include_router(
 
 app.include_router(
     fsen.router,
+    prefix="/api/v1"
+)
+app.include_router(
+    payout_requests.router,
     prefix="/api/v1"
 )
 
