@@ -76,7 +76,7 @@ def check_permission(current_user: User, fs: str, minimum_level: PermissionLevel
     if current_user.admin:
         return
     with DBHelper() as session:
-        permission = session.query(Permission).get((current_user.username, fs))
+        permission = session.get(Permission, (current_user.username, fs))
         if not permission or permission.level < minimum_level.value:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
@@ -112,14 +112,14 @@ async def get_all_fsdata(current_user: User = Depends(get_current_user)):
             group_by(ProtectedFsData.fs).subquery()
         prot_data = session.query(ProtectedFsData).join(prot_subquery, ProtectedFsData.id == prot_subquery.c.id).all()
         for row in data:
-            permission = session.query(Permission).get((current_user.username, row.fs))
+            permission = session.get(Permission, (current_user.username, row.fs))
             if current_user.admin or (permission and permission.level >= PermissionLevel.READ.value):
-                retval[row.fs] = FsDataTuple(data=json.loads(row.data))
+                retval[row.fs] = FsDataTuple(data=json.loads(row.data), protected_data=None)
         for row in prot_data:
-            permission = session.query(Permission).get((current_user.username, row.fs))
+            permission = session.get(Permission, (current_user.username, row.fs))
             if current_user.admin or (permission and permission.level >= PermissionLevel.WRITE.value):
                 if row.fs not in retval:
-                    retval[row.fs] = FsDataTuple()
+                    retval[row.fs] = FsDataTuple(data=None, protected_data=None)
                 retval[row.fs].protected_data = json.loads(row.data)
         return retval
 

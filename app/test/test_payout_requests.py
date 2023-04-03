@@ -1,8 +1,8 @@
 from fastapi.testclient import TestClient
 from freezegun import freeze_time
 
-from conftest import get_auth_header
 from app.main import app
+from app.test.conftest import get_auth_header
 
 client = TestClient(app)
 

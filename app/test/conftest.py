@@ -45,6 +45,7 @@ class DBTestHelper:
         return self._session
 
     def add_user(self, username: str, created_by: str, admin=False):
+        assert self._session
         user = User()
         user.username = username
         user.created_by = created_by
@@ -53,6 +54,7 @@ class DBTestHelper:
         self._session.add(user)
 
     def add_permission(self, username: str, fs: str, level: int):
+        assert self._session
         permission = Permission()
         permission.user = username
         permission.fs = fs
@@ -60,6 +62,7 @@ class DBTestHelper:
         self._session.add(permission)
 
     def add_payout_request(self):
+        assert self._session
         payout_request = PayoutRequest()
         payout_request.request_id = 'A22W-0023'
         payout_request.fs = 'Informatik'

@@ -1,4 +1,8 @@
+requests
+httpx
 pytest
 freezegun
 ruff
 mypy
+types-python-jose
+types-passlib

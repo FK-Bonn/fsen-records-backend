@@ -56,7 +56,12 @@ class PayoutRequestData(PublicPayoutRequest):
 
 
 def check_user_may_submit_payout_request(current_user: User, fs: str, session: Session):
-    creator: User = session.query(User).get(current_user.username)
+    creator = session.get(User, current_user.username)
+    if not creator:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="User not found",
+        )
     if creator.admin:
         return
 
@@ -107,7 +112,7 @@ def get_request_id(semester: str, session: Session) -> str:
 
 
 
-def get_payout_request(session: Session, request_id: str) -> PayoutRequest:
+def get_payout_request(session: Session, request_id: str) -> Optional[PayoutRequest]:
     subquery = session.query(PayoutRequest.request_id, func.max(PayoutRequest.id).label('id')).group_by(
         PayoutRequest.request_id).subquery()
     data = session.query(PayoutRequest).join(subquery, PayoutRequest.id == subquery.c.id).filter(

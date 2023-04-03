@@ -1,10 +1,9 @@
 from enum import Enum
 
 from passlib.context import CryptContext
-from sqlalchemy import Column, String, Boolean, ForeignKey, Integer, Text
+from sqlalchemy import String, ForeignKey, Text
 from sqlalchemy import create_engine
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import Session, relationship
+from sqlalchemy.orm import Session, relationship, Mapped, mapped_column, DeclarativeBase
 from sqlalchemy_utils import create_database, database_exists
 
 from app.config import Config
@@ -20,7 +19,8 @@ def get_password_hash(password):
     return pwd_context.hash(password)
 
 
-Base = declarative_base()
+class Base(DeclarativeBase):
+    pass
 
 class PermissionLevel(Enum):
     NONE = 0
@@ -30,49 +30,49 @@ class PermissionLevel(Enum):
 
 class User(Base):
     __tablename__ = "users"
-    username = Column(String(200), unique=True, primary_key=True)
-    hashed_password = Column(String(200))
-    admin = Column(Boolean(), default=False)
+    username: Mapped[str] = mapped_column(String(200), unique=True, primary_key=True)
+    hashed_password: Mapped[str] = mapped_column(String(200))
+    admin: Mapped[bool] = mapped_column(default=False)
     permissions = relationship('Permission')
-    created_by = Column(String(200))
+    created_by: Mapped[str] = mapped_column(String(200))
 
 
 class Permission(Base):
     __tablename__ = "permissions"
-    user = Column(ForeignKey(User.username, ondelete='CASCADE'), primary_key=True)
-    fs = Column(String(200), primary_key=True)
-    level = Column(Integer, nullable=False, default=PermissionLevel.NONE)
+    user: Mapped[str] = mapped_column(ForeignKey(User.username, ondelete='CASCADE'), primary_key=True)
+    fs: Mapped[str] = mapped_column(String(200), primary_key=True)
+    level: Mapped[int] = mapped_column(nullable=False, default=PermissionLevel.NONE)
 
 class FsData(Base):
     __tablename__ = "fs_data"
-    id = Column(Integer, primary_key=True)
-    fs = Column(String(200), nullable=False)
-    data = Column(Text, nullable=False)
-    user = Column(String(200), nullable=False)
-    timestamp = Column(String(200), nullable=False)
+    id: Mapped[int] = mapped_column(primary_key=True)
+    fs: Mapped[str] = mapped_column(String(200), nullable=False)
+    data: Mapped[str] = mapped_column(Text, nullable=False)
+    user: Mapped[str] = mapped_column(String(200), nullable=False)
+    timestamp: Mapped[str] = mapped_column(String(200), nullable=False)
 
 class ProtectedFsData(Base):
     __tablename__ = "protected_fs_data"
-    id = Column(Integer, primary_key=True)
-    fs = Column(String(200), nullable=False)
-    data = Column(Text, nullable=False)
-    user = Column(String(200), nullable=False)
-    timestamp = Column(String(200), nullable=False)
+    id: Mapped[int] = mapped_column(primary_key=True)
+    fs: Mapped[str] = mapped_column(String(200), nullable=False)
+    data: Mapped[str] = mapped_column(Text, nullable=False)
+    user: Mapped[str] = mapped_column(String(200), nullable=False)
+    timestamp: Mapped[str] = mapped_column(String(200), nullable=False)
 
 class PayoutRequest(Base):
     __tablename__ = "payout_requests"
-    id = Column(Integer, primary_key=True)
-    request_id = Column(String(200), nullable=False)
-    fs = Column(String(200), nullable=False)
-    semester = Column(String(200), nullable=False)
-    status = Column(String(200), nullable=False)
-    status_date = Column(String(200), nullable=False)
-    amount_cents = Column(Integer, nullable=False)
-    comment = Column(Text, nullable=False)
-    request_date = Column(String(200), nullable=False)
-    requester = Column(String(200), nullable=False)
-    last_modified_timestamp = Column(String(200), nullable=False)
-    last_modified_by = Column(String(200), nullable=False)
+    id: Mapped[int] = mapped_column(primary_key=True)
+    request_id: Mapped[str] = mapped_column(String(200), nullable=False)
+    fs: Mapped[str] = mapped_column(String(200), nullable=False)
+    semester: Mapped[str] = mapped_column(String(200), nullable=False)
+    status: Mapped[str] = mapped_column(String(200), nullable=False)
+    status_date: Mapped[str] = mapped_column(String(200), nullable=False)
+    amount_cents: Mapped[int] = mapped_column(nullable=False)
+    comment: Mapped[str] = mapped_column(Text, nullable=False)
+    request_date: Mapped[str] = mapped_column(String(200), nullable=False)
+    requester: Mapped[str] = mapped_column(String(200), nullable=False)
+    last_modified_timestamp: Mapped[str] = mapped_column(String(200), nullable=False)
+    last_modified_by: Mapped[str] = mapped_column(String(200), nullable=False)
 
 
 class DBHelper:

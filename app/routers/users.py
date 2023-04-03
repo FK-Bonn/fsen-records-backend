@@ -1,5 +1,5 @@
 from datetime import datetime, timedelta
-from typing import Optional, Union, List, Dict
+from typing import Optional, List, Dict
 
 from fastapi import HTTPException, Depends, APIRouter
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
@@ -11,7 +11,8 @@ from sqlalchemy.orm import Session
 from starlette import status
 
 from app.config import Config
-from app.database import DBHelper, User, verify_password, Permission as DbPermission, get_password_hash, PermissionLevel
+from app.database import DBHelper, User, verify_password, Permission as DbPermission, get_password_hash, \
+    PermissionLevel, Base
 
 
 class Token(BaseModel):
@@ -59,19 +60,22 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 router = APIRouter()
 
 
-def get_user(username: str) -> Optional[User]:
+def get_user(username: Optional[str]) -> Optional[User]:
+    if not username:
+        return None
     with DBHelper() as session:
-        user = session.query(User).get(username)
+        user = session.get(User, username)
         if user:
             return user
+    return None
 
 
-def authenticate_user(username: str, password: str) -> Union[User, bool]:
+def authenticate_user(username: str, password: str) -> Optional[User]:
     user = get_user(username)
     if not user:
-        return False
+        return None
     if not verify_password(password, user.hashed_password):
-        return False
+        return None
     return user
 
 
@@ -94,7 +98,7 @@ async def get_current_user(token: str = Depends(oauth2_scheme)) -> User:
     )
     try:
         payload = jwt.decode(token, Config.SECRET_KEY, algorithms=[Config.ALGORITHM])
-        username: str = payload.get("sub")
+        username: Optional[str] = payload.get("sub")
         if username is None:
             raise credentials_exception
         token_data = TokenData(username=username)
@@ -131,7 +135,7 @@ async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(
 
 
 def check_if_user_may_grant_permissions(current_user: User, userdata: PermissionsForUser, session: Session):
-    creator: User = session.query(User).get(current_user.username)
+    creator = get_user_or_throw(current_user, session)
     if creator.admin:
         return
 
@@ -145,6 +149,16 @@ def check_if_user_may_grant_permissions(current_user: User, userdata: Permission
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="User is not authorized to grant those permissions",
         )
+
+
+def get_user_or_throw(current_user, session):
+    creator = session.get(User, current_user.username)
+    if not creator:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="User does not exist",
+        )
+    return creator
 
 
 def check_permission_list(userdata: PermissionList):
@@ -166,7 +180,7 @@ async def create_user(userdata: UserForCreation, current_user: User = Depends(ge
             check_if_user_may_grant_permissions(current_user, userdata, session)
             check_permission_list(userdata)
 
-            items = []
+            items: List[Base] = []
             user = User()
             user.username = userdata.username
             user.hashed_password = get_password_hash(userdata.password)
@@ -197,7 +211,7 @@ async def create_user(userdata: UserForCreation, current_user: User = Depends(ge
 async def set_user_permissions(userdata: PermissionsForUser):
     check_permission_list(userdata)
     with DBHelper() as session:
-        user: User = session.query(User).get(userdata.username)
+        user: User = session.get(User, userdata.username)
         if not user:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -226,7 +240,7 @@ async def set_user_permissions(userdata: PermissionsForUser):
 async def patch_user_permissions(userdata: PermissionList, current_user: User = Depends(get_current_user)):
     check_permission_list(userdata)
     with DBHelper() as session:
-        user: User = session.query(User).get(userdata.username)
+        user: User = session.get(User, userdata.username)
         if not user:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -242,13 +256,13 @@ async def patch_user_permissions(userdata: PermissionList, current_user: User = 
                 execution_options(synchronize_session="fetch")
             session.execute(stmt)
         for p in userdata.permissions:
-            permission = DbPermission()
-            permission.user = userdata.username
-            permission.fs = p.fs
-            permission.level = p.level
-            session.add(permission)
+            db_permission = DbPermission()
+            db_permission.user = userdata.username
+            db_permission.fs = p.fs
+            db_permission.level = p.level
+            session.add(db_permission)
         session.commit()
-        actor: User = session.query(User).get(current_user.username)
+        actor: User = session.get(User, current_user.username)
         managed_fs = set(p.fs for p in actor.permissions if p.level >= PermissionLevel.WRITE.value)
         return {'username': user.username,
                 'admin': user.admin,
@@ -270,7 +284,7 @@ async def get_user_list(current_user: User = Depends(get_current_user)):
                     'permissions': [{'fs': p.fs, 'level': p.level} for p in user.permissions],
                 }
         else:
-            actor: User = session.query(User).get(current_user.username)
+            actor: User = session.get(User, current_user.username)
             managed_fs = set(p.fs for p in actor.permissions if p.level >= PermissionLevel.WRITE.value)
             for user in users:
                 if set(p.fs for p in user.permissions).intersection(managed_fs):
@@ -286,7 +300,7 @@ async def get_user_list(current_user: User = Depends(get_current_user)):
 @router.get("/user/me", response_model=UserWithPermissions)
 async def who_am_i(current_user: User = Depends(get_current_user)):
     with DBHelper() as session:
-        user: User = session.query(User).get(current_user.username)
+        user: User = session.get(User, current_user.username)
         return {
             'username': user.username,
             'admin': user.admin,
@@ -298,7 +312,7 @@ async def who_am_i(current_user: User = Depends(get_current_user)):
 @router.post("/user/password", status_code=200)
 async def change_password(password_change_data: PasswordChangeData, current_user: User = Depends(get_current_user)):
     with DBHelper() as session:
-        user: User = session.query(User).get(current_user.username)
+        user: User = session.get(User, current_user.username)
         if not verify_password(password_change_data.current_password, user.hashed_password):
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
@@ -311,7 +325,7 @@ async def change_password(password_change_data: PasswordChangeData, current_user
 @router.post("/user/password/{username}", dependencies=[Depends(admin_only)], status_code=200)
 async def change_password_for_user(username: str, new_password_data: NewPasswordData):
     with DBHelper() as session:
-        user: User = session.query(User).get(username)
+        user: User = session.get(User, username)
         if not user:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
