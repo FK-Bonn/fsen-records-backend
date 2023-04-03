@@ -1,5 +1,5 @@
 from datetime import datetime, timedelta
-from typing import Optional, Union, List, Dict, Tuple
+from typing import Optional, Union, List, Dict
 
 from fastapi import HTTPException, Depends, APIRouter
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
@@ -10,8 +10,8 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from starlette import status
 
-from config import Config
-from database import DBHelper, User, verify_password, Permission as DbPermission, get_password_hash, PermissionLevel
+from app.config import Config
+from app.database import DBHelper, User, verify_password, Permission as DbPermission, get_password_hash, PermissionLevel
 
 
 class Token(BaseModel):
@@ -232,7 +232,8 @@ async def patch_user_permissions(userdata: PermissionList, current_user: User = 
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="User not found",
             )
-        userdata_for_check = PermissionsForUser(username=userdata.username, permissions=userdata.permissions, admin=False)
+        userdata_for_check = PermissionsForUser(username=userdata.username, permissions=userdata.permissions,
+                                                admin=False)
         check_if_user_may_grant_permissions(current_user=current_user, userdata=userdata_for_check, session=session)
 
         for permission in userdata.permissions:

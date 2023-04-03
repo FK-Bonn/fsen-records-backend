@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy_utils import database_exists, create_database
 from starlette.testclient import TestClient
 
-from database import Base, User, get_password_hash, Permission, PayoutRequest
+from app.database import Base, User, get_password_hash, Permission, PayoutRequest
 
 
 class DBTestHelper:
@@ -81,9 +81,9 @@ class DBTestHelper:
 
 @pytest.fixture(autouse=True)
 def fake_db(monkeypatch, tmp_path):
-    monkeypatch.setattr('users.DBHelper', lambda: DBTestHelper(tmp_path))
-    monkeypatch.setattr('fsen.DBHelper', lambda: DBTestHelper(tmp_path))
-    monkeypatch.setattr('payout_requests.DBHelper', lambda: DBTestHelper(tmp_path))
+    monkeypatch.setattr('app.routers.users.DBHelper', lambda: DBTestHelper(tmp_path))
+    monkeypatch.setattr('app.routers.fsen.DBHelper', lambda: DBTestHelper(tmp_path))
+    monkeypatch.setattr('app.routers.payout_requests.DBHelper', lambda: DBTestHelper(tmp_path))
 
 
 def get_token(client: TestClient, user: str):

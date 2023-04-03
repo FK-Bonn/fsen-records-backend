@@ -7,7 +7,7 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import Session, relationship
 from sqlalchemy_utils import create_database, database_exists
 
-from config import Config
+from app.config import Config
 
 
 def verify_password(plain_password, hashed_password):

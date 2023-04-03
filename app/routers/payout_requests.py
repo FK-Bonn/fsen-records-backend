@@ -1,7 +1,6 @@
 import re
 from datetime import datetime
 from enum import Enum
-from enum import Enum
 from typing import List, Optional
 from zoneinfo import ZoneInfo
 
@@ -11,9 +10,9 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 from starlette import status
 
-from database import User, DBHelper, PermissionLevel, PayoutRequest
-from users import get_current_user, admin_only
-from util import ts, get_europe_berlin_date
+from app.database import User, DBHelper, PermissionLevel, PayoutRequest
+from app.util import ts, get_europe_berlin_date
+from app.routers.users import get_current_user, admin_only
 
 router = APIRouter()
 
@@ -152,7 +151,8 @@ async def create_afsg_request(data: PayoutRequestForCreation, current_user: User
 
 
 @router.patch("/payout-request/afsg/{request_id}", dependencies=[Depends(admin_only)], response_model=PayoutRequestData)
-async def modify_afsg_request(request_id: str, data: ModifiablePayoutRequestProperties, current_user: User = Depends(get_current_user)):
+async def modify_afsg_request(request_id: str, data: ModifiablePayoutRequestProperties,
+                              current_user: User = Depends(get_current_user)):
     with DBHelper() as session:
         payout_request = get_payout_request(session, request_id)
         if not payout_request:

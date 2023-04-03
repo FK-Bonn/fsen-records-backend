@@ -2,7 +2,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from conftest import get_auth_header
-from main import app
+from app.main import app
 
 client = TestClient(app)
 
@@ -51,7 +51,7 @@ def test_get_all_fsdata_no_data_set(user: str):
 def test_get_all_fsdata_no_permissions():
     set_sample_data()
     set_sample_protected_data()
-    response = client.get(f'/api/v1/data', headers=get_auth_header(client, 'user'))
+    response = client.get('/api/v1/data', headers=get_auth_header(client, 'user'))
     assert response.status_code == 200
     assert response.json() == {}
 
@@ -61,7 +61,7 @@ def test_get_all_fsdata():
     set_sample_protected_data(fs='Informatik')
     set_sample_data(fs='Metaphysik-Astrologie')
     set_sample_protected_data(fs='Metaphysik-Astrologie')
-    response = client.get(f'/api/v1/data', headers=get_auth_header(client, 'user3'))
+    response = client.get('/api/v1/data', headers=get_auth_header(client, 'user3'))
     assert response.status_code == 200
     assert response.json() == {
         'Informatik': {
@@ -76,7 +76,7 @@ def test_get_all_fsdata_multiple_fs():
     set_sample_protected_data(fs='Informatik')
     set_sample_data(fs='Metaphysik-Astrologie')
     set_sample_protected_data(fs='Metaphysik-Astrologie')
-    response = client.get(f'/api/v1/data', headers=get_auth_header(client, 'admin'))
+    response = client.get('/api/v1/data', headers=get_auth_header(client, 'admin'))
     assert response.status_code == 200
     assert response.json() == {
         'Informatik': {
@@ -93,7 +93,7 @@ def test_get_all_fsdata_multiple_fs():
 def test_get_all_fsdata_only_data_no_protected_data():
     set_sample_data()
     set_sample_protected_data()
-    response = client.get(f'/api/v1/data', headers=get_auth_header(client, 'user2'))
+    response = client.get('/api/v1/data', headers=get_auth_header(client, 'user2'))
     assert response.status_code == 200
     assert response.json() == {
         'Informatik': {
@@ -105,7 +105,7 @@ def test_get_all_fsdata_only_data_no_protected_data():
 
 def test_get_all_fsdata_only_protected_data_present():
     set_sample_protected_data()
-    response = client.get(f'/api/v1/data', headers=get_auth_header(client, 'user3'))
+    response = client.get('/api/v1/data', headers=get_auth_header(client, 'user3'))
     assert response.status_code == 200
     assert response.json() == {
         'Informatik': {

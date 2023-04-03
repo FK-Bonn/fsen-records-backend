@@ -4,7 +4,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from conftest import get_auth_header
-from main import app
+from app.main import app
 
 client = TestClient(app)
 

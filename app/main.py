@@ -4,9 +4,9 @@ import uvicorn
 from fastapi import FastAPI
 from starlette.middleware.cors import CORSMiddleware
 
-import fsen
-import users
-import payout_requests
+from app.routers import fsen
+from app.routers import users
+from app.routers import payout_requests
 
 origins = [
     "http://localhost",

@@ -7,7 +7,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 from sqlalchemy_utils import database_exists, create_database
 
-from database import Base, User, get_password_hash
+from app.database import Base, User, get_password_hash
 
 
 def main():

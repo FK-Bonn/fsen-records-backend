@@ -14,4 +14,4 @@ class Config:
         else 'sqlite:///' + str(Path(__file__).resolve().parent / 'data' / 'data.db')
     BASE_DATA_DIR = Path(os.environ["BASE_DATA_DIR"]) \
         if "BASE_DATA_DIR" in os.environ \
-        else Path(__file__).parent / 'data' / 'files'
+        else Path(__file__).parent.resolve().parent / 'data' / 'files'
