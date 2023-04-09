@@ -8,6 +8,7 @@ from starlette.testclient import TestClient
 
 from app.database import Base, User, get_password_hash, Permission, PayoutRequest
 
+HASH_CACHE = {}
 
 class DBTestHelper:
     def __init__(self, tmppath: Path):
@@ -49,7 +50,7 @@ class DBTestHelper:
         user = User()
         user.username = username
         user.created_by = created_by
-        user.hashed_password = get_password_hash("password")
+        user.hashed_password = _cached_password_hash("password")
         user.admin = admin
         self._session.add(user)
 
@@ -87,7 +88,14 @@ def fake_db(monkeypatch, tmp_path):
     monkeypatch.setattr('app.routers.users.DBHelper', lambda: DBTestHelper(tmp_path))
     monkeypatch.setattr('app.routers.fsen.DBHelper', lambda: DBTestHelper(tmp_path))
     monkeypatch.setattr('app.routers.payout_requests.DBHelper', lambda: DBTestHelper(tmp_path))
+    monkeypatch.setattr('app.database.get_password_hash', _cached_password_hash)
+    monkeypatch.setattr('app.routers.users.get_password_hash', _cached_password_hash)
 
+def _cached_password_hash(password: str) -> str:
+    if password not in HASH_CACHE:
+        hash_value = get_password_hash(password)
+        HASH_CACHE[password] = hash_value
+    return HASH_CACHE[password]
 
 def get_token(client: TestClient, user: str):
     response = client.post('/api/v1/token', data={'username': user, 'password': 'password'})
