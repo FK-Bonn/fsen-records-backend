@@ -4,3 +4,6 @@ line-length = 120
 [[tool.mypy.overrides]]
 module = 'sqlalchemy_utils'
 ignore_missing_imports = true
+
+[tool.coverage.run]
+omit = ['app/test/*']

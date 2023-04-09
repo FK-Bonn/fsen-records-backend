@@ -2,6 +2,6 @@
 
 set -ex
 
-python -m pytest ./app
+python -m pytest --cov=app --cov-report=html --cov-config=pyproject.toml ./app
 ruff check app
 python -m mypy ./app
