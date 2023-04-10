@@ -80,7 +80,11 @@ def check_semester_is_open_for_submissions(semester: str):
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="Invalid semester format",
         )
-    return semester in get_currently_valid_semesters()
+    if semester not in get_currently_valid_semesters():
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Semester is not open for requests",
+        )
 
 
 def get_currently_valid_semesters() -> List[str]:
@@ -89,6 +93,8 @@ def get_currently_valid_semesters() -> List[str]:
     if 4 <= today.month <= 9:
         semester_type = 'SoSe'
     year = today.year
+    if today.month < 4:
+        year -= 1
     previous_semester_type = 'WiSe' if semester_type == 'SoSe' else 'SoSe'
     previous_semester_year = (year - 1) if semester_type == 'SoSe' else year
     two_semesters_ago_type = semester_type
@@ -110,6 +116,15 @@ def get_request_id(semester: str, session: Session) -> str:
         PayoutRequest.request_id.like(filter)).scalar() or prefix + '0000'
     return prefix + f'{int(latest[5:]) + 1:04d}'
 
+
+def check_no_existing_payout_request(semester: str, fs: str, session: Session) -> None:
+    latest = session.query(func.max(PayoutRequest.id)).filter(
+        PayoutRequest.fs == fs, PayoutRequest.semester == semester).scalar()
+    if latest is not None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="There already is a payout request for this semester",
+        )
 
 
 def get_payout_request(session: Session, request_id: str) -> Optional[PayoutRequest]:
@@ -134,6 +149,7 @@ async def create_afsg_request(data: PayoutRequestForCreation, current_user: User
     check_semester_is_open_for_submissions(data.semester)
     with DBHelper() as session:
         check_user_may_submit_payout_request(current_user, data.fs, session)
+        check_no_existing_payout_request(data.semester, data.fs, session)
         request_id = get_request_id(data.semester, session)
         today = get_europe_berlin_date()
         now = ts()

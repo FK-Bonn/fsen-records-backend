@@ -1,3 +1,4 @@
+import pytest
 from fastapi.testclient import TestClient
 from freezegun import freeze_time
 
@@ -69,6 +70,41 @@ def test_create_payout_requests_as_write_user():
         'last_modified_timestamp': '2023-04-04T10:00:00+00:00',
         'last_modified_by': 'user3',
     }
+
+
+@freeze_time("2023-04-04T10:00:00Z")
+def test_create_payout_requests_as_write_user_fails_if_already_exists():
+    response = client.post('/api/v1/payout-request/afsg/create', json={
+        'fs': 'Informatik',
+        'semester': '2022-WiSe',
+    }, headers=get_auth_header(client, 'user3'))
+    assert response.status_code == 422
+    assert response.json() == {
+        'detail': 'There already is a payout request for this semester',
+    }
+
+
+@pytest.mark.parametrize("timestamp,semester,status_code", [
+    ['2023-04-01T00:00:00+02:00', '2023-SoSe', 200],
+    ['2023-04-01T00:00:00+02:00', '2022-WiSe', 200],
+    ['2023-04-01T00:00:00+02:00', '2022-SoSe', 200],
+    ['2023-04-01T00:00:00+02:00', '2021-WiSe', 422],
+    ['2023-03-31T23:59:59+02:00', '2023-SoSe', 422],
+    ['2023-03-31T23:59:59+02:00', '2021-WiSe', 200],
+    ['2023-10-01T00:00:00+02:00', '2023-WiSe', 200],
+    ['2023-10-01T00:00:00+02:00', '2023-SoSe', 200],
+    ['2023-10-01T00:00:00+02:00', '2022-WiSe', 200],
+    ['2023-10-01T00:00:00+02:00', '2022-SoSe', 422],
+    ['2023-09-30T23:59:59+02:00', '2023-WiSe', 422],
+    ['2023-09-30T23:59:59+02:00', '2022-SoSe', 200],
+])
+def test_create_payout_requests_checks_semester(timestamp, semester, status_code):
+    with freeze_time(timestamp):
+        response = client.post('/api/v1/payout-request/afsg/create', json={
+            'fs': 'Geographie',
+            'semester': semester,
+        }, headers=get_auth_header(client, 'user5'))
+    assert response.status_code == status_code
 
 
 def test_create_payout_requests_as_read_user_fails():
