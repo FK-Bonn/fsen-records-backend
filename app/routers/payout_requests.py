@@ -18,6 +18,7 @@ router = APIRouter()
 
 
 class PayoutRequestStatus(Enum):
+    EINGEREICHT = 'EINGEREICHT'
     GESTELLT = 'GESTELLT'
     VOLLSTAENDIG = 'VOLLSTÄNDIG'
     ANGEWIESEN = 'ANGEWIESEN'
@@ -158,7 +159,7 @@ async def create_afsg_request(data: PayoutRequestForCreation, current_user: User
         payout_request.request_id = request_id
         payout_request.fs = data.fs
         payout_request.semester = data.semester
-        payout_request.status = PayoutRequestStatus.GESTELLT.value
+        payout_request.status = PayoutRequestStatus.EINGEREICHT.value
         payout_request.status_date = today
         payout_request.amount_cents = 0
         payout_request.comment = ''
