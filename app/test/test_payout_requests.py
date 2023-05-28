@@ -48,6 +48,18 @@ def test_create_payout_requests_as_admin():
 
 
 @freeze_time("2023-04-04T10:00:00Z")
+def test_create_payout_requests_invalid_semester_format():
+    response = client.post('/api/v1/payout-request/afsg/create', json={
+        'fs': 'Informatik',
+        'semester': 'SoSe-2022',
+    }, headers=get_auth_header(client, 'admin'))
+    assert response.status_code == 422
+    assert response.json() == {
+        'detail': 'Invalid semester format',
+    }
+
+
+@freeze_time("2023-04-04T10:00:00Z")
 def test_create_payout_requests_as_write_user():
     response = client.post('/api/v1/payout-request/afsg/create', json={
         'fs': 'Informatik',
@@ -134,6 +146,21 @@ def test_modify_payout_requests_as_admin():
         'last_modified_timestamp': '2023-04-04T10:00:00+00:00',
         'last_modified_by': 'admin',
     }
+
+
+@freeze_time("2023-04-04T10:00:00Z")
+def test_modify_nonexisting_payout_requests_fails():
+    response = client.patch('/api/v1/payout-request/afsg/A22W-0069', json={
+        'status': 'VOLLSTÄNDIG',
+        'status_date': '2023-05-05',
+        'amount_cents': 100000,
+        'comment': 'This will not work',
+    }, headers=get_auth_header(client, 'admin'))
+    assert response.status_code == 404
+    assert response.json() == {
+        'detail': 'PayoutRequest not found',
+    }
+
 
 @freeze_time("2023-04-04T10:00:00Z")
 def test_modify_payout_requests_set_empty_values():

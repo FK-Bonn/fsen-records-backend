@@ -16,6 +16,20 @@ def test_login():
     assert 'access_token' in response_json
     assert response_json['token_type'] == 'bearer'
 
+def test_invalid_login_wrong_password():
+    response = client.post('/api/v1/token', data={'username': 'user', 'password': 'wrong-password'})
+    assert response.status_code == 401
+    assert response.json() == {
+        'detail': 'Incorrect username or password',
+    }
+
+def test_invalid_login_wrong_username():
+    response = client.post('/api/v1/token', data={'username': 'user-does-not-exist', 'password': 'password'})
+    assert response.status_code == 401
+    assert response.json() == {
+        'detail': 'Incorrect username or password',
+    }
+
 
 def test_create_user():
     response = client.post('/api/v1/user/create',
@@ -29,6 +43,20 @@ def test_create_user():
     usersresponse = client.get('/api/v1/user', headers=get_auth_header(client, 'admin'))
     users = usersresponse.json()
     assert users['user-to-create']['created_by'] == 'admin'
+
+
+def test_create_existing_user_fails():
+    response = client.post('/api/v1/user/create',
+                           json={'username': 'admin',
+                                 'password': 'password',
+                                 'admin': False,
+                                 'permissions': [{'fs': 'Informatik', 'level': 2}],
+                                 },
+                           headers=get_auth_header(client, 'admin'))
+    assert response.status_code == 409
+    assert response.json() == {
+        'detail': 'Already exists',
+    }
 
 
 def test_create_admin():
@@ -269,6 +297,16 @@ def test_change_own_password():
     assert 'access_token' in response.json()
 
 
+def test_change_own_password_wrong_old_password_fails():
+    response = client.post('/api/v1/user/password',
+                           json={'current_password': 'wrong-password', 'new_password': 'motdepasse'},
+                           headers=get_auth_header(client, 'user'))
+    assert response.status_code == 401
+    assert response.json() == {
+        'detail': 'Wrong current password',
+    }
+
+
 def test_admin_change_other_password():
     response = client.post('/api/v1/user/password/user',
                            json={'new_password': 'motdepasse'},
@@ -277,6 +315,15 @@ def test_admin_change_other_password():
     response = client.post('/api/v1/token', data={'username': 'user', 'password': 'motdepasse'})
     assert 'access_token' in response.json()
 
+
+def test_admin_change_other_password_user_does_not_exist():
+    response = client.post('/api/v1/user/password/invalid-user',
+                           json={'new_password': 'motdepasse'},
+                           headers=get_auth_header(client, 'admin'))
+    assert response.status_code == 404
+    assert response.json() == {
+        'detail': 'That user does not exist',
+    }
 
 def test_change_other_password_without_admin():
     response = client.post('/api/v1/user/password/user',
