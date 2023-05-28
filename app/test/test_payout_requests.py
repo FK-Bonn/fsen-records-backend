@@ -184,3 +184,30 @@ def test_modify_payout_requests_as_user_fails():
         'comment': 'Endlich ist es fertig',
     }, headers=get_auth_header(client, 'user3'))
     assert response.status_code == 401
+
+
+@freeze_time("2023-04-04T10:00:00Z")
+def test_get_payout_request_with_date_filter():
+    response = client.post('/api/v1/payout-request/afsg/create', json={
+        'fs': 'Informatik',
+        'semester': '2023-SoSe',
+    }, headers=get_auth_header(client, 'admin'))
+    assert response.status_code == 200
+
+    response = client.get('/api/v1/payout-request/afsg/2023-04-03')
+    assert response.status_code == 200
+    assert response.json() == [SAMPLE_PAYOUT_REQUEST]
+
+    response = client.get('/api/v1/payout-request/afsg/2023-04-04')
+    assert response.status_code == 200
+    assert response.json() == [
+        SAMPLE_PAYOUT_REQUEST,
+        {'amount_cents': 0,
+         'comment': '',
+         'fs': 'Informatik',
+         'request_date': '2023-04-04',
+         'request_id': 'A23S-0001',
+         'semester': '2023-SoSe',
+         'status': 'EINGEREICHT',
+         'status_date': '2023-04-04'},
+    ]

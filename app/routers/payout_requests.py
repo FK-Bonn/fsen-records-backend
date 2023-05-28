@@ -1,5 +1,5 @@
 import re
-from datetime import datetime
+from datetime import datetime, date, timedelta
 from enum import Enum
 from typing import List, Optional
 from zoneinfo import ZoneInfo
@@ -141,6 +141,17 @@ async def list_afsg_requests():
     with DBHelper() as session:
         subquery = session.query(PayoutRequest.request_id, func.max(PayoutRequest.id).label('id')).group_by(
             PayoutRequest.request_id).subquery()
+        data = session.query(PayoutRequest).join(subquery, PayoutRequest.id == subquery.c.id).all()
+        return data
+
+@router.get("/payout-request/afsg/{limit_date}", response_model=List[PublicPayoutRequest])
+async def list_afsg_requests_before_date(limit_date: date):
+    limit_date += timedelta(days=1)
+    date_string = str(limit_date)
+    with DBHelper() as session:
+        subquery = session.query(PayoutRequest.request_id, func.max(PayoutRequest.id).label('id')). \
+            filter(PayoutRequest.last_modified_timestamp < date_string). \
+            group_by(PayoutRequest.request_id).subquery()
         data = session.query(PayoutRequest).join(subquery, PayoutRequest.id == subquery.c.id).all()
         return data
 
