@@ -16,9 +16,6 @@ SAMPLE_PAYOUT_REQUEST = {
     'amount_cents': 111100,
     'comment': 'comment',
     'request_date': '2023-01-07',
-    'requester': 'tim.test',
-    'last_modified_timestamp': '2023-01-07T22:11:07+00:00',
-    'last_modified_by': 'tim.test',
 }
 
 

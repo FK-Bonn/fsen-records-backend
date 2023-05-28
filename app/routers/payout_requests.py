@@ -136,7 +136,7 @@ def get_payout_request(session: Session, request_id: str) -> Optional[PayoutRequ
     return data
 
 
-@router.get("/payout-request/afsg", response_model=List[PayoutRequestData])
+@router.get("/payout-request/afsg", response_model=List[PublicPayoutRequest])
 async def list_afsg_requests():
     with DBHelper() as session:
         subquery = session.query(PayoutRequest.request_id, func.max(PayoutRequest.id).label('id')).group_by(
