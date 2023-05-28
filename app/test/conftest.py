@@ -76,6 +76,7 @@ class DBTestHelper:
         payout_request.requester = 'tim.test'
         payout_request.last_modified_timestamp = '2023-01-07T22:11:07+00:00'
         payout_request.last_modified_by = 'tim.test'
+        payout_request.completion_deadline = '2025-03-31'
         self._session.add(payout_request)
 
     def __exit__(self, type, value, traceback):

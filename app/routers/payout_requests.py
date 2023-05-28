@@ -36,6 +36,7 @@ class ModifiablePayoutRequestProperties(BaseModel):
     status_date: Optional[str]
     amount_cents: Optional[int]
     comment: Optional[str]
+    completion_deadline: Optional[str]
 
 
 class PublicPayoutRequest(PayoutRequestForCreation):
@@ -45,6 +46,7 @@ class PublicPayoutRequest(PayoutRequestForCreation):
     comment: str
     request_id: str
     request_date: str
+    completion_deadline: str
 
     class Config:
         orm_mode = True
@@ -74,13 +76,16 @@ def check_user_may_submit_payout_request(current_user: User, fs: str, session: S
         )
 
 
-def check_semester_is_open_for_submissions(semester: str):
+def check_semester_is_valid_format(semester: str):
     m = re.match(r'\d\d\d\d-(?:SoSe|WiSe)', semester)
     if not m:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="Invalid semester format",
         )
+
+
+def check_semester_is_open_for_submissions(semester: str):
     if semester not in get_currently_valid_semesters():
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -107,6 +112,15 @@ def get_currently_valid_semesters() -> List[str]:
     ]
     return valid_semesters
 
+
+def get_default_completion_deadline(semester: str) -> str:
+    semester_year = int(semester[:4])
+    semester_type = semester[5:]
+    expiration_month = 10 if semester_type == 'SoSe' else 4
+    expiration_year = semester_year + (2 if semester_type == 'SoSe' else 3)
+    expiration_date = date(expiration_year, expiration_month, 1)
+    deadline_date = expiration_date - timedelta(days=1)
+    return str(deadline_date)
 
 def get_request_id(semester: str, session: Session) -> str:
     year_short = semester[2:4]
@@ -158,6 +172,7 @@ async def list_afsg_requests_before_date(limit_date: date):
 
 @router.post("/payout-request/afsg/create", response_model=PayoutRequestData)
 async def create_afsg_request(data: PayoutRequestForCreation, current_user: User = Depends(get_current_user)):
+    check_semester_is_valid_format(data.semester)
     check_semester_is_open_for_submissions(data.semester)
     with DBHelper() as session:
         check_user_may_submit_payout_request(current_user, data.fs, session)
@@ -178,6 +193,7 @@ async def create_afsg_request(data: PayoutRequestForCreation, current_user: User
         payout_request.requester = current_user.username
         payout_request.last_modified_timestamp = now
         payout_request.last_modified_by = current_user.username
+        payout_request.completion_deadline = get_default_completion_deadline(data.semester)
         session.add(payout_request)
         session.commit()
         return get_payout_request(session, request_id)
@@ -199,6 +215,8 @@ async def modify_afsg_request(request_id: str, data: ModifiablePayoutRequestProp
             payout_request.status = data.status.value
         if data.amount_cents is not None:
             payout_request.amount_cents = data.amount_cents
+        if data.completion_deadline is not None:
+            payout_request.completion_deadline = data.completion_deadline
         if data.comment is not None:
             payout_request.comment = data.comment
         payout_request.last_modified_by = current_user.username

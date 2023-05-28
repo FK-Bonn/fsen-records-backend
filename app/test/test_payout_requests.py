@@ -3,6 +3,7 @@ from fastapi.testclient import TestClient
 from freezegun import freeze_time
 
 from app.main import app
+from app.routers.payout_requests import get_default_completion_deadline
 from app.test.conftest import get_auth_header
 
 client = TestClient(app)
@@ -16,6 +17,7 @@ SAMPLE_PAYOUT_REQUEST = {
     'amount_cents': 111100,
     'comment': 'comment',
     'request_date': '2023-01-07',
+    'completion_deadline': '2025-03-31',
 }
 
 
@@ -44,6 +46,7 @@ def test_create_payout_requests_as_admin():
         'requester': 'admin',
         'last_modified_timestamp': '2023-04-04T10:00:00+00:00',
         'last_modified_by': 'admin',
+        'completion_deadline': '2025-09-30',
     }
 
 
@@ -78,6 +81,7 @@ def test_create_payout_requests_as_write_user():
         'requester': 'user3',
         'last_modified_timestamp': '2023-04-04T10:00:00+00:00',
         'last_modified_by': 'user3',
+        'completion_deadline': '2025-09-30',
     }
 
 
@@ -130,6 +134,7 @@ def test_modify_payout_requests_as_admin():
         'status': 'VOLLSTÄNDIG',
         'status_date': '2023-05-05',
         'amount_cents': 100000,
+        'completion_deadline': '2025-05-31',
         'comment': 'Endlich ist es fertig',
     }, headers=get_auth_header(client, 'admin'))
     assert response.status_code == 200
@@ -145,6 +150,7 @@ def test_modify_payout_requests_as_admin():
         'requester': 'tim.test',
         'last_modified_timestamp': '2023-04-04T10:00:00+00:00',
         'last_modified_by': 'admin',
+        'completion_deadline': '2025-05-31',
     }
 
 
@@ -181,6 +187,7 @@ def test_modify_payout_requests_set_empty_values():
         'requester': 'tim.test',
         'last_modified_timestamp': '2023-04-04T10:00:00+00:00',
         'last_modified_by': 'admin',
+        'completion_deadline': '2025-03-31',
     }
 
 
@@ -200,6 +207,7 @@ def test_modify_payout_requests_no_changes():
         'requester': 'tim.test',
         'last_modified_timestamp': '2023-04-04T10:00:00+00:00',
         'last_modified_by': 'admin',
+        'completion_deadline': '2025-03-31',
     }
 
 
@@ -236,5 +244,18 @@ def test_get_payout_request_with_date_filter():
          'request_id': 'A23S-0001',
          'semester': '2023-SoSe',
          'status': 'EINGEREICHT',
-         'status_date': '2023-04-04'},
+         'status_date': '2023-04-04',
+         'completion_deadline': '2025-09-30'},
     ]
+
+
+@pytest.mark.parametrize("semester,expiration_date", [
+    ['2023-SoSe', '2025-09-30'],
+    ['2023-WiSe', '2026-03-31'],
+    ['2024-SoSe', '2026-09-30'],
+    ['2024-WiSe', '2027-03-31'],
+    ['2025-SoSe', '2027-09-30'],
+    ['2025-WiSe', '2028-03-31'],
+])
+def test_get_default_completion_deadline(semester: str, expiration_date: str):
+    assert get_default_completion_deadline(semester) == expiration_date

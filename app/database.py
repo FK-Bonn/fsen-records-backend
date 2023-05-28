@@ -73,6 +73,7 @@ class PayoutRequest(Base):
     requester: Mapped[str] = mapped_column(String(200), nullable=False)
     last_modified_timestamp: Mapped[str] = mapped_column(String(200), nullable=False)
     last_modified_by: Mapped[str] = mapped_column(String(200), nullable=False)
+    completion_deadline: Mapped[str] = mapped_column(String(200), nullable=False)
 
 
 class DBHelper:
