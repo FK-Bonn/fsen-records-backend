@@ -10,9 +10,9 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 from starlette import status
 
-from app.database import User, DBHelper, PermissionLevel, PayoutRequest
-from app.util import ts, get_europe_berlin_date
+from app.database import User, DBHelper, PayoutRequest
 from app.routers.users import get_current_user, admin_only
+from app.util import ts, get_europe_berlin_date
 
 router = APIRouter()
 
@@ -68,8 +68,8 @@ def check_user_may_submit_payout_request(current_user: User, fs: str, session: S
     if creator.admin:
         return
 
-    creatorpermissions = {p.fs: p.level for p in creator.permissions}
-    if creatorpermissions.get(fs, PermissionLevel.NONE.value) < PermissionLevel.WRITE.value:
+    creatorpermissions = {p.fs: p.submit_payout_request for p in creator.permissions}
+    if not creatorpermissions.get(fs, False):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="User is not authorized to submit payout request for this fs",

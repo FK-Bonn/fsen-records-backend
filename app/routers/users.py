@@ -12,7 +12,7 @@ from starlette import status
 
 from app.config import Config
 from app.database import DBHelper, User, verify_password, Permission as DbPermission, get_password_hash, \
-    PermissionLevel, Base
+    Base
 
 
 class Token(BaseModel):
@@ -22,7 +22,17 @@ class Token(BaseModel):
 
 class Permission(BaseModel):
     fs: str
-    level: int
+    read_permissions: bool
+    write_permissions: bool
+    read_files: bool
+    read_public_data: bool
+    write_public_data: bool
+    read_protected_data: bool
+    write_protected_data: bool
+    submit_payout_request: bool
+
+    class Config:
+        orm_mode = True
 
 
 class PermissionList(BaseModel):
@@ -139,10 +149,10 @@ def check_if_user_may_grant_permissions(current_user: User, userdata: Permission
     if creator.admin:
         return
 
-    creatorpermissions = {p.fs: p.level for p in creator.permissions}
+    creatorpermissions = {p.fs: p.write_permissions for p in creator.permissions}
     is_subset = True
     for permission in userdata.permissions:
-        if permission.fs not in creatorpermissions or creatorpermissions[permission.fs] < permission.level:
+        if permission.fs not in creatorpermissions or not creatorpermissions[permission.fs]:
             is_subset = False
     if userdata.admin or not is_subset:
         raise HTTPException(
@@ -188,10 +198,7 @@ async def create_user(userdata: UserForCreation, current_user: User = Depends(ge
             user.created_by = current_user.username
             items.append(user)
             for p in userdata.permissions:
-                permission = DbPermission()
-                permission.user = userdata.username
-                permission.fs = p.fs
-                permission.level = p.level
+                permission = to_db_permission(p, userdata.username)
                 items.append(permission)
 
             session.add_all(items)
@@ -199,12 +206,17 @@ async def create_user(userdata: UserForCreation, current_user: User = Depends(ge
             return {'username': user.username,
                     'admin': user.admin,
                     'created_by': user.created_by,
-                    'permissions': [{'fs': p.fs, 'level': p.level} for p in user.permissions]}
+                    'permissions': [p for p in user.permissions]}
     except IntegrityError:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="Already exists",
         )
+
+
+def is_empty(p: DbPermission):
+    return not (p.read_files or p.write_permissions or p.read_public_data or p.write_public_data or
+                p.read_protected_data or p.write_protected_data or p.submit_payout_request)
 
 
 @router.post("/user/permissions", dependencies=[Depends(admin_only)], response_model=UserWithPermissions)
@@ -222,18 +234,14 @@ async def set_user_permissions(userdata: PermissionsForUser):
             synchronize_session="fetch")
         session.execute(stmt)
         for p in userdata.permissions:
-            if p.level == PermissionLevel.NONE.value:
-                continue
-            permission = DbPermission()
-            permission.user = userdata.username
-            permission.fs = p.fs
-            permission.level = p.level
-            session.add(permission)
+            permission = to_db_permission(p, userdata.username)
+            if not is_empty(permission):
+                session.add(permission)
         session.commit()
         return {'username': user.username,
                 'admin': user.admin,
                 'created_by': user.created_by,
-                'permissions': [{'fs': p.fs, 'level': p.level} for p in user.permissions]}
+                'permissions': [p for p in user.permissions]}
 
 
 @router.patch("/user/permissions", response_model=UserWithPermissions)
@@ -256,18 +264,30 @@ async def patch_user_permissions(userdata: PermissionList, current_user: User = 
                 execution_options(synchronize_session="fetch")
             session.execute(stmt)
         for p in userdata.permissions:
-            db_permission = DbPermission()
-            db_permission.user = userdata.username
-            db_permission.fs = p.fs
-            db_permission.level = p.level
+            db_permission = to_db_permission(p, userdata.username)
             session.add(db_permission)
         session.commit()
         actor: User = session.get(User, current_user.username)
-        managed_fs = set(p.fs for p in actor.permissions if p.level >= PermissionLevel.WRITE.value)
+        managed_fs = set(p.fs for p in actor.permissions if p.write_permissions)
         return {'username': user.username,
                 'admin': user.admin,
                 'created_by': user.created_by,
-                'permissions': [{'fs': p.fs, 'level': p.level} for p in user.permissions if p.fs in managed_fs]}
+                'permissions': [p for p in user.permissions if p.fs in managed_fs]}
+
+
+def to_db_permission(p: Permission, username: str):
+    db_permission = DbPermission()
+    db_permission.user = username
+    db_permission.fs = p.fs
+    db_permission.read_permissions = p.read_permissions
+    db_permission.write_permissions = p.write_permissions
+    db_permission.read_files = p.read_files
+    db_permission.read_public_data = p.read_public_data
+    db_permission.write_public_data = p.write_public_data
+    db_permission.read_protected_data = p.read_protected_data
+    db_permission.write_protected_data = p.write_protected_data
+    db_permission.submit_payout_request = p.submit_payout_request
+    return db_permission
 
 
 @router.get("/user", response_model=Dict[str, UserWithPermissions])
@@ -281,18 +301,18 @@ async def get_user_list(current_user: User = Depends(get_current_user)):
                     'username': user.username,
                     'admin': user.admin,
                     'created_by': user.created_by,
-                    'permissions': [{'fs': p.fs, 'level': p.level} for p in user.permissions],
+                    'permissions': [p for p in user.permissions],
                 }
         else:
             actor: User = session.get(User, current_user.username)
-            managed_fs = set(p.fs for p in actor.permissions if p.level >= PermissionLevel.WRITE.value)
+            readable_fs = set(p.fs for p in actor.permissions if p.read_permissions)
             for user in users:
-                if set(p.fs for p in user.permissions).intersection(managed_fs):
+                if set(p.fs for p in user.permissions).intersection(readable_fs):
                     allusers[user.username] = {
                         'username': user.username,
                         'admin': user.admin,
                         'created_by': user.created_by,
-                        'permissions': [{'fs': p.fs, 'level': p.level} for p in user.permissions if p.fs in managed_fs],
+                        'permissions': [p for p in user.permissions if p.fs in readable_fs],
                     }
         return allusers
 
@@ -305,7 +325,7 @@ async def who_am_i(current_user: User = Depends(get_current_user)):
             'username': user.username,
             'admin': user.admin,
             'created_by': user.created_by,
-            'permissions': [{'fs': p.fs, 'level': p.level} for p in user.permissions],
+            'permissions': [p for p in user.permissions],
         }
 
 

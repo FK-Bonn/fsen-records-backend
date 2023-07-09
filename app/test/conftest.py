@@ -35,12 +35,18 @@ class DBTestHelper:
             self.add_user('user4', 'root')
             self.add_user('user5', 'root')
             self.add_user('admin', 'root', admin=True)
-            self.add_permission('user2', 'Informatik', 1)
-            self.add_permission('user3', 'Informatik', 2)
-            self.add_permission('user4', 'Informatik', 1)
-            self.add_permission('user4', 'Geographie', 1)
-            self.add_permission('user5', 'Informatik', 2)
-            self.add_permission('user5', 'Geographie', 2)
+            self.add_permission('user2', 'Informatik', read_files=True, read_permissions=True, read_public_data=True)
+            self.add_permission('user3', 'Informatik', read_files=True, read_permissions=True, write_permissions=True,
+                                read_public_data=True, write_public_data=True, read_protected_data=True,
+                                write_protected_data=True, submit_payout_request=True)
+            self.add_permission('user4', 'Informatik', read_files=True, read_permissions=True, read_public_data=True)
+            self.add_permission('user4', 'Geographie', read_files=True, read_permissions=True, read_public_data=True)
+            self.add_permission('user5', 'Informatik', read_files=True, read_permissions=True, write_permissions=True,
+                                read_public_data=True, write_public_data=True, read_protected_data=True,
+                                write_protected_data=True, submit_payout_request=True)
+            self.add_permission('user5', 'Geographie', read_files=True, read_permissions=True, write_permissions=True,
+                                read_public_data=True, write_public_data=True, read_protected_data=True,
+                                write_protected_data=True, submit_payout_request=True)
             self.add_payout_request()
             self._session.commit()
         return self._session
@@ -54,12 +60,28 @@ class DBTestHelper:
         user.admin = admin
         self._session.add(user)
 
-    def add_permission(self, username: str, fs: str, level: int):
+    def add_permission(self, username: str, fs: str,
+                       read_permissions: bool = False,
+                       write_permissions: bool = False,
+                       read_files: bool = False,
+                       read_public_data: bool = False,
+                       write_public_data: bool = False,
+                       read_protected_data: bool = False,
+                       write_protected_data: bool = False,
+                       submit_payout_request: bool = False,
+                       ):
         assert self._session
         permission = Permission()
         permission.user = username
         permission.fs = fs
-        permission.level = level
+        permission.read_permissions = read_permissions
+        permission.write_permissions = write_permissions
+        permission.read_files = read_files
+        permission.read_public_data = read_public_data
+        permission.write_public_data = write_public_data
+        permission.read_protected_data = read_protected_data
+        permission.write_protected_data = write_protected_data
+        permission.submit_payout_request = submit_payout_request
         self._session.add(permission)
 
     def add_payout_request(self):

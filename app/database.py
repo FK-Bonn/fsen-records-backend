@@ -1,5 +1,3 @@
-from enum import Enum
-
 from passlib.context import CryptContext
 from sqlalchemy import String, ForeignKey, Text
 from sqlalchemy import create_engine
@@ -22,11 +20,6 @@ def get_password_hash(password):
 class Base(DeclarativeBase):
     pass
 
-class PermissionLevel(Enum):
-    NONE = 0
-    READ = 1
-    WRITE = 2
-
 
 class User(Base):
     __tablename__ = "users"
@@ -41,7 +34,14 @@ class Permission(Base):
     __tablename__ = "permissions"
     user: Mapped[str] = mapped_column(ForeignKey(User.username, ondelete='CASCADE'), primary_key=True)
     fs: Mapped[str] = mapped_column(String(200), primary_key=True)
-    level: Mapped[int] = mapped_column(nullable=False, default=PermissionLevel.NONE)
+    read_permissions: Mapped[bool] = mapped_column(nullable=False, default=False)
+    write_permissions: Mapped[bool] = mapped_column(nullable=False, default=False)
+    read_files: Mapped[bool] = mapped_column(nullable=False, default=False)
+    read_public_data: Mapped[bool] = mapped_column(nullable=False, default=False)
+    write_public_data: Mapped[bool] = mapped_column(nullable=False, default=False)
+    read_protected_data: Mapped[bool] = mapped_column(nullable=False, default=False)
+    write_protected_data: Mapped[bool] = mapped_column(nullable=False, default=False)
+    submit_payout_request: Mapped[bool] = mapped_column(nullable=False, default=False)
 
 class FsData(Base):
     __tablename__ = "fs_data"
