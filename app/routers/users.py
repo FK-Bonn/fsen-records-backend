@@ -1,5 +1,5 @@
 from datetime import datetime, timedelta
-from typing import Optional, List, Dict
+from typing import Optional, List, Dict, Coroutine, Any, Callable
 
 from fastapi import HTTPException, Depends, APIRouter
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
@@ -65,7 +65,7 @@ class NewPasswordData(BaseModel):
     new_password: str
 
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token", auto_error=False)
 
 router = APIRouter()
 
@@ -100,7 +100,21 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
     return encoded_jwt
 
 
-async def get_current_user(token: str = Depends(oauth2_scheme)) -> User:
+async def get_current_user_or_raise(token: str = Depends(oauth2_scheme)) -> User:
+    if not token:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Not authenticated",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    return  get_user_for_token(token)
+
+async def get_current_user_or_none(token: str = Depends(oauth2_scheme)) -> Optional[User]:
+    if not token:
+        return None
+    return get_user_for_token(token)
+
+def get_user_for_token(token: str)->User:
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",
@@ -119,8 +133,14 @@ async def get_current_user(token: str = Depends(oauth2_scheme)) -> User:
         raise credentials_exception
     return user
 
+def get_current_user(auto_error: bool = True) -> Callable[[str], Coroutine[Any, Any, User]] | Callable[
+    [str], Coroutine[Any, Any, User | None]]:
+    if auto_error:
+        return get_current_user_or_raise
+    else:
+        return get_current_user_or_none
 
-async def admin_only(current_user: User = Depends(get_current_user)):
+async def admin_only(current_user: User = Depends(get_current_user())):
     if not current_user.admin:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -184,7 +204,7 @@ def check_permission_list(userdata: PermissionList):
 
 
 @router.post("/user/create", response_model=UserWithPermissions)
-async def create_user(userdata: UserForCreation, current_user: User = Depends(get_current_user)):
+async def create_user(userdata: UserForCreation, current_user: User = Depends(get_current_user())):
     try:
         with DBHelper() as session:
             check_if_user_may_grant_permissions(current_user, userdata, session)
@@ -245,7 +265,7 @@ async def set_user_permissions(userdata: PermissionsForUser):
 
 
 @router.patch("/user/permissions", response_model=UserWithPermissions)
-async def patch_user_permissions(userdata: PermissionList, current_user: User = Depends(get_current_user)):
+async def patch_user_permissions(userdata: PermissionList, current_user: User = Depends(get_current_user())):
     check_permission_list(userdata)
     with DBHelper() as session:
         user: User = session.get(User, userdata.username)
@@ -291,7 +311,7 @@ def to_db_permission(p: Permission, username: str):
 
 
 @router.get("/user", response_model=Dict[str, UserWithPermissions])
-async def get_user_list(current_user: User = Depends(get_current_user)):
+async def get_user_list(current_user: User = Depends(get_current_user())):
     with DBHelper() as session:
         users: List[User] = session.query(User).all()
         allusers = {}
@@ -318,7 +338,7 @@ async def get_user_list(current_user: User = Depends(get_current_user)):
 
 
 @router.get("/user/me", response_model=UserWithPermissions)
-async def who_am_i(current_user: User = Depends(get_current_user)):
+async def who_am_i(current_user: User = Depends(get_current_user())):
     with DBHelper() as session:
         user: User = session.get(User, current_user.username)
         return {
@@ -330,7 +350,7 @@ async def who_am_i(current_user: User = Depends(get_current_user)):
 
 
 @router.post("/user/password", status_code=200)
-async def change_password(password_change_data: PasswordChangeData, current_user: User = Depends(get_current_user)):
+async def change_password(password_change_data: PasswordChangeData, current_user: User = Depends(get_current_user())):
     with DBHelper() as session:
         user: User = session.get(User, current_user.username)
         if not verify_password(password_change_data.current_password, user.hashed_password):

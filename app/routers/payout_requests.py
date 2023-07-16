@@ -7,7 +7,7 @@ from zoneinfo import ZoneInfo
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy import func
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, make_transient
 from starlette import status
 
 from app.database import User, DBHelper, PayoutRequest
@@ -53,9 +53,9 @@ class PublicPayoutRequest(PayoutRequestForCreation):
 
 
 class PayoutRequestData(PublicPayoutRequest):
-    requester: str
-    last_modified_timestamp: str
-    last_modified_by: str
+    requester: Optional[str]
+    last_modified_timestamp: Optional[str]
+    last_modified_by: Optional[str]
 
 
 def check_user_may_submit_payout_request(current_user: User, fs: str, session: Session):
@@ -150,16 +150,27 @@ def get_payout_request(session: Session, request_id: str) -> Optional[PayoutRequ
     return data
 
 
-@router.get("/payout-request/afsg", response_model=List[PublicPayoutRequest])
-async def list_afsg_requests():
+def get_payout_request_history(session: Session, request_id: str) -> List[PayoutRequest]:
+    return session.query(PayoutRequest). \
+        filter(PayoutRequest.request_id == request_id). \
+        order_by(PayoutRequest.last_modified_timestamp.desc()).all()
+
+
+@router.get("/payout-request/afsg", response_model=List[PayoutRequestData])
+async def list_afsg_requests(current_user: User = Depends(get_current_user(auto_error=False))):
     with DBHelper() as session:
         subquery = session.query(PayoutRequest.request_id, func.max(PayoutRequest.id).label('id')).group_by(
             PayoutRequest.request_id).subquery()
         data = session.query(PayoutRequest).join(subquery, PayoutRequest.id == subquery.c.id).all()
-        return data
+        if current_user and current_user.admin:
+            return data
+        else:
+            return [PublicPayoutRequest(**item.__dict__) for item in data]
 
-@router.get("/payout-request/afsg/{limit_date}", response_model=List[PublicPayoutRequest])
-async def list_afsg_requests_before_date(limit_date: date):
+
+@router.get("/payout-request/afsg/{limit_date}", response_model=List[PayoutRequestData])
+async def list_afsg_requests_before_date(limit_date: date,
+                                         current_user: User = Depends(get_current_user(auto_error=False))):
     limit_date += timedelta(days=1)
     date_string = str(limit_date)
     with DBHelper() as session:
@@ -167,11 +178,14 @@ async def list_afsg_requests_before_date(limit_date: date):
             filter(PayoutRequest.last_modified_timestamp < date_string). \
             group_by(PayoutRequest.request_id).subquery()
         data = session.query(PayoutRequest).join(subquery, PayoutRequest.id == subquery.c.id).all()
-        return data
+        if current_user and current_user.admin:
+            return data
+        else:
+            return [PublicPayoutRequest(**item.__dict__) for item in data]
 
 
 @router.post("/payout-request/afsg/create", response_model=PayoutRequestData)
-async def create_afsg_request(data: PayoutRequestForCreation, current_user: User = Depends(get_current_user)):
+async def create_afsg_request(data: PayoutRequestForCreation, current_user: User = Depends(get_current_user())):
     check_semester_is_valid_format(data.semester)
     check_semester_is_open_for_submissions(data.semester)
     with DBHelper() as session:
@@ -201,14 +215,17 @@ async def create_afsg_request(data: PayoutRequestForCreation, current_user: User
 
 @router.patch("/payout-request/afsg/{request_id}", dependencies=[Depends(admin_only)], response_model=PayoutRequestData)
 async def modify_afsg_request(request_id: str, data: ModifiablePayoutRequestProperties,
-                              current_user: User = Depends(get_current_user)):
+                              current_user: User = Depends(get_current_user())):
     with DBHelper() as session:
         payout_request = get_payout_request(session, request_id)
         if not payout_request:
             raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="PayoutRequest not found",
-        )
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="PayoutRequest not found",
+            )
+        session.expunge(payout_request)
+        make_transient(payout_request)
+        payout_request.id = None  # type: ignore
         if data.status_date is not None:
             payout_request.status_date = data.status_date
         if data.status is not None:
@@ -221,5 +238,20 @@ async def modify_afsg_request(request_id: str, data: ModifiablePayoutRequestProp
             payout_request.comment = data.comment
         payout_request.last_modified_by = current_user.username
         payout_request.last_modified_timestamp = ts()
+        session.add(payout_request)
         session.commit()
         return get_payout_request(session, request_id)
+
+
+@router.get("/payout-request/afsg/{request_id}/history", response_model=List[PayoutRequestData])
+async def get_afsg_request_history(request_id: str, current_user: User = Depends(get_current_user(auto_error=False))):
+    with DBHelper() as session:
+        payout_request_history = get_payout_request_history(session, request_id)
+        if not len(payout_request_history):
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="PayoutRequest not found",
+            )
+        if current_user and current_user.admin:
+            return payout_request_history
+        return [PublicPayoutRequest(**item.__dict__) for item in payout_request_history]

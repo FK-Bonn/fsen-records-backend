@@ -99,7 +99,7 @@ def check_permission(current_user: User, fs: str,
 
 
 @router.get("/file/{fs}/{filename}", response_class=FileResponse)
-async def get_individual_file(fs: str, filename: str, current_user: User = Depends(get_current_user)):
+async def get_individual_file(fs: str, filename: str, current_user: User = Depends(get_current_user())):
     check_permission(current_user, fs, read_files=True)
     subfolder = get_subfolder_from_filename(filename)
     if not subfolder or '/' in fs or '/' in filename:
@@ -117,7 +117,7 @@ async def get_individual_file(fs: str, filename: str, current_user: User = Depen
 
 
 @router.get("/data", response_model=dict[str, FsDataTuple])
-async def get_all_fsdata(current_user: User = Depends(get_current_user)):
+async def get_all_fsdata(current_user: User = Depends(get_current_user())):
     retval = {}
     with DBHelper() as session:
         subquery = session.query(func.max(FsData.id).label('id'), FsData.fs).group_by(FsData.fs).subquery()
@@ -139,7 +139,7 @@ async def get_all_fsdata(current_user: User = Depends(get_current_user)):
 
 
 @router.get("/data/{fs}", response_model=FsDataType)
-async def get_fsdata(fs: str, current_user: User = Depends(get_current_user)):
+async def get_fsdata(fs: str, current_user: User = Depends(get_current_user())):
     check_permission(current_user, fs, read_public_data=True)
     with DBHelper() as session:
         subquery = session.query(func.max(FsData.id).label('id')).where(FsData.fs == fs).subquery()
@@ -153,7 +153,7 @@ async def get_fsdata(fs: str, current_user: User = Depends(get_current_user)):
 
 
 @router.put("/data/{fs}")
-async def set_fsdata(data: FsDataType, fs: str, current_user: User = Depends(get_current_user)):
+async def set_fsdata(data: FsDataType, fs: str, current_user: User = Depends(get_current_user())):
     check_permission(current_user, fs, write_public_data=True)
     with DBHelper() as session:
         db_data = FsData()
@@ -166,7 +166,7 @@ async def set_fsdata(data: FsDataType, fs: str, current_user: User = Depends(get
 
 
 @router.get("/data/{fs}/protected", response_model=ProtectedFsDataType)
-async def get_protected_fsdata(fs: str, current_user: User = Depends(get_current_user)):
+async def get_protected_fsdata(fs: str, current_user: User = Depends(get_current_user())):
     check_permission(current_user, fs, read_protected_data=True)
     with DBHelper() as session:
         subquery = session.query(func.max(ProtectedFsData.id).label('id')).where(ProtectedFsData.fs == fs).subquery()
@@ -181,7 +181,7 @@ async def get_protected_fsdata(fs: str, current_user: User = Depends(get_current
 
 @router.put("/data/{fs}/protected")
 async def set_protected_fsdata(data: ProtectedFsDataType, fs: str,
-                               current_user: User = Depends(get_current_user)):
+                               current_user: User = Depends(get_current_user())):
     check_permission(current_user, fs, write_protected_data=True)
     with DBHelper() as session:
         db_data = ProtectedFsData()
