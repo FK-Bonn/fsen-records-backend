@@ -1,5 +1,6 @@
 import pytest
 from fastapi.testclient import TestClient
+from freezegun import freeze_time
 
 from app.main import app
 from app.test.conftest import get_auth_header
@@ -155,6 +156,52 @@ def test_set_and_get_fsdata(user):
     response = client.get('/api/v1/data/Informatik', headers=get_auth_header(client, user))
     assert response.status_code == 200
     assert response.json() == SAMPLE_DATA
+
+
+def test_fsdata_history_as_admin():
+    data1 = SAMPLE_DATA
+    data2 = {**SAMPLE_DATA, 'website': 'https://changed.xyz', }
+    with freeze_time("2023-04-04T10:00:00Z"):
+        response = client.put('/api/v1/data/Informatik', json=data1, headers=get_auth_header(client, 'admin'))
+        assert response.status_code == 200
+    with freeze_time("2023-07-07T17:00:00Z"):
+        response = client.put('/api/v1/data/Informatik', json=data2, headers=get_auth_header(client, 'admin'))
+        assert response.status_code == 200
+
+    response = client.get('/api/v1/data/Informatik/history', headers=get_auth_header(client, 'admin'))
+    assert response.status_code == 200
+    assert response.json() == [
+        {**data2, 'timestamp': '2023-07-07T17:00:00+00:00'},
+        {**data1, 'timestamp': '2023-04-04T10:00:00+00:00'},
+    ]
+
+
+def test_fsdata_history_unauthorized():
+    response = client.get('/api/v1/data/Informatik/history', headers=get_auth_header(client, 'user'))
+    assert response.status_code == 401
+
+
+def test_protected_fsdata_history_as_admin():
+    data1 = SAMPLE_PROTECTED_DATA
+    data2 = {**SAMPLE_PROTECTED_DATA, 'iban': 'AT1234567890', }
+    with freeze_time("2023-04-04T10:00:00Z"):
+        response = client.put('/api/v1/data/Informatik/protected', json=data1, headers=get_auth_header(client, 'admin'))
+        assert response.status_code == 200
+    with freeze_time("2023-07-07T17:00:00Z"):
+        response = client.put('/api/v1/data/Informatik/protected', json=data2, headers=get_auth_header(client, 'admin'))
+        assert response.status_code == 200
+
+    response = client.get('/api/v1/data/Informatik/protected/history', headers=get_auth_header(client, 'admin'))
+    assert response.status_code == 200
+    assert response.json() == [
+        {**data2, 'timestamp': '2023-07-07T17:00:00+00:00'},
+        {**data1, 'timestamp': '2023-04-04T10:00:00+00:00'},
+    ]
+
+
+def test_protected_fsdata_history_unauthorized():
+    response = client.get('/api/v1/data/Informatik/protected/history', headers=get_auth_header(client, 'user'))
+    assert response.status_code == 401
 
 
 @pytest.mark.parametrize('user', [

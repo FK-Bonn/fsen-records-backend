@@ -1,5 +1,5 @@
 import json
-from typing import Optional
+from typing import Optional, List
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
@@ -9,7 +9,7 @@ from starlette.responses import FileResponse
 
 from app.config import Config
 from app.database import User, DBHelper, Permission, FsData, ProtectedFsData
-from app.routers.users import get_current_user
+from app.routers.users import get_current_user, admin_only
 from app.util import ts, to_json
 
 SUBFOLDERS = {
@@ -52,12 +52,19 @@ class FsDataType(BaseModel):
     other: dict
 
 
+class TimestampedFsDataType(FsDataType):
+    timestamp: str
+
+
 class ProtectedFsDataType(BaseModel):
     email_addresses: list[EmailAddress]
     iban: str
     bic: str
     other: dict
 
+
+class TimestampedProtectedFsDataType(ProtectedFsDataType):
+    timestamp: str
 
 class FsDataTuple(BaseModel):
     data: Optional[FsDataType]
@@ -150,6 +157,32 @@ async def get_fsdata(fs: str, current_user: User = Depends(get_current_user())):
                 detail="No data found",
             )
         return json.loads(data.data)
+
+
+@router.get("/data/{fs}/history", dependencies=[Depends(admin_only)], response_model=List[TimestampedFsDataType])
+async def get_fsdata_history(fs: str):
+    with DBHelper() as session:
+        data = session.query(FsData).filter(FsData.fs == fs).order_by(FsData.timestamp.desc()).all()
+        if not len(data):
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="No data found",
+            )
+        return [TimestampedFsDataType(**json.loads(item.data), timestamp=item.timestamp) for item in data]
+
+
+@router.get("/data/{fs}/protected/history", dependencies=[Depends(admin_only)],
+            response_model=List[TimestampedProtectedFsDataType])
+async def get_protected_fsdata_history(fs: str):
+    with DBHelper() as session:
+        data = session.query(ProtectedFsData).filter(ProtectedFsData.fs == fs).order_by(
+            ProtectedFsData.timestamp.desc()).all()
+        if not len(data):
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="No data found",
+            )
+        return [TimestampedProtectedFsDataType(**json.loads(item.data), timestamp=item.timestamp) for item in data]
 
 
 @router.put("/data/{fs}")
