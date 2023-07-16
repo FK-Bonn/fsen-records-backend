@@ -176,6 +176,17 @@ def test_create_user_no_admin():
     assert response.status_code == 200
 
 
+def test_set_user_permissions_as_admin_invalid_user():
+    response = client.post('/api/v1/user/permissions',
+                           json={'username': 'does-not-exist',
+                                 'admin': False,
+                                 'permissions': [{'fs': 'Geographie',
+                                                  **PERMISSIONS_LEVEL_2}],
+                                 },
+                           headers=get_auth_header(client, 'admin'))
+    assert response.status_code == 404
+
+
 def test_set_user_permissions_as_admin():
     response = client.post('/api/v1/user/permissions',
                            json={'username': 'user',
@@ -216,6 +227,16 @@ def test_set_user_permissions_as_admin_bad_permission_list():
                            headers=get_auth_header(client, 'admin'))
     assert response.status_code == 400
 
+
+def test_add_user_permission_as_user_missing_user():
+    response = client.patch('/api/v1/user/permissions',
+                            json={
+                                'username': 'does-not-exist',
+                                'permissions': [{'fs': 'Informatik',
+                                                 **PERMISSIONS_LEVEL_1}],
+                            },
+                            headers=get_auth_header(client, 'user3'))
+    assert response.status_code == 404
 
 def test_add_user_permission_as_user():
     response = client.patch('/api/v1/user/permissions',

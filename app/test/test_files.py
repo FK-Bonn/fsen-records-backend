@@ -33,3 +33,8 @@ def test_get_single_nonexisting_file():
     response = client.get('/api/v1/file/Informatik/HHP-2022-02-01--2023-03-31-does-not-exist.pdf',
                           headers=get_auth_header(client))
     assert response.status_code == 404
+
+def test_get_single_file_wrong_format():
+    response = client.get('/api/v1/file/Informatik/ABC-2022-02-01--2023-03-31.pdf',
+                          headers=get_auth_header(client))
+    assert response.status_code == 404

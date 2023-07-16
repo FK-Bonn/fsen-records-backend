@@ -12,6 +12,8 @@ from app.database import User, DBHelper, Permission, FsData, ProtectedFsData
 from app.routers.users import get_current_user, admin_only
 from app.util import ts, to_json
 
+LAST_FS_DATA_FORMAT_UPDATE = '2023-01-01'
+
 SUBFOLDERS = {
     'HHP-': 'HHP',
     'HHR-': 'HHR',
@@ -52,7 +54,17 @@ class FsDataType(BaseModel):
     other: dict
 
 
+class FsDataResponse(BaseModel):
+    data: FsDataType
+    is_latest: bool
+
+
 class TimestampedFsDataType(FsDataType):
+    id: int
+    user: str
+    approved: bool
+    approved_by: Optional[str]
+    approval_timestamp: Optional[str]
     timestamp: str
 
 
@@ -63,12 +75,23 @@ class ProtectedFsDataType(BaseModel):
     other: dict
 
 
+class ProtectedFsDataResponse(BaseModel):
+    data: ProtectedFsDataType
+    is_latest: bool
+
+
 class TimestampedProtectedFsDataType(ProtectedFsDataType):
+    id: int
+    user: str
+    approved: bool
+    approved_by: Optional[str]
+    approval_timestamp: Optional[str]
     timestamp: str
 
+
 class FsDataTuple(BaseModel):
-    data: Optional[FsDataType]
-    protected_data: Optional[ProtectedFsDataType]
+    data: Optional[FsDataResponse]
+    protected_data: Optional[ProtectedFsDataResponse]
 
 
 def get_subfolder_from_filename(filename: str) -> Optional[str]:
@@ -127,48 +150,71 @@ async def get_individual_file(fs: str, filename: str, current_user: User = Depen
 async def get_all_fsdata(current_user: User = Depends(get_current_user())):
     retval = {}
     with DBHelper() as session:
-        subquery = session.query(func.max(FsData.id).label('id'), FsData.fs).group_by(FsData.fs).subquery()
+        subquery = session.query(func.max(FsData.id).label('id'), FsData.fs). \
+            where(FsData.approved.is_(True)). \
+            group_by(FsData.fs).subquery()
         data = session.query(FsData).join(subquery, FsData.id == subquery.c.id).all()
+        latest_ids_for_data = {row.fs: row.id for row in
+                               session.query(func.max(FsData.id).label('id'), FsData.fs). \
+                                   group_by(FsData.fs).all()}
         prot_subquery = session.query(func.max(ProtectedFsData.id).label('id'), ProtectedFsData.fs). \
+            where(ProtectedFsData.approved.is_(True)). \
             group_by(ProtectedFsData.fs).subquery()
         prot_data = session.query(ProtectedFsData).join(prot_subquery, ProtectedFsData.id == prot_subquery.c.id).all()
+        latest_ids_for_prot_data = {row.fs: row.id for row in
+                                    session.query(func.max(ProtectedFsData.id).label('id'), ProtectedFsData.fs). \
+                                        group_by(ProtectedFsData.fs).all()}
         for row in data:
             permission = session.get(Permission, (current_user.username, row.fs))
             if current_user.admin or (permission and permission.read_public_data):
-                retval[row.fs] = FsDataTuple(data=json.loads(row.data), protected_data=None)
+                retval[row.fs] = FsDataTuple(data=FsDataResponse(data=json.loads(row.data), is_latest=(
+                        row.id == latest_ids_for_data.get(row.fs, None))),
+                                             protected_data=None)
         for row in prot_data:
             permission = session.get(Permission, (current_user.username, row.fs))
             if current_user.admin or (permission and permission.read_protected_data):
                 if row.fs not in retval:
                     retval[row.fs] = FsDataTuple(data=None, protected_data=None)
-                retval[row.fs].protected_data = json.loads(row.data)
+                retval[row.fs].protected_data = ProtectedFsDataResponse(data=json.loads(row.data), is_latest=(
+                        row.id == latest_ids_for_prot_data.get(row.fs, None)))
         return retval
 
 
-@router.get("/data/{fs}", response_model=FsDataType)
+@router.get("/data/{fs}", response_model=FsDataResponse)
 async def get_fsdata(fs: str, current_user: User = Depends(get_current_user())):
     check_permission(current_user, fs, read_public_data=True)
     with DBHelper() as session:
-        subquery = session.query(func.max(FsData.id).label('id')).where(FsData.fs == fs).subquery()
+        subquery = session.query(func.max(FsData.id).label('id')). \
+            where(FsData.fs == fs, FsData.approved.is_(True)).subquery()
         data = session.query(FsData).filter(FsData.id == subquery.c.id).first()
+        latest_id = session.query(func.max(FsData.id).label('id')). \
+            where(FsData.fs == fs).scalar()
         if not data:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="No data found",
             )
-        return json.loads(data.data)
+        return FsDataResponse(data=json.loads(data.data), is_latest=data.id == latest_id)
 
 
 @router.get("/data/{fs}/history", dependencies=[Depends(admin_only)], response_model=List[TimestampedFsDataType])
 async def get_fsdata_history(fs: str):
     with DBHelper() as session:
-        data = session.query(FsData).filter(FsData.fs == fs).order_by(FsData.timestamp.desc()).all()
+        data = session.query(FsData). \
+            filter(FsData.fs == fs, FsData.timestamp > LAST_FS_DATA_FORMAT_UPDATE). \
+            order_by(FsData.timestamp.desc()).all()
         if not len(data):
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="No data found",
             )
-        return [TimestampedFsDataType(**json.loads(item.data), timestamp=item.timestamp) for item in data]
+        return [TimestampedFsDataType(**json.loads(item.data),
+                                      id=item.id,
+                                      user=item.user,
+                                      timestamp=item.timestamp,
+                                      approved=item.approved,
+                                      approved_by=item.approved_by,
+                                      approval_timestamp=item.approval_timestamp) for item in data]
 
 
 @router.get("/data/{fs}/protected/history", dependencies=[Depends(admin_only)],
@@ -182,7 +228,13 @@ async def get_protected_fsdata_history(fs: str):
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="No data found",
             )
-        return [TimestampedProtectedFsDataType(**json.loads(item.data), timestamp=item.timestamp) for item in data]
+        return [TimestampedProtectedFsDataType(**json.loads(item.data),
+                                               id=item.id,
+                                               user=item.user,
+                                               timestamp=item.timestamp,
+                                               approved=item.approved,
+                                               approved_by=item.approved_by,
+                                               approval_timestamp=item.approval_timestamp) for item in data]
 
 
 @router.put("/data/{fs}")
@@ -192,24 +244,31 @@ async def set_fsdata(data: FsDataType, fs: str, current_user: User = Depends(get
         db_data = FsData()
         db_data.user = current_user.username
         db_data.fs = fs
-        db_data.timestamp = ts()
+        now = ts()
+        db_data.timestamp = now
         db_data.data = to_json(data)
+        db_data.approved = True
+        db_data.approved_by = 'auto'
+        db_data.approval_timestamp = now
         session.add(db_data)
         session.commit()
 
 
-@router.get("/data/{fs}/protected", response_model=ProtectedFsDataType)
+@router.get("/data/{fs}/protected", response_model=ProtectedFsDataResponse)
 async def get_protected_fsdata(fs: str, current_user: User = Depends(get_current_user())):
     check_permission(current_user, fs, read_protected_data=True)
     with DBHelper() as session:
-        subquery = session.query(func.max(ProtectedFsData.id).label('id')).where(ProtectedFsData.fs == fs).subquery()
+        subquery = session.query(func.max(ProtectedFsData.id).label('id')). \
+            where(ProtectedFsData.fs == fs, ProtectedFsData.approved.is_(True)).subquery()
         data = session.query(ProtectedFsData).filter(ProtectedFsData.id == subquery.c.id).first()
+        latest_id = session.query(func.max(ProtectedFsData.id).label('id')). \
+            where(ProtectedFsData.fs == fs).scalar()
         if not data:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="No data found",
             )
-        return json.loads(data.data)
+        return ProtectedFsDataResponse(data=json.loads(data.data), is_latest=data.id == latest_id)
 
 
 @router.put("/data/{fs}/protected")
@@ -220,7 +279,42 @@ async def set_protected_fsdata(data: ProtectedFsDataType, fs: str,
         db_data = ProtectedFsData()
         db_data.user = current_user.username
         db_data.fs = fs
-        db_data.timestamp = ts()
+        now = ts()
+        db_data.timestamp = now
         db_data.data = to_json(data)
+        if current_user.admin:
+            db_data.approved = True
+            db_data.approved_by = 'auto'
+            db_data.approval_timestamp = now
         session.add(db_data)
+        session.commit()
+
+
+@router.post("/data/approve/{id_}", dependencies=[Depends(admin_only)])
+async def approve_fs_data(id_: int, current_user: User = Depends(get_current_user())):
+    with DBHelper() as session:
+        data = session.get(FsData, id_)
+        if not data:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="No data found",
+            )
+        data.approved = True
+        data.approved_by = current_user.username
+        data.approval_timestamp = ts()
+        session.commit()
+
+
+@router.post("/data/approve/protected/{id_}", dependencies=[Depends(admin_only)])
+async def approve_protected_fs_data(id_: int, current_user: User = Depends(get_current_user())):
+    with DBHelper() as session:
+        data = session.get(ProtectedFsData, id_)
+        if not data:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="No data found",
+            )
+        data.approved = True
+        data.approved_by = current_user.username
+        data.approval_timestamp = ts()
         session.commit()

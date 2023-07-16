@@ -50,6 +50,9 @@ class FsData(Base):
     data: Mapped[str] = mapped_column(Text, nullable=False)
     user: Mapped[str] = mapped_column(String(200), nullable=False)
     timestamp: Mapped[str] = mapped_column(String(200), nullable=False)
+    approved: Mapped[bool] = mapped_column(nullable=False, default=False)
+    approved_by: Mapped[str] = mapped_column(String(200), nullable=True, default=None)
+    approval_timestamp: Mapped[str] = mapped_column(String(200), nullable=True, default=None)
 
 class ProtectedFsData(Base):
     __tablename__ = "protected_fs_data"
@@ -58,6 +61,9 @@ class ProtectedFsData(Base):
     data: Mapped[str] = mapped_column(Text, nullable=False)
     user: Mapped[str] = mapped_column(String(200), nullable=False)
     timestamp: Mapped[str] = mapped_column(String(200), nullable=False)
+    approved: Mapped[bool] = mapped_column(nullable=False, default=False)
+    approved_by: Mapped[str] = mapped_column(String(200), nullable=True, default=None)
+    approval_timestamp: Mapped[str] = mapped_column(String(200), nullable=True, default=None)
 
 class PayoutRequest(Base):
     __tablename__ = "payout_requests"

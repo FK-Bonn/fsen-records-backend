@@ -307,6 +307,11 @@ def test_get_payout_request_history_no_admin(username: Optional[str]):
     ]
 
 
+def test_get_payout_request_history_not_found():
+    response = client.get('/api/v1/payout-request/afsg/A22W-0069/history', headers=get_auth_header(client, 'admin'))
+    assert response.status_code == 404
+
+
 @freeze_time("2023-04-04T10:00:00Z")
 def test_get_payout_request_with_date_filter():
     response = client.post('/api/v1/payout-request/afsg/create', json={
@@ -336,6 +341,31 @@ def test_get_payout_request_with_date_filter():
          'last_modified_timestamp': None,
          'requester': None,
          },
+    ]
+
+    response = client.get('/api/v1/payout-request/afsg/2023-04-04', headers=get_auth_header(client, 'admin'))
+    assert response.status_code == 200
+    assert response.json() == [
+        {
+            **SAMPLE_PAYOUT_REQUEST,
+            'last_modified_by': 'tim.test',
+            'last_modified_timestamp': '2023-01-07T22:11:07+00:00',
+            'requester': 'tim.test',
+        },
+        {
+            'amount_cents': 0,
+            'comment': '',
+            'fs': 'Informatik',
+            'request_date': '2023-04-04',
+            'request_id': 'A23S-0001',
+            'semester': '2023-SoSe',
+            'status': 'EINGEREICHT',
+            'status_date': '2023-04-04',
+            'completion_deadline': '2025-09-30',
+            'last_modified_by': 'admin',
+            'last_modified_timestamp': '2023-04-04T10:00:00+00:00',
+            'requester': 'admin',
+        },
     ]
 
 
