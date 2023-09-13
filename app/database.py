@@ -42,6 +42,8 @@ class Permission(Base):
     read_protected_data: Mapped[bool] = mapped_column(nullable=False, default=False)
     write_protected_data: Mapped[bool] = mapped_column(nullable=False, default=False)
     submit_payout_request: Mapped[bool] = mapped_column(nullable=False, default=False)
+    locked: Mapped[bool] = mapped_column(nullable=False, default=False)
+
 
 class FsData(Base):
     __tablename__ = "fs_data"
@@ -54,6 +56,7 @@ class FsData(Base):
     approved_by: Mapped[str] = mapped_column(String(200), nullable=True, default=None)
     approval_timestamp: Mapped[str] = mapped_column(String(200), nullable=True, default=None)
 
+
 class ProtectedFsData(Base):
     __tablename__ = "protected_fs_data"
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -64,6 +67,7 @@ class ProtectedFsData(Base):
     approved: Mapped[bool] = mapped_column(nullable=False, default=False)
     approved_by: Mapped[str] = mapped_column(String(200), nullable=True, default=None)
     approval_timestamp: Mapped[str] = mapped_column(String(200), nullable=True, default=None)
+
 
 class PayoutRequest(Base):
     __tablename__ = "payout_requests"

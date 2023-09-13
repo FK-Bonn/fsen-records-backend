@@ -30,6 +30,7 @@ class Permission(BaseModel):
     read_protected_data: bool
     write_protected_data: bool
     submit_payout_request: bool
+    locked: bool
 
     class Config:
         orm_mode = True
@@ -172,6 +173,12 @@ def check_if_user_may_grant_permissions(current_user: User, userdata: Permission
     creatorpermissions = {p.fs: p.write_permissions for p in creator.permissions}
     is_subset = True
     for permission in userdata.permissions:
+        if permission.locked:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="User is not authorized to modify those permissions",
+            )
+    for permission in userdata.permissions:
         if permission.fs not in creatorpermissions or not creatorpermissions[permission.fs]:
             is_subset = False
     if userdata.admin or not is_subset:
@@ -299,6 +306,7 @@ def to_db_permission(p: Permission, username: str):
     db_permission = DbPermission()
     db_permission.user = username
     db_permission.fs = p.fs
+    db_permission.locked = p.locked
     db_permission.read_permissions = p.read_permissions
     db_permission.write_permissions = p.write_permissions
     db_permission.read_files = p.read_files

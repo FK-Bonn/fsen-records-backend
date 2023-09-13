@@ -17,6 +17,7 @@ PERMISSIONS_LEVEL_0 = {
     'read_protected_data': False,
     'write_protected_data': False,
     'submit_payout_request': False,
+    'locked': False,
 }
 
 PERMISSIONS_LEVEL_1 = {
@@ -28,6 +29,7 @@ PERMISSIONS_LEVEL_1 = {
     'read_protected_data': False,
     'write_protected_data': False,
     'submit_payout_request': False,
+    'locked': False,
 }
 
 PERMISSIONS_LEVEL_2 = {
@@ -39,6 +41,7 @@ PERMISSIONS_LEVEL_2 = {
     'read_protected_data': True,
     'write_protected_data': True,
     'submit_payout_request': True,
+    'locked': False,
 }
 
 
@@ -57,6 +60,7 @@ def test_invalid_login_wrong_password():
         'detail': 'Incorrect username or password',
     }
 
+
 def test_invalid_login_wrong_username():
     response = client.post('/api/v1/token', data={'username': 'user-does-not-exist', 'password': 'password'})
     assert response.status_code == 401
@@ -71,6 +75,7 @@ def test_create_user():
                                  'password': 'password',
                                  'admin': False,
                                  'permissions': [{'fs': 'Informatik',
+                                                  'locked': False,
                                                   'read_files': True,
                                                   'read_permissions': True,
                                                   'write_permissions': True,
@@ -85,6 +90,31 @@ def test_create_user():
     usersresponse = client.get('/api/v1/user', headers=get_auth_header(client, 'admin'))
     users = usersresponse.json()
     assert users['user-to-create']['created_by'] == 'admin'
+    assert not users['user-to-create']['permissions'][0]['locked']
+
+
+def test_create_user_locked_permissions_admin():
+    response = client.post('/api/v1/user/create',
+                           json={'username': 'user-to-create',
+                                 'password': 'password',
+                                 'admin': False,
+                                 'permissions': [{'fs': 'Informatik',
+                                                  'read_files': True,
+                                                  'read_permissions': True,
+                                                  'write_permissions': True,
+                                                  'read_public_data': True,
+                                                  'write_public_data': True,
+                                                  'read_protected_data': True,
+                                                  'write_protected_data': True,
+                                                  'submit_payout_request': True,
+                                                  'locked': True}],
+                                 },
+                           headers=get_auth_header(client, 'admin'))
+    assert response.status_code == 200
+    usersresponse = client.get('/api/v1/user', headers=get_auth_header(client, 'admin'))
+    users = usersresponse.json()
+    assert users['user-to-create']['created_by'] == 'admin'
+    assert users['user-to-create']['permissions'][0]['locked']
 
 
 def test_create_existing_user_fails():
@@ -93,6 +123,7 @@ def test_create_existing_user_fails():
                                  'password': 'password',
                                  'admin': False,
                                  'permissions': [{'fs': 'Informatik',
+                                                  'locked': False,
                                                   'read_files': True,
                                                   'read_permissions': True,
                                                   'write_permissions': True,
@@ -176,6 +207,20 @@ def test_create_user_no_admin():
     assert response.status_code == 200
 
 
+def test_create_user_no_admin_locked_fails():
+    response = client.post('/api/v1/user/create',
+                           json={'username': 'user-to-create',
+                                 'password': 'password',
+                                 'admin': False,
+                                 'permissions': [{'fs': 'Informatik',
+                                                  **PERMISSIONS_LEVEL_2,
+                                                  'locked': True,
+                                                  }],
+                                 },
+                           headers=get_auth_header(client, 'user3'))
+    assert response.status_code == 401
+
+
 def test_set_user_permissions_as_admin_invalid_user():
     response = client.post('/api/v1/user/permissions',
                            json={'username': 'does-not-exist',
@@ -199,6 +244,7 @@ def test_set_user_permissions_as_admin():
     fsen = [p['fs'] for p in response.json()['permissions']]
     assert 'Informatik' not in fsen
     assert 'Geographie' in fsen
+
 
 def test_set_user_permissions_0_as_admin():
     response = client.post('/api/v1/user/permissions',
@@ -237,6 +283,7 @@ def test_add_user_permission_as_user_missing_user():
                             },
                             headers=get_auth_header(client, 'user3'))
     assert response.status_code == 404
+
 
 def test_add_user_permission_as_user():
     response = client.patch('/api/v1/user/permissions',
@@ -277,6 +324,45 @@ def test_change_user_permission_level_as_user():
     assert response.status_code == 200
     assert response.json()['permissions'] == [{'fs': 'Informatik',
                                                **PERMISSIONS_LEVEL_2}]
+
+
+def test_change_user_permission_level_set_locked_fails():
+    response = client.patch('/api/v1/user/permissions',
+                            json={
+                                'username': 'user2',
+                                'permissions': [{'fs': 'Informatik',
+                                                 **PERMISSIONS_LEVEL_2,
+                                                 'locked': True,
+                                                 }],
+                            },
+                            headers=get_auth_header(client, 'user3'))
+    assert response.status_code == 401
+
+
+@pytest.mark.parametrize('locked_value', [
+    True, False
+])
+def test_change_user_permission_level_is_locked_fails(locked_value):
+    response = client.patch('/api/v1/user/permissions',
+                            json={
+                                'username': 'user2',
+                                'permissions': [{'fs': 'Informatik',
+                                                 **PERMISSIONS_LEVEL_1,
+                                                 'locked': locked_value,
+                                                 }],
+                            },
+                            headers=get_auth_header(client, 'admin'))
+    assert response.status_code == 200
+    response = client.patch('/api/v1/user/permissions',
+                            json={
+                                'username': 'user2',
+                                'permissions': [{'fs': 'Informatik',
+                                                 **PERMISSIONS_LEVEL_2,
+                                                 'locked': True,
+                                                 }],
+                            },
+                            headers=get_auth_header(client, 'user3'))
+    assert response.status_code == 401
 
 
 def test_set_user_permissions_as_user_not_allowed():
@@ -338,6 +424,7 @@ def test_get_users_as_admin():
                                                           **PERMISSIONS_LEVEL_2}],
                                          'username': 'user5'}}
 
+
 def test_get_users_as_user_with_write_permission():
     response = client.get('/api/v1/user/', headers=get_auth_header(client, 'user3'))
     assert response.status_code == 200
@@ -362,6 +449,7 @@ def test_get_users_as_user_with_write_permission():
                                                           **PERMISSIONS_LEVEL_2}],
                                          'username': 'user5'}}
 
+
 def test_get_users_as_user_with_read_permission():
     response = client.get('/api/v1/user/', headers=get_auth_header(client, 'user2'))
     assert response.status_code == 200
@@ -385,6 +473,7 @@ def test_get_users_as_user_with_read_permission():
                                          'permissions': [{'fs': 'Informatik',
                                                           **PERMISSIONS_LEVEL_2}],
                                          'username': 'user5'}}
+
 
 def test_get_users_as_user_with_multiple_write_permissions():
     response = client.get('/api/v1/user/', headers=get_auth_header(client, 'user5'))
@@ -420,6 +509,7 @@ def test_get_users_as_user_with_multiple_write_permissions():
     ['user', {'username': 'user', 'admin': False, 'created_by': 'root', 'permissions': []}],
     ['user2',
      {'username': 'user2', 'admin': False, 'created_by': 'root', 'permissions': [{'fs': 'Informatik',
+                                                                                  'locked': False,
                                                                                   'read_files': True,
                                                                                   'read_permissions': True,
                                                                                   'write_permissions': False,
@@ -431,6 +521,7 @@ def test_get_users_as_user_with_multiple_write_permissions():
                                                                                   }]}],
     ['user3',
      {'username': 'user3', 'admin': False, 'created_by': 'root', 'permissions': [{'fs': 'Informatik',
+                                                                                  'locked': False,
                                                                                   'read_files': True,
                                                                                   'read_permissions': True,
                                                                                   'write_permissions': True,
@@ -483,6 +574,7 @@ def test_admin_change_other_password_user_does_not_exist():
     assert response.json() == {
         'detail': 'That user does not exist',
     }
+
 
 def test_change_other_password_without_admin():
     response = client.post('/api/v1/user/password/user',

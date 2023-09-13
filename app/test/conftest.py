@@ -69,11 +69,13 @@ class DBTestHelper:
                        read_protected_data: bool = False,
                        write_protected_data: bool = False,
                        submit_payout_request: bool = False,
+                       locked: bool = False,
                        ):
         assert self._session
         permission = Permission()
         permission.user = username
         permission.fs = fs
+        permission.locked = locked
         permission.read_permissions = read_permissions
         permission.write_permissions = write_permissions
         permission.read_files = read_files
