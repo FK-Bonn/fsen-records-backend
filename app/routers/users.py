@@ -242,8 +242,8 @@ async def create_user(userdata: UserForCreation, current_user: User = Depends(ge
 
 
 def is_empty(p: DbPermission):
-    return not (p.read_files or p.write_permissions or p.read_public_data or p.write_public_data or
-                p.read_protected_data or p.write_protected_data or p.submit_payout_request)
+    return not (p.read_files or p.read_permissions or p.write_permissions or p.read_public_data or
+                p.write_public_data or p.read_protected_data or p.write_protected_data or p.submit_payout_request)
 
 
 @router.post("/user/permissions", dependencies=[Depends(admin_only)], response_model=UserWithPermissions)
