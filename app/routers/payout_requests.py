@@ -14,12 +14,12 @@ from app.database import User, DBHelper, PayoutRequest
 from app.routers.users import get_current_user, admin_only
 from app.util import ts, get_europe_berlin_date
 
-
 router = APIRouter()
 
 
 class PayoutRequestType(Enum):
     AFSG = 'afsg'
+    BFSG = 'bfsg'
 
 class PayoutRequestStatus(Enum):
     EINGEREICHT = 'EINGEREICHT'
@@ -28,11 +28,19 @@ class PayoutRequestStatus(Enum):
     ANGEWIESEN = 'ANGEWIESEN'
     UEBERWIESEN = 'ÜBERWIESEN'
     FAILED = 'FAILED'
+    VORGESTELLT = 'VORGESTELLT'
+    ANGENOMMEN = 'ANGENOMMEN'
+    ABGELEHNT = 'ABGELEHNT'
 
 
 class PayoutRequestForCreation(BaseModel):
     fs: str
     semester: str
+
+
+class BfsgPayoutRequestForCreation(PayoutRequestForCreation):
+    category: str
+    amount_cents: int
 
 
 class ModifiablePayoutRequestProperties(BaseModel):
@@ -66,7 +74,8 @@ class PayoutRequestData(PublicPayoutRequest):
     last_modified_by: Optional[str]
 
 
-def check_user_may_submit_payout_request(current_user: User, fs: str, session: Session):
+def check_user_may_submit_payout_request(current_user: User, fs: str, session: Session,
+                                         _type: PayoutRequestType = PayoutRequestType.AFSG):
     creator = session.get(User, current_user.username)
     if not creator:
         raise HTTPException(
@@ -75,6 +84,14 @@ def check_user_may_submit_payout_request(current_user: User, fs: str, session: S
         )
     if creator.admin:
         return
+
+    # TODO remove this block when regular users may request BFSG themselves
+    if _type != PayoutRequestType.AFSG:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="User is not authorized to submit bfsg payout request for this fs",
+        )
+
 
     creatorpermissions = {p.fs: p.submit_payout_request for p in creator.permissions}
     if not creatorpermissions.get(fs, False):
@@ -93,15 +110,15 @@ def check_semester_is_valid_format(semester: str):
         )
 
 
-def check_semester_is_open_for_submissions(semester: str):
-    if semester not in get_currently_valid_semesters():
+def check_semester_is_open_for_afsg_submissions(semester: str):
+    if semester not in get_currently_valid_afsg_semesters():
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="Semester is not open for requests",
         )
 
 
-def get_currently_valid_semesters() -> List[str]:
+def get_currently_valid_afsg_semesters() -> List[str]:
     today = datetime.now(tz=ZoneInfo('Europe/Berlin'))
     semester_type = 'WiSe'
     if 4 <= today.month <= 9:
@@ -121,7 +138,19 @@ def get_currently_valid_semesters() -> List[str]:
     return valid_semesters
 
 
-def get_default_completion_deadline(semester: str) -> str:
+def check_semester_is_open_for_bfsg_submissions(semester: str):
+    if semester not in get_currently_valid_bfsg_semesters():
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Semester is not open for requests",
+        )
+
+
+def get_currently_valid_bfsg_semesters() -> List[str]:
+    return get_currently_valid_afsg_semesters()[:2]
+
+
+def get_default_afsg_completion_deadline(semester: str) -> str:
     semester_year = int(semester[:4])
     semester_type = semester[5:]
     expiration_month = 10 if semester_type == 'SoSe' else 4
@@ -130,19 +159,36 @@ def get_default_completion_deadline(semester: str) -> str:
     deadline_date = expiration_date - timedelta(days=1)
     return str(deadline_date)
 
-def get_request_id(semester: str, session: Session) -> str:
+
+def get_default_bfsg_completion_deadline(today: str) -> str:
+    parsedDate = datetime.strptime(today, '%Y-%m-%d').date()
+    year = parsedDate.year
+    month = parsedDate.month + 6
+    day = parsedDate.day
+    while month > 12:
+        month -= 12
+        year += 1
+    try:
+        return date(year=year, month=month, day=day).strftime('%Y-%m-%d')
+    except ValueError:
+        return date(year=year, month=month + 1, day=1).strftime('%Y-%m-%d')
+
+
+def get_request_id(semester: str, type_prefix: str, session: Session) -> str:
     year_short = semester[2:4]
     semester_type = semester[5]
-    prefix = f'A{year_short}{semester_type}-'
+    prefix = f'{type_prefix}{year_short}{semester_type}-'
     filter = prefix + '%'
     latest = session.query(func.max(PayoutRequest.request_id)).filter(
         PayoutRequest.request_id.like(filter)).scalar() or prefix + '0000'
     return prefix + f'{int(latest[5:]) + 1:04d}'
 
 
-def check_no_existing_payout_request(semester: str, fs: str, session: Session) -> None:
-    latest = session.query(func.max(PayoutRequest.id)).filter(
-        PayoutRequest.fs == fs, PayoutRequest.semester == semester).scalar()
+def check_no_existing_afsg_payout_request(semester: str, fs: str, session: Session) -> None:
+    latest = session.query(func.max(PayoutRequest.id)). \
+        filter(PayoutRequest.fs == fs,
+               PayoutRequest.semester == semester,
+               PayoutRequest.type == PayoutRequestType.AFSG.value).scalar()
     if latest is not None:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -150,27 +196,27 @@ def check_no_existing_payout_request(semester: str, fs: str, session: Session) -
         )
 
 
-def get_afsg_payout_request(session: Session, request_id: str) -> Optional[PayoutRequest]:
+def get_payout_request(session: Session, request_id: str, _type: PayoutRequestType) -> Optional[PayoutRequest]:
     subquery = session.query(PayoutRequest.request_id, func.max(PayoutRequest.id).label('id')). \
-        filter(PayoutRequest.type == PayoutRequestType.AFSG.value). \
+        filter(PayoutRequest.type == _type.value). \
         group_by(PayoutRequest.request_id).subquery()
     data = session.query(PayoutRequest).join(subquery, PayoutRequest.id == subquery.c.id).filter(
         PayoutRequest.request_id == request_id).first()
     return data
 
 
-def get_afsg_payout_request_history(session: Session, request_id: str) -> List[PayoutRequest]:
+def get_payout_request_history(session: Session, request_id: str, _type: PayoutRequestType) -> List[PayoutRequest]:
     return session.query(PayoutRequest). \
         filter(PayoutRequest.request_id == request_id). \
-        filter(PayoutRequest.type == PayoutRequestType.AFSG.value). \
+        filter(PayoutRequest.type == _type.value). \
         order_by(PayoutRequest.last_modified_timestamp.desc()).all()
 
 
-@router.get("/payout-request/afsg", response_model=List[PayoutRequestData])
-async def list_afsg_requests(current_user: User = Depends(get_current_user(auto_error=False))):
+@router.get("/payout-request/{_type}", response_model=List[PayoutRequestData])
+async def list_requests(_type: PayoutRequestType, current_user: User = Depends(get_current_user(auto_error=False))):
     with DBHelper() as session:
         subquery = session.query(PayoutRequest.request_id, func.max(PayoutRequest.id).label('id')). \
-            filter(PayoutRequest.type == PayoutRequestType.AFSG.value). \
+            filter(PayoutRequest.type == _type.value). \
             group_by(PayoutRequest.request_id).subquery()
         data = session.query(PayoutRequest).join(subquery, PayoutRequest.id == subquery.c.id).all()
         if current_user and current_user.admin:
@@ -179,15 +225,15 @@ async def list_afsg_requests(current_user: User = Depends(get_current_user(auto_
             return [PublicPayoutRequest(**item.__dict__) for item in data]
 
 
-@router.get("/payout-request/afsg/{limit_date}", response_model=List[PayoutRequestData])
-async def list_afsg_requests_before_date(limit_date: date,
+@router.get("/payout-request/{_type}/{limit_date}", response_model=List[PayoutRequestData])
+async def list_requests_before_date(_type: PayoutRequestType, limit_date: date,
                                          current_user: User = Depends(get_current_user(auto_error=False))):
     limit_date += timedelta(days=1)
     date_string = str(limit_date)
     with DBHelper() as session:
         subquery = session.query(PayoutRequest.request_id, func.max(PayoutRequest.id).label('id')). \
             filter(PayoutRequest.last_modified_timestamp < date_string). \
-            filter(PayoutRequest.type == PayoutRequestType.AFSG.value). \
+            filter(PayoutRequest.type == _type.value). \
             group_by(PayoutRequest.request_id).subquery()
         data = session.query(PayoutRequest).join(subquery, PayoutRequest.id == subquery.c.id).all()
         if current_user and current_user.admin:
@@ -199,11 +245,11 @@ async def list_afsg_requests_before_date(limit_date: date,
 @router.post("/payout-request/afsg/create", response_model=PayoutRequestData)
 async def create_afsg_request(data: PayoutRequestForCreation, current_user: User = Depends(get_current_user())):
     check_semester_is_valid_format(data.semester)
-    check_semester_is_open_for_submissions(data.semester)
+    check_semester_is_open_for_afsg_submissions(data.semester)
     with DBHelper() as session:
         check_user_may_submit_payout_request(current_user, data.fs, session)
-        check_no_existing_payout_request(data.semester, data.fs, session)
-        request_id = get_request_id(data.semester, session)
+        check_no_existing_afsg_payout_request(data.semester, data.fs, session)
+        request_id = get_request_id(data.semester, 'A', session)
         today = get_europe_berlin_date()
         now = ts()
 
@@ -221,17 +267,48 @@ async def create_afsg_request(data: PayoutRequestForCreation, current_user: User
         payout_request.requester = current_user.username
         payout_request.last_modified_timestamp = now
         payout_request.last_modified_by = current_user.username
-        payout_request.completion_deadline = get_default_completion_deadline(data.semester)
+        payout_request.completion_deadline = get_default_afsg_completion_deadline(data.semester)
         session.add(payout_request)
         session.commit()
-        return get_afsg_payout_request(session, request_id)
+        return get_payout_request(session, request_id, PayoutRequestType.AFSG)
 
 
-@router.patch("/payout-request/afsg/{request_id}", dependencies=[Depends(admin_only)], response_model=PayoutRequestData)
-async def modify_afsg_request(request_id: str, data: ModifiablePayoutRequestProperties,
+@router.post("/payout-request/bfsg/create", response_model=PayoutRequestData)
+async def create_bfsg_request(data: BfsgPayoutRequestForCreation, current_user: User = Depends(get_current_user())):
+    check_semester_is_valid_format(data.semester)
+    check_semester_is_open_for_bfsg_submissions(data.semester)
+    with DBHelper() as session:
+        check_user_may_submit_payout_request(current_user, data.fs, session, _type=PayoutRequestType.BFSG)
+        request_id = get_request_id(data.semester, 'B', session)
+        today = get_europe_berlin_date()
+        now = ts()
+
+        payout_request = PayoutRequest()
+        payout_request.request_id = request_id
+        payout_request.type = PayoutRequestType.BFSG.value
+        payout_request.category = data.category
+        payout_request.fs = data.fs
+        payout_request.semester = data.semester
+        payout_request.status = PayoutRequestStatus.GESTELLT.value
+        payout_request.status_date = today
+        payout_request.amount_cents = data.amount_cents
+        payout_request.comment = ''
+        payout_request.request_date = today
+        payout_request.requester = current_user.username
+        payout_request.last_modified_timestamp = now
+        payout_request.last_modified_by = current_user.username
+        payout_request.completion_deadline = get_default_bfsg_completion_deadline(today)
+        session.add(payout_request)
+        session.commit()
+        return get_payout_request(session, request_id, PayoutRequestType.BFSG)
+
+
+@router.patch("/payout-request/{_type}/{request_id}", dependencies=[Depends(admin_only)],
+              response_model=PayoutRequestData)
+async def modify_request(_type: PayoutRequestType, request_id: str, data: ModifiablePayoutRequestProperties,
                               current_user: User = Depends(get_current_user())):
     with DBHelper() as session:
-        payout_request = get_afsg_payout_request(session, request_id)
+        payout_request = get_payout_request(session, request_id, _type)
         if not payout_request:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -256,13 +333,14 @@ async def modify_afsg_request(request_id: str, data: ModifiablePayoutRequestProp
         payout_request.last_modified_timestamp = ts()
         session.add(payout_request)
         session.commit()
-        return get_afsg_payout_request(session, request_id)
+        return get_payout_request(session, request_id, _type)
 
 
-@router.get("/payout-request/afsg/{request_id}/history", response_model=List[PayoutRequestData])
-async def get_afsg_request_history(request_id: str, current_user: User = Depends(get_current_user(auto_error=False))):
+@router.get("/payout-request/{_type}/{request_id}/history", response_model=List[PayoutRequestData])
+async def get_request_history(_type: PayoutRequestType, request_id: str,
+                              current_user: User = Depends(get_current_user(auto_error=False))):
     with DBHelper() as session:
-        payout_request_history = get_afsg_payout_request_history(session, request_id)
+        payout_request_history = get_payout_request_history(session, request_id, _type)
         if not len(payout_request_history):
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,

@@ -47,7 +47,8 @@ class DBTestHelper:
             self.add_permission('user5', 'Geographie', read_files=True, read_permissions=True, write_permissions=True,
                                 read_public_data=True, write_public_data=True, read_protected_data=True,
                                 write_protected_data=True, submit_payout_request=True)
-            self.add_payout_request()
+            self.add_afsg_payout_request()
+            self.add_bfsg_payout_request()
             self._session.commit()
         return self._session
 
@@ -86,7 +87,7 @@ class DBTestHelper:
         permission.submit_payout_request = submit_payout_request
         self._session.add(permission)
 
-    def add_payout_request(self):
+    def add_afsg_payout_request(self):
         assert self._session
         payout_request = PayoutRequest()
         payout_request.request_id = 'A22W-0023'
@@ -103,6 +104,25 @@ class DBTestHelper:
         payout_request.last_modified_timestamp = '2023-01-07T22:11:07+00:00'
         payout_request.last_modified_by = 'tim.test'
         payout_request.completion_deadline = '2025-03-31'
+        self._session.add(payout_request)
+
+    def add_bfsg_payout_request(self):
+        assert self._session
+        payout_request = PayoutRequest()
+        payout_request.request_id = 'B22W-0023'
+        payout_request.type = 'bfsg'
+        payout_request.category = 'Erstiarbeit'
+        payout_request.fs = 'Informatik'
+        payout_request.semester = '2022-WiSe'
+        payout_request.status = 'GESTELLT'
+        payout_request.status_date = '2023-01-07'
+        payout_request.amount_cents = 23456
+        payout_request.comment = 'comment'
+        payout_request.request_date = '2023-01-07'
+        payout_request.requester = 'tim.test'
+        payout_request.last_modified_timestamp = '2023-01-07T22:11:07+00:00'
+        payout_request.last_modified_by = 'tim.test'
+        payout_request.completion_deadline = '2023-07-07'
         self._session.add(payout_request)
 
     def __exit__(self, type, value, traceback):
