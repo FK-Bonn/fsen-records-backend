@@ -73,6 +73,8 @@ class PayoutRequest(Base):
     __tablename__ = "payout_requests"
     id: Mapped[int] = mapped_column(primary_key=True)
     request_id: Mapped[str] = mapped_column(String(200), nullable=False)
+    type: Mapped[str] = mapped_column(String(200), nullable=False)
+    category: Mapped[str] = mapped_column(String(200), nullable=False)
     fs: Mapped[str] = mapped_column(String(200), nullable=False)
     semester: Mapped[str] = mapped_column(String(200), nullable=False)
     status: Mapped[str] = mapped_column(String(200), nullable=False)
@@ -84,6 +86,7 @@ class PayoutRequest(Base):
     last_modified_timestamp: Mapped[str] = mapped_column(String(200), nullable=False)
     last_modified_by: Mapped[str] = mapped_column(String(200), nullable=False)
     completion_deadline: Mapped[str] = mapped_column(String(200), nullable=False)
+    reference: Mapped[str] = mapped_column(String(200), nullable=True)
 
 
 class DBHelper:

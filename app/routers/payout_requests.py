@@ -14,8 +14,12 @@ from app.database import User, DBHelper, PayoutRequest
 from app.routers.users import get_current_user, admin_only
 from app.util import ts, get_europe_berlin_date
 
+
 router = APIRouter()
 
+
+class PayoutRequestType(Enum):
+    AFSG = 'afsg'
 
 class PayoutRequestStatus(Enum):
     EINGEREICHT = 'EINGEREICHT'
@@ -37,6 +41,7 @@ class ModifiablePayoutRequestProperties(BaseModel):
     amount_cents: Optional[int]
     comment: Optional[str]
     completion_deadline: Optional[str]
+    reference: Optional[str]
 
 
 class PublicPayoutRequest(PayoutRequestForCreation):
@@ -45,8 +50,11 @@ class PublicPayoutRequest(PayoutRequestForCreation):
     amount_cents: int
     comment: str
     request_id: str
+    type: str
+    category: str
     request_date: str
     completion_deadline: str
+    reference: str | None
 
     class Config:
         orm_mode = True
@@ -142,25 +150,28 @@ def check_no_existing_payout_request(semester: str, fs: str, session: Session) -
         )
 
 
-def get_payout_request(session: Session, request_id: str) -> Optional[PayoutRequest]:
-    subquery = session.query(PayoutRequest.request_id, func.max(PayoutRequest.id).label('id')).group_by(
-        PayoutRequest.request_id).subquery()
+def get_afsg_payout_request(session: Session, request_id: str) -> Optional[PayoutRequest]:
+    subquery = session.query(PayoutRequest.request_id, func.max(PayoutRequest.id).label('id')). \
+        filter(PayoutRequest.type == PayoutRequestType.AFSG.value). \
+        group_by(PayoutRequest.request_id).subquery()
     data = session.query(PayoutRequest).join(subquery, PayoutRequest.id == subquery.c.id).filter(
         PayoutRequest.request_id == request_id).first()
     return data
 
 
-def get_payout_request_history(session: Session, request_id: str) -> List[PayoutRequest]:
+def get_afsg_payout_request_history(session: Session, request_id: str) -> List[PayoutRequest]:
     return session.query(PayoutRequest). \
         filter(PayoutRequest.request_id == request_id). \
+        filter(PayoutRequest.type == PayoutRequestType.AFSG.value). \
         order_by(PayoutRequest.last_modified_timestamp.desc()).all()
 
 
 @router.get("/payout-request/afsg", response_model=List[PayoutRequestData])
 async def list_afsg_requests(current_user: User = Depends(get_current_user(auto_error=False))):
     with DBHelper() as session:
-        subquery = session.query(PayoutRequest.request_id, func.max(PayoutRequest.id).label('id')).group_by(
-            PayoutRequest.request_id).subquery()
+        subquery = session.query(PayoutRequest.request_id, func.max(PayoutRequest.id).label('id')). \
+            filter(PayoutRequest.type == PayoutRequestType.AFSG.value). \
+            group_by(PayoutRequest.request_id).subquery()
         data = session.query(PayoutRequest).join(subquery, PayoutRequest.id == subquery.c.id).all()
         if current_user and current_user.admin:
             return data
@@ -176,6 +187,7 @@ async def list_afsg_requests_before_date(limit_date: date,
     with DBHelper() as session:
         subquery = session.query(PayoutRequest.request_id, func.max(PayoutRequest.id).label('id')). \
             filter(PayoutRequest.last_modified_timestamp < date_string). \
+            filter(PayoutRequest.type == PayoutRequestType.AFSG.value). \
             group_by(PayoutRequest.request_id).subquery()
         data = session.query(PayoutRequest).join(subquery, PayoutRequest.id == subquery.c.id).all()
         if current_user and current_user.admin:
@@ -197,6 +209,8 @@ async def create_afsg_request(data: PayoutRequestForCreation, current_user: User
 
         payout_request = PayoutRequest()
         payout_request.request_id = request_id
+        payout_request.type = PayoutRequestType.AFSG.value
+        payout_request.category = PayoutRequestType.AFSG.value.upper()
         payout_request.fs = data.fs
         payout_request.semester = data.semester
         payout_request.status = PayoutRequestStatus.EINGEREICHT.value
@@ -210,14 +224,14 @@ async def create_afsg_request(data: PayoutRequestForCreation, current_user: User
         payout_request.completion_deadline = get_default_completion_deadline(data.semester)
         session.add(payout_request)
         session.commit()
-        return get_payout_request(session, request_id)
+        return get_afsg_payout_request(session, request_id)
 
 
 @router.patch("/payout-request/afsg/{request_id}", dependencies=[Depends(admin_only)], response_model=PayoutRequestData)
 async def modify_afsg_request(request_id: str, data: ModifiablePayoutRequestProperties,
                               current_user: User = Depends(get_current_user())):
     with DBHelper() as session:
-        payout_request = get_payout_request(session, request_id)
+        payout_request = get_afsg_payout_request(session, request_id)
         if not payout_request:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -236,17 +250,19 @@ async def modify_afsg_request(request_id: str, data: ModifiablePayoutRequestProp
             payout_request.completion_deadline = data.completion_deadline
         if data.comment is not None:
             payout_request.comment = data.comment
+        if data.reference is not None:
+            payout_request.reference = data.reference
         payout_request.last_modified_by = current_user.username
         payout_request.last_modified_timestamp = ts()
         session.add(payout_request)
         session.commit()
-        return get_payout_request(session, request_id)
+        return get_afsg_payout_request(session, request_id)
 
 
 @router.get("/payout-request/afsg/{request_id}/history", response_model=List[PayoutRequestData])
 async def get_afsg_request_history(request_id: str, current_user: User = Depends(get_current_user(auto_error=False))):
     with DBHelper() as session:
-        payout_request_history = get_payout_request_history(session, request_id)
+        payout_request_history = get_afsg_payout_request_history(session, request_id)
         if not len(payout_request_history):
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,

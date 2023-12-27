@@ -12,6 +12,8 @@ client = TestClient(app)
 
 SAMPLE_PAYOUT_REQUEST:  dict[str, str | int | None] = {
     'request_id': 'A22W-0023',
+    'type': 'afsg',
+    'category': 'AFSG',
     'fs': 'Informatik',
     'semester': '2022-WiSe',
     'status': 'GESTELLT',
@@ -20,6 +22,7 @@ SAMPLE_PAYOUT_REQUEST:  dict[str, str | int | None] = {
     'comment': 'comment',
     'request_date': '2023-01-07',
     'completion_deadline': '2025-03-31',
+    'reference': None,
     'last_modified_by': None,
     'last_modified_timestamp': None,
     'requester': None,
@@ -54,6 +57,8 @@ def test_create_payout_requests_as_admin():
     assert response.status_code == 200
     assert response.json() == {
         'request_id': 'A23S-0001',
+        'type': 'afsg',
+        'category': 'AFSG',
         'fs': 'Informatik',
         'semester': '2023-SoSe',
         'status': 'EINGEREICHT',
@@ -62,6 +67,7 @@ def test_create_payout_requests_as_admin():
         'comment': '',
         'request_date': '2023-04-04',
         'requester': 'admin',
+        'reference': None,
         'last_modified_timestamp': '2023-04-04T10:00:00+00:00',
         'last_modified_by': 'admin',
         'completion_deadline': '2025-09-30',
@@ -89,6 +95,8 @@ def test_create_payout_requests_as_write_user():
     assert response.status_code == 200
     assert response.json() == {
         'request_id': 'A23S-0001',
+        'type': 'afsg',
+        'category': 'AFSG',
         'fs': 'Informatik',
         'semester': '2023-SoSe',
         'status': 'EINGEREICHT',
@@ -97,6 +105,7 @@ def test_create_payout_requests_as_write_user():
         'comment': '',
         'request_date': '2023-04-04',
         'requester': 'user3',
+        'reference': None,
         'last_modified_timestamp': '2023-04-04T10:00:00+00:00',
         'last_modified_by': 'user3',
         'completion_deadline': '2025-09-30',
@@ -158,6 +167,8 @@ def test_modify_payout_requests_as_admin():
     assert response.status_code == 200
     assert response.json() == {
         'request_id': 'A22W-0023',
+        'type': 'afsg',
+        'category': 'AFSG',
         'fs': 'Informatik',
         'semester': '2022-WiSe',
         'status': 'VOLLSTÄNDIG',
@@ -166,6 +177,7 @@ def test_modify_payout_requests_as_admin():
         'comment': 'Endlich ist es fertig',
         'request_date': '2023-01-07',
         'requester': 'tim.test',
+        'reference': None,
         'last_modified_timestamp': '2023-04-04T10:00:00+00:00',
         'last_modified_by': 'admin',
         'completion_deadline': '2025-05-31',
@@ -195,6 +207,8 @@ def test_modify_payout_requests_set_empty_values():
     assert response.status_code == 200
     assert response.json() == {
         'request_id': 'A22W-0023',
+        'type': 'afsg',
+        'category': 'AFSG',
         'fs': 'Informatik',
         'semester': '2022-WiSe',
         'status': 'GESTELLT',
@@ -203,6 +217,7 @@ def test_modify_payout_requests_set_empty_values():
         'comment': '',
         'request_date': '2023-01-07',
         'requester': 'tim.test',
+        'reference': None,
         'last_modified_timestamp': '2023-04-04T10:00:00+00:00',
         'last_modified_by': 'admin',
         'completion_deadline': '2025-03-31',
@@ -215,6 +230,8 @@ def test_modify_payout_requests_no_changes():
     assert response.status_code == 200
     assert response.json() == {
         'request_id': 'A22W-0023',
+        'type': 'afsg',
+        'category': 'AFSG',
         'fs': 'Informatik',
         'semester': '2022-WiSe',
         'status': 'GESTELLT',
@@ -223,6 +240,7 @@ def test_modify_payout_requests_no_changes():
         'comment': 'comment',
         'request_date': '2023-01-07',
         'requester': 'tim.test',
+        'reference': None,
         'last_modified_timestamp': '2023-04-04T10:00:00+00:00',
         'last_modified_by': 'admin',
         'completion_deadline': '2025-03-31',
@@ -253,6 +271,8 @@ def test_get_payout_request_history_as_admin():
     assert response.json() == [
         {
             'request_id': 'A22W-0023',
+            'type': 'afsg',
+            'category': 'AFSG',
             'fs': 'Informatik',
             'semester': '2022-WiSe',
             'status': 'VOLLSTÄNDIG',
@@ -261,6 +281,7 @@ def test_get_payout_request_history_as_admin():
             'comment': 'Endlich ist es fertig',
             'request_date': '2023-01-07',
             'requester': 'tim.test',
+            'reference': None,
             'last_modified_timestamp': '2023-04-04T10:00:00+00:00',
             'last_modified_by': 'admin',
             'completion_deadline': '2025-05-31',
@@ -291,6 +312,8 @@ def test_get_payout_request_history_no_admin(username: Optional[str]):
     assert response.json() == [
         {
             'request_id': 'A22W-0023',
+            'type': 'afsg',
+            'category': 'AFSG',
             'fs': 'Informatik',
             'semester': '2022-WiSe',
             'status': 'VOLLSTÄNDIG',
@@ -299,6 +322,7 @@ def test_get_payout_request_history_no_admin(username: Optional[str]):
             'comment': 'Endlich ist es fertig',
             'request_date': '2023-01-07',
             'requester': None,
+            'reference': None,
             'last_modified_timestamp': None,
             'last_modified_by': None,
             'completion_deadline': '2025-05-31',
@@ -333,6 +357,8 @@ def test_get_payout_request_with_date_filter():
          'fs': 'Informatik',
          'request_date': '2023-04-04',
          'request_id': 'A23S-0001',
+         'type': 'afsg',
+         'category': 'AFSG',
          'semester': '2023-SoSe',
          'status': 'EINGEREICHT',
          'status_date': '2023-04-04',
@@ -340,6 +366,7 @@ def test_get_payout_request_with_date_filter():
          'last_modified_by': None,
          'last_modified_timestamp': None,
          'requester': None,
+         'reference': None,
          },
     ]
 
@@ -358,6 +385,8 @@ def test_get_payout_request_with_date_filter():
             'fs': 'Informatik',
             'request_date': '2023-04-04',
             'request_id': 'A23S-0001',
+            'type': 'afsg',
+            'category': 'AFSG',
             'semester': '2023-SoSe',
             'status': 'EINGEREICHT',
             'status_date': '2023-04-04',
@@ -365,6 +394,7 @@ def test_get_payout_request_with_date_filter():
             'last_modified_by': 'admin',
             'last_modified_timestamp': '2023-04-04T10:00:00+00:00',
             'requester': 'admin',
+            'reference': None,
         },
     ]
 

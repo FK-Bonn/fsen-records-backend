@@ -90,6 +90,8 @@ class DBTestHelper:
         assert self._session
         payout_request = PayoutRequest()
         payout_request.request_id = 'A22W-0023'
+        payout_request.type = 'afsg'
+        payout_request.category = 'AFSG'
         payout_request.fs = 'Informatik'
         payout_request.semester = '2022-WiSe'
         payout_request.status = 'GESTELLT'
