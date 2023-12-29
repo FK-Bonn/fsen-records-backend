@@ -15,6 +15,7 @@ DEFAULT_PARAMETERS: dict[str, str | int] = {
     'amount_cents': 100000,
     'completion_deadline': '2025-05-31',
     'comment': 'Endlich ist es fertig',
+    'reference': 'V22W-6969',
 }
 
 client = TestClient(app)
@@ -53,6 +54,23 @@ SAMPLE_PAYOUT_REQUEST: dict[str, dict[str, str | int | None]] = {
         'last_modified_by': None,
         'last_modified_timestamp': None,
         'requester': None,
+    },
+    'vorankuendigung': {
+        'request_id': 'V22W-0023',
+        'type': 'vorankuendigung',
+        'category': 'Erstiarbeit',
+        'fs': 'Informatik',
+        'semester': '2022-WiSe',
+        'status': 'GESTELLT',
+        'status_date': '2023-01-07',
+        'amount_cents': 100000,
+        'comment': 'comment',
+        'request_date': '2023-01-07',
+        'completion_deadline': '',
+        'reference': None,
+        'last_modified_by': None,
+        'last_modified_timestamp': None,
+        'requester': None,
     }
 }
 
@@ -65,6 +83,12 @@ SAMPLE_FULL_PAYOUT_REQUEST: dict[str, dict[str, str | int | None]] = {
     },
     'bfsg': {
         **SAMPLE_PAYOUT_REQUEST['bfsg'],
+        'last_modified_by': 'tim.test',
+        'last_modified_timestamp': '2023-01-07T22:11:07+00:00',
+        'requester': 'tim.test',
+    },
+    'vorankuendigung': {
+        **SAMPLE_PAYOUT_REQUEST['vorankuendigung'],
         'last_modified_by': 'tim.test',
         'last_modified_timestamp': '2023-01-07T22:11:07+00:00',
         'requester': 'tim.test',
@@ -105,6 +129,23 @@ CREATED_PAYOUT_REQUEST: dict[str, dict[str, str | int | None]] = {
         'last_modified_timestamp': '2023-04-04T10:00:00+00:00',
         'last_modified_by': 'admin',
         'completion_deadline': '2023-10-04',
+    },
+    'vorankuendigung': {
+        'request_id': 'V23S-0001',
+        'type': 'vorankuendigung',
+        'category': 'Erstiarbeit',
+        'fs': 'Informatik',
+        'semester': '2023-SoSe',
+        'status': 'GESTELLT',
+        'status_date': '2023-04-04',
+        'amount_cents': 99900,
+        'comment': '',
+        'request_date': '2023-04-04',
+        'reference': None,
+        'requester': 'admin',
+        'last_modified_timestamp': '2023-04-04T10:00:00+00:00',
+        'last_modified_by': 'admin',
+        'completion_deadline': '',
     }
 }
 
@@ -118,6 +159,12 @@ CREATE_PARAMS: dict[str, dict[str, str | int | None]] = {
         'semester': '2023-SoSe',
         'category': 'Erstiarbeit',
         'amount_cents': 6969,
+    },
+    'vorankuendigung': {
+        'fs': 'Informatik',
+        'semester': '2023-SoSe',
+        'category': 'Erstiarbeit',
+        'amount_cents': 99900,
     }
 }
 
@@ -125,6 +172,7 @@ CREATE_PARAMS: dict[str, dict[str, str | int | None]] = {
 @pytest.mark.parametrize('_type', [
     'afsg',
     'bfsg',
+    'vorankuendigung',
 ])
 def test_get_all_payout_requests(_type):
     response = client.get(f'/api/v1/payout-request/{_type}')
@@ -135,6 +183,7 @@ def test_get_all_payout_requests(_type):
 @pytest.mark.parametrize('_type', [
     'afsg',
     'bfsg',
+    'vorankuendigung',
 ])
 def test_get_all_payout_requests_as_admin(_type):
     response = client.get(f'/api/v1/payout-request/{_type}', headers=get_auth_header(client, 'admin'))
@@ -145,6 +194,7 @@ def test_get_all_payout_requests_as_admin(_type):
 @pytest.mark.parametrize('_type', [
     'afsg',
     'bfsg',
+    'vorankuendigung',
 ])
 @freeze_time("2023-04-04T10:00:00Z")
 def test_create_payout_requests_as_admin(_type):
@@ -157,6 +207,7 @@ def test_create_payout_requests_as_admin(_type):
 @pytest.mark.parametrize('_type', [
     'afsg',
     'bfsg',
+    'vorankuendigung',
 ])
 @freeze_time("2023-04-04T10:00:00Z")
 def test_create_payout_requests_invalid_semester_format(_type):
@@ -182,21 +233,30 @@ def test_create_afsg_payout_requests_as_write_user():
     }
 
 
+
+@pytest.mark.parametrize('_type', [
+    'bfsg',
+    'vorankuendigung',
+])
 @freeze_time("2023-04-04T10:00:00Z")
-def test_create_bfsg_payout_requests_as_write_user_currently_not_allowed():
-    response = client.post('/api/v1/payout-request/bfsg/create', json=CREATE_PARAMS['bfsg']
+def test_create_payout_requests_as_write_user_currently_not_allowed(_type):
+    response = client.post(f'/api/v1/payout-request/{_type}/create', json=CREATE_PARAMS[_type]
                            , headers=get_auth_header(client, 'user3'))
     assert response.status_code == 401
 
 
+@pytest.mark.parametrize('_type', [
+    'bfsg',
+    'vorankuendigung',
+])
 @freeze_time("2023-04-04T10:00:00Z")
 @patch('app.routers.payout_requests.check_user_may_submit_payout_request')
-def test_create_bfsg_payout_requests_as_write_user(mocked_func):
-    response = client.post('/api/v1/payout-request/bfsg/create', json=CREATE_PARAMS['bfsg'],
+def test_create_payout_requests_as_write_user_mocked(mocked_func, _type):
+    response = client.post(f'/api/v1/payout-request/{_type}/create', json=CREATE_PARAMS[_type],
                            headers=get_auth_header(client, 'user3'))
     assert response.status_code == 200
     assert response.json() == {
-        **CREATED_PAYOUT_REQUEST['bfsg'],
+        **CREATED_PAYOUT_REQUEST[_type],
         'requester': 'user3',
         'last_modified_by': 'user3',
     }
@@ -214,32 +274,21 @@ def test_create_afsg_payout_requests_as_write_user_fails_if_already_exists():
     }
 
 
+@pytest.mark.parametrize('_type', [
+    'bfsg',
+    'vorankuendigung',
+])
 @freeze_time("2023-04-04T10:00:00Z")
 @patch('app.routers.payout_requests.check_user_may_submit_payout_request')
-def test_create_bfsg_payout_requests_as_write_user_does_not_fail_if_already_exists(mocked_func):
-    response = client.post('/api/v1/payout-request/bfsg/create', json={
-        'fs': 'Informatik',
-        'semester': '2022-WiSe',
-        'category': 'Erstiarbeit',
-        'amount_cents': 6969,
-    }, headers=get_auth_header(client, 'user3'))
+def test_create_payout_requests_as_write_user_does_not_fail_if_already_exists(mocked_func, _type):
+    response = client.post(f'/api/v1/payout-request/{_type}/create', json=CREATE_PARAMS[_type],
+                           headers=get_auth_header(client, 'user3'))
     assert response.status_code == 200
     assert response.json() == {
-        'request_id': 'B22W-0024',
-        'type': 'bfsg',
-        'category': 'Erstiarbeit',
-        'fs': 'Informatik',
-        'semester': '2022-WiSe',
-        'status': 'GESTELLT',
-        'status_date': '2023-04-04',
-        'amount_cents': 6969,
-        'comment': '',
-        'request_date': '2023-04-04',
-        'requester': 'user3',
-        'reference': None,
+        **CREATED_PAYOUT_REQUEST[_type],
         'last_modified_timestamp': '2023-04-04T10:00:00+00:00',
         'last_modified_by': 'user3',
-        'completion_deadline': '2023-10-04',
+        'requester': 'user3',
     }
 
 
@@ -299,6 +348,7 @@ def test_create_bfsg_payout_requests_checks_semester(timestamp, semester, status
 @pytest.mark.parametrize('_type', [
     'afsg',
     'bfsg',
+    'vorankuendigung',
 ])
 @freeze_time("2023-04-04T10:00:00Z")
 def test_create_payout_requests_as_read_user_fails(_type):
@@ -310,6 +360,7 @@ def test_create_payout_requests_as_read_user_fails(_type):
 @pytest.mark.parametrize('_type,request_id', [
     ['afsg', 'A22W-0023'],
     ['bfsg', 'B22W-0023'],
+    ['vorankuendigung', 'V22W-0023'],
 ])
 @freeze_time("2023-04-04T10:00:00Z")
 def test_modify_payout_requests_as_admin(_type, request_id):
@@ -327,6 +378,7 @@ def test_modify_payout_requests_as_admin(_type, request_id):
 @pytest.mark.parametrize('_type,request_id', [
     ['afsg', 'A22W-0069'],
     ['bfsg', 'B22W-0069'],
+    ['vorankuendigung', 'V22W-0069'],
 ])
 @freeze_time("2023-04-04T10:00:00Z")
 def test_modify_nonexisting_payout_requests_fails(_type, request_id):
@@ -345,6 +397,7 @@ def test_modify_nonexisting_payout_requests_fails(_type, request_id):
 @pytest.mark.parametrize('_type,request_id', [
     ['afsg', 'A22W-0023'],
     ['bfsg', 'B22W-0023'],
+    ['vorankuendigung', 'V22W-0023'],
 ])
 @freeze_time("2023-04-04T10:00:00Z")
 def test_modify_payout_requests_set_empty_values(_type, request_id):
@@ -366,6 +419,7 @@ def test_modify_payout_requests_set_empty_values(_type, request_id):
 @pytest.mark.parametrize('_type,request_id', [
     ['afsg', 'A22W-0023'],
     ['bfsg', 'B22W-0023'],
+    ['vorankuendigung', 'V22W-0023'],
 ])
 @freeze_time("2023-04-04T10:00:00Z")
 def test_modify_payout_requests_no_changes(_type, request_id):
@@ -382,6 +436,7 @@ def test_modify_payout_requests_no_changes(_type, request_id):
 @pytest.mark.parametrize('_type,request_id', [
     ['afsg', 'A22W-0023'],
     ['bfsg', 'B22W-0023'],
+    ['vorankuendigung', 'V22W-0023'],
 ])
 def test_modify_payout_requests_as_user_fails(_type, request_id):
     response = client.patch(f'/api/v1/payout-request/{_type}/{request_id}', json=DEFAULT_PARAMETERS,
@@ -392,6 +447,7 @@ def test_modify_payout_requests_as_user_fails(_type, request_id):
 @pytest.mark.parametrize('_type,request_id', [
     ['afsg', 'A22W-0023'],
     ['bfsg', 'B22W-0023'],
+    ['vorankuendigung', 'V22W-0023'],
 ])
 @freeze_time("2023-04-04T10:00:00Z")
 def test_get_payout_request_history_as_admin(_type, request_id):
@@ -418,6 +474,7 @@ def test_get_payout_request_history_as_admin(_type, request_id):
 @pytest.mark.parametrize('_type,request_id', [
     ['afsg', 'A22W-0023'],
     ['bfsg', 'B22W-0023'],
+    ['vorankuendigung', 'V22W-0023'],
 ])
 @freeze_time("2023-04-04T10:00:00Z")
 def test_get_payout_request_history_no_admin(username: Optional[str], _type, request_id):
@@ -444,6 +501,7 @@ def edit_request(_type, request_id):
 @pytest.mark.parametrize('_type,request_id', [
     ['afsg', 'A22W-0069'],
     ['bfsg', 'B22W-0069'],
+    ['vorankuendigung', 'V22W-0069'],
 ])
 def test_get_payout_request_history_not_found(_type, request_id):
     response = client.get(f'/api/v1/payout-request/{_type}/{request_id}/history',
@@ -454,6 +512,7 @@ def test_get_payout_request_history_not_found(_type, request_id):
 @pytest.mark.parametrize('_type', [
     'afsg',
     'bfsg',
+    'vorankuendigung',
 ])
 @freeze_time("2023-04-04T10:00:00Z")
 def test_get_payout_request_with_date_filter(_type):

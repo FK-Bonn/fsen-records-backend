@@ -49,6 +49,7 @@ class DBTestHelper:
                                 write_protected_data=True, submit_payout_request=True)
             self.add_afsg_payout_request()
             self.add_bfsg_payout_request()
+            self.add_vorankuendigung_payout_request()
             self._session.commit()
         return self._session
 
@@ -123,6 +124,25 @@ class DBTestHelper:
         payout_request.last_modified_timestamp = '2023-01-07T22:11:07+00:00'
         payout_request.last_modified_by = 'tim.test'
         payout_request.completion_deadline = '2023-07-07'
+        self._session.add(payout_request)
+
+    def add_vorankuendigung_payout_request(self):
+        assert self._session
+        payout_request = PayoutRequest()
+        payout_request.request_id = 'V22W-0023'
+        payout_request.type = 'vorankuendigung'
+        payout_request.category = 'Erstiarbeit'
+        payout_request.fs = 'Informatik'
+        payout_request.semester = '2022-WiSe'
+        payout_request.status = 'GESTELLT'
+        payout_request.status_date = '2023-01-07'
+        payout_request.amount_cents = 100000
+        payout_request.comment = 'comment'
+        payout_request.request_date = '2023-01-07'
+        payout_request.requester = 'tim.test'
+        payout_request.last_modified_timestamp = '2023-01-07T22:11:07+00:00'
+        payout_request.last_modified_by = 'tim.test'
+        payout_request.completion_deadline = ''
         self._session.add(payout_request)
 
     def __exit__(self, type, value, traceback):

@@ -20,6 +20,7 @@ router = APIRouter()
 class PayoutRequestType(Enum):
     AFSG = 'afsg'
     BFSG = 'bfsg'
+    VORANKUENDIGUNG = 'vorankuendigung'
 
 class PayoutRequestStatus(Enum):
     EINGEREICHT = 'EINGEREICHT'
@@ -31,6 +32,7 @@ class PayoutRequestStatus(Enum):
     VORGESTELLT = 'VORGESTELLT'
     ANGENOMMEN = 'ANGENOMMEN'
     ABGELEHNT = 'ABGELEHNT'
+    GENUTZT = 'GENUTZT'
 
 
 class PayoutRequestForCreation(BaseModel):
@@ -41,6 +43,9 @@ class PayoutRequestForCreation(BaseModel):
 class BfsgPayoutRequestForCreation(PayoutRequestForCreation):
     category: str
     amount_cents: int
+
+class VorankuendigungPayoutRequestForCreation(BfsgPayoutRequestForCreation):
+    pass
 
 
 class ModifiablePayoutRequestProperties(BaseModel):
@@ -85,7 +90,7 @@ def check_user_may_submit_payout_request(current_user: User, fs: str, session: S
     if creator.admin:
         return
 
-    # TODO remove this block when regular users may request BFSG themselves
+    # TODO remove this block when regular users may request BFSG/VORANKUENDIGUNG themselves
     if _type != PayoutRequestType.AFSG:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -301,6 +306,35 @@ async def create_bfsg_request(data: BfsgPayoutRequestForCreation, current_user: 
         session.add(payout_request)
         session.commit()
         return get_payout_request(session, request_id, PayoutRequestType.BFSG)
+
+@router.post("/payout-request/vorankuendigung/create", response_model=PayoutRequestData)
+async def create_vorankuendigung_request(data: VorankuendigungPayoutRequestForCreation,
+                                         current_user: User = Depends(get_current_user())):
+    check_semester_is_valid_format(data.semester)
+    with DBHelper() as session:
+        check_user_may_submit_payout_request(current_user, data.fs, session, _type=PayoutRequestType.VORANKUENDIGUNG)
+        request_id = get_request_id(data.semester, 'V', session)
+        today = get_europe_berlin_date()
+        now = ts()
+
+        payout_request = PayoutRequest()
+        payout_request.request_id = request_id
+        payout_request.type = PayoutRequestType.VORANKUENDIGUNG.value
+        payout_request.category = data.category
+        payout_request.fs = data.fs
+        payout_request.semester = data.semester
+        payout_request.status = PayoutRequestStatus.GESTELLT.value
+        payout_request.status_date = today
+        payout_request.amount_cents = data.amount_cents
+        payout_request.comment = ''
+        payout_request.request_date = today
+        payout_request.requester = current_user.username
+        payout_request.last_modified_timestamp = now
+        payout_request.last_modified_by = current_user.username
+        payout_request.completion_deadline = ''
+        session.add(payout_request)
+        session.commit()
+        return get_payout_request(session, request_id, PayoutRequestType.VORANKUENDIGUNG)
 
 
 @router.patch("/payout-request/{_type}/{request_id}", dependencies=[Depends(admin_only)],
