@@ -4,7 +4,7 @@ from typing import Optional, List, Dict, Coroutine, Any, Callable
 from fastapi import HTTPException, Depends, APIRouter
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from jose import JWTError, jwt
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from sqlalchemy import delete
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -21,6 +21,8 @@ class Token(BaseModel):
 
 
 class Permission(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     fs: str
     read_permissions: bool
     write_permissions: bool
@@ -32,8 +34,6 @@ class Permission(BaseModel):
     submit_payout_request: bool
     locked: bool
 
-    class Config:
-        orm_mode = True
 
 
 class PermissionList(BaseModel):

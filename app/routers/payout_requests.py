@@ -5,7 +5,7 @@ from typing import List, Optional
 from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from sqlalchemy import func
 from sqlalchemy.orm import Session, make_transient
 from starlette import status
@@ -49,15 +49,17 @@ class VorankuendigungPayoutRequestForCreation(BfsgPayoutRequestForCreation):
 
 
 class ModifiablePayoutRequestProperties(BaseModel):
-    status: Optional[PayoutRequestStatus]
-    status_date: Optional[str]
-    amount_cents: Optional[int]
-    comment: Optional[str]
-    completion_deadline: Optional[str]
-    reference: Optional[str]
+    status: Optional[PayoutRequestStatus] = None
+    status_date: Optional[str] = None
+    amount_cents: Optional[int] = None
+    comment: Optional[str] = None
+    completion_deadline: Optional[str] = None
+    reference: Optional[str] = None
 
 
 class PublicPayoutRequest(PayoutRequestForCreation):
+    model_config = ConfigDict(from_attributes= True)
+
     status: PayoutRequestStatus
     status_date: str
     amount_cents: int
@@ -69,14 +71,11 @@ class PublicPayoutRequest(PayoutRequestForCreation):
     completion_deadline: str
     reference: str | None
 
-    class Config:
-        orm_mode = True
-
 
 class PayoutRequestData(PublicPayoutRequest):
-    requester: Optional[str]
-    last_modified_timestamp: Optional[str]
-    last_modified_by: Optional[str]
+    requester: Optional[str] = None
+    last_modified_timestamp: Optional[str] = None
+    last_modified_by: Optional[str] = None
 
 
 def check_user_may_submit_payout_request(current_user: User, fs: str, session: Session,
