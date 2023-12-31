@@ -202,6 +202,32 @@ def test_create_payout_requests_as_admin(_type):
     assert response.status_code == 200
     assert response.json() == CREATED_PAYOUT_REQUEST[_type]
 
+@pytest.mark.parametrize('_type', [
+    'bfsg',
+    'vorankuendigung',
+])
+@freeze_time("2023-04-04T10:00:00Z")
+def test_create_payout_requests_with_all_optional_parameters_as_admin(_type):
+    params = {
+        'fs': 'Informatik',
+        'semester': '2023-SoSe',
+        'category': 'Erstiarbeit',
+        'amount_cents': 6969,
+        'status': 'FAILED',
+        'status_date': '2023-06-06',
+        'request_date': '2023-05-05',
+        'comment': 'oh boi',
+        'completion_deadline': '2023-06-06',
+        'reference': 'V23S-0001'
+    }
+    response = client.post(f'/api/v1/payout-request/{_type}/create', json=params,
+                           headers=get_auth_header(client, 'admin'))
+    assert response.status_code == 200
+    assert response.json() == {
+        **CREATED_PAYOUT_REQUEST[_type],
+        **params,
+    }
+
 
 @pytest.mark.parametrize('_type', [
     'afsg',

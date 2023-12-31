@@ -42,6 +42,12 @@ class PayoutRequestForCreation(BaseModel):
 class BfsgPayoutRequestForCreation(PayoutRequestForCreation):
     category: str
     amount_cents: int
+    status: PayoutRequestStatus | None = None
+    status_date: str | None = None
+    request_date: str | None = None
+    comment: str | None = None
+    completion_deadline: str | None = None
+    reference: str | None = None
 
 class VorankuendigungPayoutRequestForCreation(BfsgPayoutRequestForCreation):
     pass
@@ -271,6 +277,7 @@ async def create_afsg_request(data: PayoutRequestForCreation, current_user: User
         payout_request.last_modified_timestamp = now
         payout_request.last_modified_by = current_user.username
         payout_request.completion_deadline = get_default_afsg_completion_deadline(data.semester)
+        payout_request.reference = None  # type: ignore
         session.add(payout_request)
         session.commit()
         return get_payout_request(session, request_id, PayoutRequestType.AFSG)
@@ -292,15 +299,16 @@ async def create_bfsg_request(data: BfsgPayoutRequestForCreation, current_user: 
         payout_request.category = data.category
         payout_request.fs = data.fs
         payout_request.semester = data.semester
-        payout_request.status = PayoutRequestStatus.GESTELLT.value
-        payout_request.status_date = today
+        payout_request.status = data.status.value if data.status else PayoutRequestStatus.GESTELLT.value
+        payout_request.status_date = data.status_date or today
         payout_request.amount_cents = data.amount_cents
-        payout_request.comment = ''
-        payout_request.request_date = today
+        payout_request.comment = data.comment or ''
+        payout_request.request_date = data.request_date or today
         payout_request.requester = current_user.username
         payout_request.last_modified_timestamp = now
         payout_request.last_modified_by = current_user.username
-        payout_request.completion_deadline = get_default_bfsg_completion_deadline(today)
+        payout_request.completion_deadline = data.completion_deadline or get_default_bfsg_completion_deadline(today)
+        payout_request.reference = data.reference  # type: ignore
         session.add(payout_request)
         session.commit()
         return get_payout_request(session, request_id, PayoutRequestType.BFSG)
@@ -321,15 +329,16 @@ async def create_vorankuendigung_request(data: VorankuendigungPayoutRequestForCr
         payout_request.category = data.category
         payout_request.fs = data.fs
         payout_request.semester = data.semester
-        payout_request.status = PayoutRequestStatus.GESTELLT.value
-        payout_request.status_date = today
+        payout_request.status = data.status.value if data.status else PayoutRequestStatus.GESTELLT.value
+        payout_request.status_date = data.status_date or today
         payout_request.amount_cents = data.amount_cents
-        payout_request.comment = ''
-        payout_request.request_date = today
+        payout_request.comment = data.comment or ''
+        payout_request.request_date = data.request_date or today
         payout_request.requester = current_user.username
         payout_request.last_modified_timestamp = now
         payout_request.last_modified_by = current_user.username
-        payout_request.completion_deadline = ''
+        payout_request.completion_deadline = data.completion_deadline or ''
+        payout_request.reference = data.reference  # type: ignore
         session.add(payout_request)
         session.commit()
         return get_payout_request(session, request_id, PayoutRequestType.VORANKUENDIGUNG)
