@@ -359,6 +359,7 @@ def test_create_afsg_payout_requests_checks_semester(timestamp, semester, status
     ['2023-09-30T23:59:59+02:00', '2022-WiSe', 200],
     ['2023-09-30T23:59:59+02:00', '2022-SoSe', 422],
 ])
+@pytest.mark.skip(reason="Currently disabled while only admins may create requests")
 def test_create_bfsg_payout_requests_checks_semester(timestamp, semester, status_code):
     with freeze_time(timestamp):
         response = client.post('/api/v1/payout-request/bfsg/create', json={

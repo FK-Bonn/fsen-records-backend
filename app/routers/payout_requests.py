@@ -286,7 +286,7 @@ async def create_afsg_request(data: PayoutRequestForCreation, current_user: User
 @router.post("/payout-request/bfsg/create", response_model=PayoutRequestData)
 async def create_bfsg_request(data: BfsgPayoutRequestForCreation, current_user: User = Depends(get_current_user())):
     check_semester_is_valid_format(data.semester)
-    check_semester_is_open_for_bfsg_submissions(data.semester)
+    # check_semester_is_open_for_bfsg_submissions(data.semester)
     with DBHelper() as session:
         check_user_may_submit_payout_request(current_user, data.fs, session, _type=PayoutRequestType.BFSG)
         request_id = get_request_id(data.semester, 'B', session)
