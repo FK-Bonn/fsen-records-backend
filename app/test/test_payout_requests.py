@@ -1,4 +1,3 @@
-from typing import Optional
 from unittest.mock import patch
 
 import pytest
@@ -477,7 +476,7 @@ def test_get_payout_request_history_as_admin(_type, request_id):
     ['vorankuendigung', 'V22W-0023'],
 ])
 @freeze_time("2023-04-04T10:00:00Z")
-def test_get_payout_request_history_no_admin(username: Optional[str], _type, request_id):
+def test_get_payout_request_history_no_admin(username: str | None, _type, request_id):
     edit_request(_type, request_id)
     headers = {}
     if username:

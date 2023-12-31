@@ -1,7 +1,6 @@
 import re
 from datetime import datetime, date, timedelta
 from enum import Enum
-from typing import List, Optional
 from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -49,12 +48,12 @@ class VorankuendigungPayoutRequestForCreation(BfsgPayoutRequestForCreation):
 
 
 class ModifiablePayoutRequestProperties(BaseModel):
-    status: Optional[PayoutRequestStatus] = None
-    status_date: Optional[str] = None
-    amount_cents: Optional[int] = None
-    comment: Optional[str] = None
-    completion_deadline: Optional[str] = None
-    reference: Optional[str] = None
+    status: PayoutRequestStatus | None = None
+    status_date: str | None = None
+    amount_cents: int | None = None
+    comment: str | None = None
+    completion_deadline: str | None = None
+    reference: str | None = None
 
 
 class PublicPayoutRequest(PayoutRequestForCreation):
@@ -73,9 +72,9 @@ class PublicPayoutRequest(PayoutRequestForCreation):
 
 
 class PayoutRequestData(PublicPayoutRequest):
-    requester: Optional[str] = None
-    last_modified_timestamp: Optional[str] = None
-    last_modified_by: Optional[str] = None
+    requester: str | None = None
+    last_modified_timestamp: str | None = None
+    last_modified_by: str | None = None
 
 
 def check_user_may_submit_payout_request(current_user: User, fs: str, session: Session,
@@ -122,7 +121,7 @@ def check_semester_is_open_for_afsg_submissions(semester: str):
         )
 
 
-def get_currently_valid_afsg_semesters() -> List[str]:
+def get_currently_valid_afsg_semesters() -> list[str]:
     today = datetime.now(tz=ZoneInfo('Europe/Berlin'))
     semester_type = 'WiSe'
     if 4 <= today.month <= 9:
@@ -150,7 +149,7 @@ def check_semester_is_open_for_bfsg_submissions(semester: str):
         )
 
 
-def get_currently_valid_bfsg_semesters() -> List[str]:
+def get_currently_valid_bfsg_semesters() -> list[str]:
     return get_currently_valid_afsg_semesters()[:2]
 
 
@@ -200,7 +199,7 @@ def check_no_existing_afsg_payout_request(semester: str, fs: str, session: Sessi
         )
 
 
-def get_payout_request(session: Session, request_id: str, _type: PayoutRequestType) -> Optional[PayoutRequest]:
+def get_payout_request(session: Session, request_id: str, _type: PayoutRequestType) -> PayoutRequest | None:
     subquery = session.query(PayoutRequest.request_id, func.max(PayoutRequest.id).label('id')). \
         filter(PayoutRequest.type == _type.value). \
         group_by(PayoutRequest.request_id).subquery()
@@ -209,14 +208,14 @@ def get_payout_request(session: Session, request_id: str, _type: PayoutRequestTy
     return data
 
 
-def get_payout_request_history(session: Session, request_id: str, _type: PayoutRequestType) -> List[PayoutRequest]:
+def get_payout_request_history(session: Session, request_id: str, _type: PayoutRequestType) -> list[PayoutRequest]:
     return session.query(PayoutRequest). \
         filter(PayoutRequest.request_id == request_id). \
         filter(PayoutRequest.type == _type.value). \
         order_by(PayoutRequest.last_modified_timestamp.desc()).all()
 
 
-@router.get("/payout-request/{_type}", response_model=List[PayoutRequestData])
+@router.get("/payout-request/{_type}", response_model=list[PayoutRequestData])
 async def list_requests(_type: PayoutRequestType, current_user: User = Depends(get_current_user(auto_error=False))):
     with DBHelper() as session:
         subquery = session.query(PayoutRequest.request_id, func.max(PayoutRequest.id).label('id')). \
@@ -229,7 +228,7 @@ async def list_requests(_type: PayoutRequestType, current_user: User = Depends(g
             return [PublicPayoutRequest(**item.__dict__) for item in data]
 
 
-@router.get("/payout-request/{_type}/{limit_date}", response_model=List[PayoutRequestData])
+@router.get("/payout-request/{_type}/{limit_date}", response_model=list[PayoutRequestData])
 async def list_requests_before_date(_type: PayoutRequestType, limit_date: date,
                                          current_user: User = Depends(get_current_user(auto_error=False))):
     limit_date += timedelta(days=1)
@@ -369,7 +368,7 @@ async def modify_request(_type: PayoutRequestType, request_id: str, data: Modifi
         return get_payout_request(session, request_id, _type)
 
 
-@router.get("/payout-request/{_type}/{request_id}/history", response_model=List[PayoutRequestData])
+@router.get("/payout-request/{_type}/{request_id}/history", response_model=list[PayoutRequestData])
 async def get_request_history(_type: PayoutRequestType, request_id: str,
                               current_user: User = Depends(get_current_user(auto_error=False))):
     with DBHelper() as session:

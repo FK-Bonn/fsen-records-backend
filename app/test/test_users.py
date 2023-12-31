@@ -1,4 +1,4 @@
-from typing import Any, Dict
+from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
@@ -532,7 +532,7 @@ def test_get_users_as_user_with_multiple_write_permissions():
                                                                                   'submit_payout_request': True,
                                                                                   }]}],
 ])
-def test_who_am_i(username: str, response_data: Dict[str, Any]):
+def test_who_am_i(username: str, response_data: dict[str, Any]):
     response = client.get('/api/v1/user/me', headers=get_auth_header(client, username))
     assert response.status_code == 200
     assert response.json() == response_data

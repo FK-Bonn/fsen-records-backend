@@ -1,5 +1,6 @@
+from collections.abc import Coroutine, Callable
 from datetime import datetime, timedelta
-from typing import Optional, List, Dict, Coroutine, Any, Callable
+from typing import Any
 
 from fastapi import HTTPException, Depends, APIRouter
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
@@ -38,7 +39,7 @@ class Permission(BaseModel):
 
 class PermissionList(BaseModel):
     username: str
-    permissions: List[Permission]
+    permissions: list[Permission]
 
 
 class PermissionsForUser(PermissionList):
@@ -50,7 +51,7 @@ class UserWithPermissions(PermissionsForUser):
 
 
 class TokenData(BaseModel):
-    username: Optional[str] = None
+    username: str | None = None
 
 
 class UserForCreation(PermissionsForUser):
@@ -71,7 +72,7 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token", auto_error=False)
 router = APIRouter()
 
 
-def get_user(username: Optional[str]) -> Optional[User]:
+def get_user(username: str | None) -> User | None:
     if not username:
         return None
     with DBHelper() as session:
@@ -81,7 +82,7 @@ def get_user(username: Optional[str]) -> Optional[User]:
     return None
 
 
-def authenticate_user(username: str, password: str) -> Optional[User]:
+def authenticate_user(username: str, password: str) -> User | None:
     user = get_user(username)
     if not user:
         return None
@@ -90,7 +91,7 @@ def authenticate_user(username: str, password: str) -> Optional[User]:
     return user
 
 
-def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
+def create_access_token(data: dict, expires_delta: timedelta | None = None):
     to_encode = data.copy()
     if expires_delta:
         expire = datetime.utcnow() + expires_delta
@@ -110,7 +111,7 @@ async def get_current_user_or_raise(token: str = Depends(oauth2_scheme)) -> User
         )
     return  get_user_for_token(token)
 
-async def get_current_user_or_none(token: str = Depends(oauth2_scheme)) -> Optional[User]:
+async def get_current_user_or_none(token: str = Depends(oauth2_scheme)) -> User | None:
     if not token:
         return None
     return get_user_for_token(token)
@@ -123,7 +124,7 @@ def get_user_for_token(token: str)->User:
     )
     try:
         payload = jwt.decode(token, Config.SECRET_KEY, algorithms=[Config.ALGORITHM])
-        username: Optional[str] = payload.get("sub")
+        username: str | None = payload.get("sub")
         if username is None:
             raise credentials_exception
         token_data = TokenData(username=username)
@@ -217,7 +218,7 @@ async def create_user(userdata: UserForCreation, current_user: User = Depends(ge
             check_if_user_may_grant_permissions(current_user, userdata, session)
             check_permission_list(userdata)
 
-            items: List[Base] = []
+            items: list[Base] = []
             user = User()
             user.username = userdata.username
             user.hashed_password = get_password_hash(userdata.password)
@@ -295,7 +296,7 @@ async def patch_user_permissions(userdata: PermissionList, current_user: User = 
             session.add(db_permission)
         session.commit()
         actor: User = session.get(User, current_user.username)
-        managed_fs = set(p.fs for p in actor.permissions if p.write_permissions)
+        managed_fs = {p.fs for p in actor.permissions if p.write_permissions}
         return {'username': user.username,
                 'admin': user.admin,
                 'created_by': user.created_by,
@@ -318,10 +319,10 @@ def to_db_permission(p: Permission, username: str):
     return db_permission
 
 
-@router.get("/user", response_model=Dict[str, UserWithPermissions])
+@router.get("/user", response_model=dict[str, UserWithPermissions])
 async def get_user_list(current_user: User = Depends(get_current_user())):
     with DBHelper() as session:
-        users: List[User] = session.query(User).all()
+        users: list[User] = session.query(User).all()
         allusers = {}
         if current_user.admin:
             for user in users:
@@ -333,9 +334,9 @@ async def get_user_list(current_user: User = Depends(get_current_user())):
                 }
         else:
             actor: User = session.get(User, current_user.username)
-            readable_fs = set(p.fs for p in actor.permissions if p.read_permissions)
+            readable_fs = {p.fs for p in actor.permissions if p.read_permissions}
             for user in users:
-                if set(p.fs for p in user.permissions).intersection(readable_fs):
+                if {p.fs for p in user.permissions}.intersection(readable_fs):
                     allusers[user.username] = {
                         'username': user.username,
                         'admin': user.admin,

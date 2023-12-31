@@ -1,5 +1,4 @@
 import json
-from typing import Optional, List
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
@@ -63,8 +62,8 @@ class TimestampedFsDataType(FsDataType):
     id: int
     user: str
     approved: bool
-    approved_by: Optional[str]
-    approval_timestamp: Optional[str]
+    approved_by: str | None
+    approval_timestamp: str | None
     timestamp: str
 
 
@@ -84,17 +83,17 @@ class TimestampedProtectedFsDataType(ProtectedFsDataType):
     id: int
     user: str
     approved: bool
-    approved_by: Optional[str]
-    approval_timestamp: Optional[str]
+    approved_by: str | None
+    approval_timestamp: str | None
     timestamp: str
 
 
 class FsDataTuple(BaseModel):
-    data: Optional[FsDataResponse]
-    protected_data: Optional[ProtectedFsDataResponse]
+    data: FsDataResponse | None
+    protected_data: ProtectedFsDataResponse | None
 
 
-def get_subfolder_from_filename(filename: str) -> Optional[str]:
+def get_subfolder_from_filename(filename: str) -> str | None:
     for key, value in SUBFOLDERS.items():
         if filename.startswith(key):
             return value
@@ -197,7 +196,7 @@ async def get_fsdata(fs: str, current_user: User = Depends(get_current_user())):
         return FsDataResponse(data=json.loads(data.data), is_latest=data.id == latest_id)
 
 
-@router.get("/data/{fs}/history", dependencies=[Depends(admin_only)], response_model=List[TimestampedFsDataType])
+@router.get("/data/{fs}/history", dependencies=[Depends(admin_only)], response_model=list[TimestampedFsDataType])
 async def get_fsdata_history(fs: str):
     with DBHelper() as session:
         data = session.query(FsData). \
@@ -218,7 +217,7 @@ async def get_fsdata_history(fs: str):
 
 
 @router.get("/data/{fs}/protected/history", dependencies=[Depends(admin_only)],
-            response_model=List[TimestampedProtectedFsDataType])
+            response_model=list[TimestampedProtectedFsDataType])
 async def get_protected_fsdata_history(fs: str):
     with DBHelper() as session:
         data = session.query(ProtectedFsData).filter(ProtectedFsData.fs == fs).order_by(
