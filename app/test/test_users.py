@@ -195,6 +195,28 @@ def test_create_user_bad_permission_list():
     assert response.status_code == 400
 
 
+def test_create_user_empty_username():
+    response = client.post('/api/v1/user/create',
+                           json={'username': '',
+                                 'password': 'password',
+                                 'admin': False,
+                                 'permissions': [],
+                                 },
+                           headers=get_auth_header(client, 'admin'))
+    assert response.status_code == 422
+
+
+def test_create_user_empty_password():
+    response = client.post('/api/v1/user/create',
+                           json={'username': 'user-to-create',
+                                 'password': '',
+                                 'admin': False,
+                                 'permissions': [],
+                                 },
+                           headers=get_auth_header(client, 'admin'))
+    assert response.status_code == 422
+
+
 def test_create_user_no_admin():
     response = client.post('/api/v1/user/create',
                            json={'username': 'user-to-create',
@@ -555,6 +577,14 @@ def test_change_own_password_wrong_old_password_fails():
     assert response.json() == {
         'detail': 'Wrong current password',
     }
+
+
+def test_change_own_password_new_password_empty_fails():
+    response = client.post('/api/v1/user/password',
+                           json={'current_password': 'password', 'new_password': ''},
+                           headers=get_auth_header(client, 'user'))
+    assert response.status_code == 422
+    assert response.json()['detail'][0]['msg'] == 'String should have at least 8 characters'
 
 
 def test_admin_change_other_password():

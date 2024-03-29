@@ -1,11 +1,11 @@
 from collections.abc import Coroutine, Callable
 from datetime import datetime, timedelta
-from typing import Any
+from typing import Any, Annotated
 
 from fastapi import HTTPException, Depends, APIRouter
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from jose import JWTError, jwt
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import delete
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -36,9 +36,8 @@ class Permission(BaseModel):
     locked: bool
 
 
-
 class PermissionList(BaseModel):
-    username: str
+    username: Annotated[str, Field(min_length=1)]
     permissions: list[Permission]
 
 
@@ -55,12 +54,12 @@ class TokenData(BaseModel):
 
 
 class UserForCreation(PermissionsForUser):
-    password: str
+    password: Annotated[str, Field(min_length=8)]
 
 
 class PasswordChangeData(BaseModel):
     current_password: str
-    new_password: str
+    new_password: Annotated[str, Field(min_length=8)]
 
 
 class NewPasswordData(BaseModel):
@@ -109,12 +108,14 @@ async def get_current_user_or_raise(token: str = Depends(oauth2_scheme)) -> User
             detail="Not authenticated",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    return  get_user_for_token(token)
+    return get_user_for_token(token)
+
 
 async def get_current_user_or_none(token: str = Depends(oauth2_scheme)) -> User | None:
     if not token:
         return None
     return get_user_for_token(token)
+
 
 def get_user_for_token(token: str)->User:
     credentials_exception = HTTPException(
@@ -135,12 +136,14 @@ def get_user_for_token(token: str)->User:
         raise credentials_exception
     return user
 
+
 def get_current_user(auto_error: bool = True) -> Callable[[str], Coroutine[Any, Any, User]] | Callable[
     [str], Coroutine[Any, Any, User | None]]:
     if auto_error:
         return get_current_user_or_raise
     else:
         return get_current_user_or_none
+
 
 async def admin_only(current_user: User = Depends(get_current_user())):
     if not current_user.admin:
