@@ -33,6 +33,8 @@ class Permission(BaseModel):
     read_protected_data: bool
     write_protected_data: bool
     submit_payout_request: bool
+    upload_proceedings: bool
+    delete_proceedings: bool
     locked: bool
 
 
@@ -319,6 +321,8 @@ def to_db_permission(p: Permission, username: str):
     db_permission.read_protected_data = p.read_protected_data
     db_permission.write_protected_data = p.write_protected_data
     db_permission.submit_payout_request = p.submit_payout_request
+    db_permission.upload_proceedings = p.upload_proceedings
+    db_permission.delete_proceedings = p.delete_proceedings
     return db_permission
 
 

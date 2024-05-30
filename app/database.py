@@ -42,6 +42,8 @@ class Permission(Base):
     read_protected_data: Mapped[bool] = mapped_column(nullable=False, default=False)
     write_protected_data: Mapped[bool] = mapped_column(nullable=False, default=False)
     submit_payout_request: Mapped[bool] = mapped_column(nullable=False, default=False)
+    upload_proceedings: Mapped[bool] = mapped_column(nullable=False, default=False)
+    delete_proceedings: Mapped[bool] = mapped_column(nullable=False, default=False)
     locked: Mapped[bool] = mapped_column(nullable=False, default=False)
 
 
@@ -87,6 +89,19 @@ class PayoutRequest(Base):
     last_modified_by: Mapped[str] = mapped_column(String(200), nullable=False)
     completion_deadline: Mapped[str] = mapped_column(String(200), nullable=False)
     reference: Mapped[str] = mapped_column(String(200), nullable=True)
+
+
+class Proceedings(Base):
+    __tablename__ = "proceedings"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    fs: Mapped[str] = mapped_column(String(200), nullable=False)
+    committee: Mapped[str] = mapped_column(String(200), nullable=False)
+    date: Mapped[str] = mapped_column(String(200), nullable=False)
+    tags: Mapped[str] = mapped_column(Text, nullable=False)
+    sha256hash: Mapped[str] = mapped_column(String(200), nullable=False)
+    upload_date: Mapped[str] = mapped_column(String(200), nullable=False)
+    uploaded_by: Mapped[str] = mapped_column(String(200), nullable=False)
+    deleted_by: Mapped[str] = mapped_column(String(200), nullable=True, default=None)
 
 
 class DBHelper:

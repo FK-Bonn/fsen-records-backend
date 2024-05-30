@@ -4,7 +4,7 @@ import uvicorn
 from fastapi import FastAPI
 from starlette.middleware.cors import CORSMiddleware
 
-from app.routers import fsen
+from app.routers import fsen, proceedings
 from app.routers import users
 from app.routers import payout_requests
 
@@ -40,10 +40,16 @@ app.include_router(
     fsen.router,
     prefix="/api/v1"
 )
+
 app.include_router(
     payout_requests.router,
     prefix="/api/v1"
 )
 
+app.include_router(
+    proceedings.router,
+    prefix="/api/v1"
+)
+
 if __name__ == "__main__":
-    uvicorn.run(app)
+    uvicorn.run(app, host='::')

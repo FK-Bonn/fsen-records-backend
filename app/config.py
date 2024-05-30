@@ -15,3 +15,6 @@ class Config:
     BASE_DATA_DIR = Path(os.environ["BASE_DATA_DIR"]) \
         if "BASE_DATA_DIR" in os.environ \
         else Path(__file__).parent.resolve().parent / 'data' / 'files'
+    BASE_PROCEEDINGS_DIR = Path(os.environ["BASE_PROCEEDINGS_DIR"]) \
+        if "BASE_PROCEEDINGS_DIR" in os.environ \
+        else Path(__file__).parent.resolve().parent / 'data' / 'proceedings'

@@ -17,6 +17,8 @@ PERMISSIONS_LEVEL_0 = {
     'read_protected_data': False,
     'write_protected_data': False,
     'submit_payout_request': False,
+    'upload_proceedings': False,
+    'delete_proceedings': False,
     'locked': False,
 }
 
@@ -29,6 +31,8 @@ PERMISSIONS_LEVEL_1 = {
     'read_protected_data': False,
     'write_protected_data': False,
     'submit_payout_request': False,
+    'upload_proceedings': False,
+    'delete_proceedings': False,
     'locked': False,
 }
 
@@ -41,6 +45,8 @@ PERMISSIONS_LEVEL_2 = {
     'read_protected_data': True,
     'write_protected_data': True,
     'submit_payout_request': True,
+    'upload_proceedings': True,
+    'delete_proceedings': True,
     'locked': False,
 }
 
@@ -83,7 +89,10 @@ def test_create_user():
                                                   'write_public_data': True,
                                                   'read_protected_data': True,
                                                   'write_protected_data': True,
-                                                  'submit_payout_request': True}],
+                                                  'submit_payout_request': True,
+                                                  'upload_proceedings': True,
+                                                  'delete_proceedings': True,
+                                                  }],
                                  },
                            headers=get_auth_header(client, 'admin'))
     assert response.status_code == 200
@@ -107,6 +116,8 @@ def test_create_user_locked_permissions_admin():
                                                   'read_protected_data': True,
                                                   'write_protected_data': True,
                                                   'submit_payout_request': True,
+                                                  'upload_proceedings': True,
+                                                  'delete_proceedings': True,
                                                   'locked': True}],
                                  },
                            headers=get_auth_header(client, 'admin'))
@@ -131,7 +142,10 @@ def test_create_existing_user_fails():
                                                   'write_public_data': True,
                                                   'read_protected_data': True,
                                                   'write_protected_data': True,
-                                                  'submit_payout_request': True}],
+                                                  'submit_payout_request': True,
+                                                  'upload_proceedings': True,
+                                                  'delete_proceedings': True,
+                                                  }],
                                  },
                            headers=get_auth_header(client, 'admin'))
     assert response.status_code == 409
@@ -540,6 +554,8 @@ def test_get_users_as_user_with_multiple_write_permissions():
                                                                                   'read_protected_data': False,
                                                                                   'write_protected_data': False,
                                                                                   'submit_payout_request': False,
+                                                                                  'upload_proceedings': False,
+                                                                                  'delete_proceedings': False,
                                                                                   }]}],
     ['user3',
      {'username': 'user3', 'admin': False, 'created_by': 'root', 'permissions': [{'fs': 'Informatik',
@@ -552,6 +568,8 @@ def test_get_users_as_user_with_multiple_write_permissions():
                                                                                   'read_protected_data': True,
                                                                                   'write_protected_data': True,
                                                                                   'submit_payout_request': True,
+                                                                                  'upload_proceedings': True,
+                                                                                  'delete_proceedings': True,
                                                                                   }]}],
 ])
 def test_who_am_i(username: str, response_data: dict[str, Any]):

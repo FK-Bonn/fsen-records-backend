@@ -38,15 +38,18 @@ class DBTestHelper:
             self.add_permission('user2', 'Informatik', read_files=True, read_permissions=True, read_public_data=True)
             self.add_permission('user3', 'Informatik', read_files=True, read_permissions=True, write_permissions=True,
                                 read_public_data=True, write_public_data=True, read_protected_data=True,
-                                write_protected_data=True, submit_payout_request=True)
+                                write_protected_data=True, submit_payout_request=True, upload_proceedings=True,
+                                delete_proceedings=True)
             self.add_permission('user4', 'Informatik', read_files=True, read_permissions=True, read_public_data=True)
             self.add_permission('user4', 'Geographie', read_files=True, read_permissions=True, read_public_data=True)
             self.add_permission('user5', 'Informatik', read_files=True, read_permissions=True, write_permissions=True,
                                 read_public_data=True, write_public_data=True, read_protected_data=True,
-                                write_protected_data=True, submit_payout_request=True)
+                                write_protected_data=True, submit_payout_request=True, upload_proceedings=True,
+                                delete_proceedings=True)
             self.add_permission('user5', 'Geographie', read_files=True, read_permissions=True, write_permissions=True,
                                 read_public_data=True, write_public_data=True, read_protected_data=True,
-                                write_protected_data=True, submit_payout_request=True)
+                                write_protected_data=True, submit_payout_request=True, upload_proceedings=True,
+                                delete_proceedings=True)
             self.add_afsg_payout_request()
             self.add_bfsg_payout_request()
             self.add_vorankuendigung_payout_request()
@@ -71,6 +74,8 @@ class DBTestHelper:
                        read_protected_data: bool = False,
                        write_protected_data: bool = False,
                        submit_payout_request: bool = False,
+                       upload_proceedings: bool = False,
+                       delete_proceedings: bool = False,
                        locked: bool = False,
                        ):
         assert self._session
@@ -86,6 +91,8 @@ class DBTestHelper:
         permission.read_protected_data = read_protected_data
         permission.write_protected_data = write_protected_data
         permission.submit_payout_request = submit_payout_request
+        permission.upload_proceedings = upload_proceedings
+        permission.delete_proceedings = delete_proceedings
         self._session.add(permission)
 
     def add_afsg_payout_request(self):
@@ -155,6 +162,7 @@ def fake_db(monkeypatch, tmp_path):
     monkeypatch.setattr('app.routers.users.DBHelper', lambda: DBTestHelper(tmp_path))
     monkeypatch.setattr('app.routers.fsen.DBHelper', lambda: DBTestHelper(tmp_path))
     monkeypatch.setattr('app.routers.payout_requests.DBHelper', lambda: DBTestHelper(tmp_path))
+    monkeypatch.setattr('app.routers.proceedings.DBHelper', lambda: DBTestHelper(tmp_path))
     monkeypatch.setattr('app.database.get_password_hash', _cached_password_hash)
     monkeypatch.setattr('app.routers.users.get_password_hash', _cached_password_hash)
 
