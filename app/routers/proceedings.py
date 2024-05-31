@@ -177,7 +177,7 @@ async def get_individual_file(fs: str, filename: str, request: Request,
     if not is_access_allowed(source_ip, current_user):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Only available from the university network",
+            detail="Only available from the university network. You are however coming from: " + source_ip,
         )
     if '/' in fs or '/' in filename:
         raise HTTPException(
