@@ -8,7 +8,15 @@ from starlette.testclient import TestClient
 
 from app.database import Base, User, get_password_hash, Permission, PayoutRequest
 
+ADMIN = 'admin'
+USER_NO_PERMS = 'user_no_perms'
+USER_INFO_READ = 'user_info_read'
+USER_INFO_ALL = 'user_info_all'
+USER_INFO_GEO_READ = 'user_geo_read'
+USER_INFO_GEO_ALL = 'user_geo_all'
+
 HASH_CACHE = {}
+
 
 class DBTestHelper:
     def __init__(self, tmppath: Path):
@@ -29,24 +37,24 @@ class DBTestHelper:
         self._session = Session(engine)
 
         if do_init:
-            self.add_user('user', 'root')
-            self.add_user('user2', 'root')
-            self.add_user('user3', 'root')
-            self.add_user('user4', 'root')
-            self.add_user('user5', 'root')
-            self.add_user('admin', 'root', admin=True)
-            self.add_permission('user2', 'Informatik', read_files=True, read_permissions=True, read_public_data=True)
-            self.add_permission('user3', 'Informatik', read_files=True, read_permissions=True, write_permissions=True,
+            self.add_user(USER_NO_PERMS, 'root')
+            self.add_user(USER_INFO_READ, 'root')
+            self.add_user(USER_INFO_ALL, 'root')
+            self.add_user(USER_INFO_GEO_READ, 'root')
+            self.add_user(USER_INFO_GEO_ALL, 'root')
+            self.add_user(ADMIN, 'root', admin=True)
+            self.add_permission(USER_INFO_READ, 'Informatik', read_files=True, read_permissions=True, read_public_data=True)
+            self.add_permission(USER_INFO_ALL, 'Informatik', read_files=True, read_permissions=True, write_permissions=True,
                                 read_public_data=True, write_public_data=True, read_protected_data=True,
                                 write_protected_data=True, submit_payout_request=True, upload_proceedings=True,
                                 delete_proceedings=True)
-            self.add_permission('user4', 'Informatik', read_files=True, read_permissions=True, read_public_data=True)
-            self.add_permission('user4', 'Geographie', read_files=True, read_permissions=True, read_public_data=True)
-            self.add_permission('user5', 'Informatik', read_files=True, read_permissions=True, write_permissions=True,
+            self.add_permission(USER_INFO_GEO_READ, 'Informatik', read_files=True, read_permissions=True, read_public_data=True)
+            self.add_permission(USER_INFO_GEO_READ, 'Geographie', read_files=True, read_permissions=True, read_public_data=True)
+            self.add_permission(USER_INFO_GEO_ALL, 'Informatik', read_files=True, read_permissions=True, write_permissions=True,
                                 read_public_data=True, write_public_data=True, read_protected_data=True,
                                 write_protected_data=True, submit_payout_request=True, upload_proceedings=True,
                                 delete_proceedings=True)
-            self.add_permission('user5', 'Geographie', read_files=True, read_permissions=True, write_permissions=True,
+            self.add_permission(USER_INFO_GEO_ALL, 'Geographie', read_files=True, read_permissions=True, write_permissions=True,
                                 read_public_data=True, write_public_data=True, read_protected_data=True,
                                 write_protected_data=True, submit_payout_request=True, upload_proceedings=True,
                                 delete_proceedings=True)
@@ -177,6 +185,6 @@ def get_token(client: TestClient, user: str):
     return response.json()['access_token']
 
 
-def get_auth_header(client: TestClient, user: str = 'user2'):
+def get_auth_header(client: TestClient, user: str = USER_INFO_READ):
     token = get_token(client, user)
     return {'Authorization': f'Bearer {token}'}

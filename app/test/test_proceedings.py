@@ -8,7 +8,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.main import app
-from app.test.conftest import get_auth_header
+from app.test.conftest import get_auth_header, USER_INFO_ALL, USER_INFO_READ, ADMIN, USER_INFO_GEO_ALL, USER_NO_PERMS
 
 EMPTY_PDF_PAGE = base64.b64decode("""JVBERi0xLjUKJbXtrvsKNCAwIG9iago8PCAvTGVuZ3RoIDUgMCBSCiAgIC9GaWx0ZXIgL0ZsYXRl
 RGVjb2RlCj4+CnN0cmVhbQp4nDNUMABCXUMgYWFiqGdhYWlubqiQnMtVyBXIBQBPJAWjCmVuZHN0
@@ -38,7 +38,7 @@ def test_proceedings_upload(mocked_base_dir):
     result = client.post('/api/v1/proceedings/Informatik',
                          data={'committee': 'FSV', 'date': '2024-05-30', 'tags': 'HHP,Wahl KP'},
                          files={'file': ('prot.pdf', handle, 'application/pdf')},
-                         headers=get_auth_header(client, 'user3'))
+                         headers=get_auth_header(client, USER_INFO_ALL))
     assert result.status_code == 200
     assert (mocked_base_dir.return_value / 'Informatik' / 'Prot-FSV-2024-05-30.pdf').exists()
 
@@ -59,7 +59,7 @@ def test_proceedings_upload_no_fs_permission(mocked_base_dir):
     result = client.post('/api/v1/proceedings/Informatik',
                          data={'committee': 'FSV', 'date': '2024-05-30', 'tags': 'HHP,Wahl KP'},
                          files={'file': ('prot.pdf', handle, 'application/pdf')},
-                         headers=get_auth_header(client, 'user'))
+                         headers=get_auth_header(client, USER_NO_PERMS))
     assert result.status_code == 401
     assert not (mocked_base_dir.return_value / 'Informatik' / 'Prot-FSV-2024-05-30.pdf').exists()
 
@@ -70,7 +70,7 @@ def test_proceedings_upload_missing_upload_permission(mocked_base_dir):
     result = client.post('/api/v1/proceedings/Informatik',
                          data={'committee': 'FSV', 'date': '2024-05-30', 'tags': 'HHP,Wahl KP'},
                          files={'file': ('prot.pdf', handle, 'application/pdf')},
-                         headers=get_auth_header(client, 'user2'))
+                         headers=get_auth_header(client, USER_INFO_READ))
     assert result.status_code == 401
     assert not (mocked_base_dir.return_value / 'Informatik' / 'Prot-FSV-2024-05-30.pdf').exists()
 
@@ -87,7 +87,7 @@ def test_proceedings_upload_missing_field_fails(mocked_base_dir, key_to_set_none
     result = client.post('/api/v1/proceedings/Informatik',
                          data=data,
                          files={'file': ('prot.pdf', handle, 'application/pdf')},
-                         headers=get_auth_header(client, 'user2'))
+                         headers=get_auth_header(client, USER_INFO_READ))
     assert result.status_code == 422
     assert not (mocked_base_dir.return_value / 'Informatik' / 'Prot-FSV-2024-05-30.pdf').exists()
 
@@ -104,7 +104,7 @@ def test_proceedings_upload_invalid_field_values(mocked_base_dir, key, value):
     result = client.post('/api/v1/proceedings/Informatik',
                          data=data,
                          files={'file': ('prot.pdf', handle, 'application/pdf')},
-                         headers=get_auth_header(client, 'user2'))
+                         headers=get_auth_header(client, USER_INFO_READ))
     assert result.status_code == 422
     assert not (mocked_base_dir.return_value / 'Informatik' / 'Prot-FSV-2024-05-30.pdf').exists()
 
@@ -117,7 +117,7 @@ def test_proceedings_upload_overwrite_existing_file(mocked_base_dir):
     result = client.post('/api/v1/proceedings/Informatik',
                          data={'committee': 'FSV', 'date': '2024-05-30', 'tags': 'HHP,Wahl KP'},
                          files={'file': ('prot.pdf', handle, 'application/pdf')},
-                         headers=get_auth_header(client, 'user3'))
+                         headers=get_auth_header(client, USER_INFO_ALL))
     assert result.status_code == 200
     assert target_file.read_bytes() == b'%PDF-overwrite_me'
 
@@ -125,7 +125,7 @@ def test_proceedings_upload_overwrite_existing_file(mocked_base_dir):
     result = client.post('/api/v1/proceedings/Informatik',
                          data={'committee': 'FSV', 'date': '2024-05-30', 'tags': ''},
                          files={'file': ('prot.pdf', handle, 'application/pdf')},
-                         headers=get_auth_header(client, 'user3'))
+                         headers=get_auth_header(client, USER_INFO_ALL))
     assert result.status_code == 200
     assert target_file.read_bytes() == EMPTY_PDF_PAGE
 
@@ -135,14 +135,14 @@ def create_sample_proceedings(target_file):
     result = client.post('/api/v1/proceedings/Informatik',
                          data={'committee': 'FSV', 'date': '2024-05-30', 'tags': ''},
                          files={'file': ('prot.pdf', handle, 'application/pdf')},
-                         headers=get_auth_header(client, 'user3'))
+                         headers=get_auth_header(client, USER_INFO_ALL))
     assert result.status_code == 200
     assert target_file.exists()
 
 
 @pytest.mark.parametrize('username', [
-    'user3',
-    'admin',
+    USER_INFO_ALL,
+    ADMIN,
 ])
 @mock.patch('app.routers.proceedings.get_base_dir', return_value=Path(TemporaryDirectory().name))
 def test_proceedings_delete_file(mocked_base_dir, username):
@@ -158,7 +158,7 @@ def test_proceedings_delete_file(mocked_base_dir, username):
 @mock.patch('app.routers.proceedings.get_base_dir', return_value=Path(TemporaryDirectory().name))
 def test_proceedings_nonexisting_file(mocked_base_dir):
     result = client.delete('/api/v1/proceedings/Informatik/FSR/2024-11-11',
-                           headers=get_auth_header(client, 'user3'))
+                           headers=get_auth_header(client, USER_INFO_ALL))
     assert result.status_code == 404
 
 
@@ -178,7 +178,7 @@ def test_proceedings_delete_file_missing_permission(mocked_base_dir):
     create_sample_proceedings(target_file)
 
     result = client.delete('/api/v1/proceedings/Informatik/FSV/2024-05-30',
-                           headers=get_auth_header(client, 'user2'))
+                           headers=get_auth_header(client, USER_INFO_READ))
     assert result.status_code == 401
     assert target_file.exists()
 
@@ -189,29 +189,29 @@ def test_proceedings_list(mocked_base_dir):
     client.post('/api/v1/proceedings/Informatik',
                 data={'committee': 'FSV', 'date': '2024-03-30', 'tags': 'HHP,Wahl KP'},
                 files={'file': ('prot.pdf', handle, 'application/pdf')},
-                headers=get_auth_header(client, 'user3'))
+                headers=get_auth_header(client, USER_INFO_ALL))
     client.post('/api/v1/proceedings/Informatik',
                 data={'committee': 'FSV', 'date': '2024-03-20', 'tags': 'hoppla'},
                 files={'file': ('prot.pdf', handle, 'application/pdf')},
-                headers=get_auth_header(client, 'user3'))
+                headers=get_auth_header(client, USER_INFO_ALL))
     client.post('/api/v1/proceedings/Informatik',
                 data={'committee': 'FSV', 'date': '2024-03-20', 'tags': 'HHP,Wahl KP'},
                 files={'file': ('prot.pdf', handle, 'application/pdf')},
-                headers=get_auth_header(client, 'user3'))
+                headers=get_auth_header(client, USER_INFO_ALL))
     client.post('/api/v1/proceedings/Informatik',
                 data={'committee': 'FSR', 'date': '2024-02-22', 'tags': 'oopsie'},
                 files={'file': ('prot.pdf', handle, 'application/pdf')},
-                headers=get_auth_header(client, 'user3'))
+                headers=get_auth_header(client, USER_INFO_ALL))
     client.delete('/api/v1/proceedings/Informatik/FSR/2024-02-22',
-                  headers=get_auth_header(client, 'user3'))
+                  headers=get_auth_header(client, USER_INFO_ALL))
     client.post('/api/v1/proceedings/Geographie',
                 data={'committee': 'FSV', 'date': '2024-04-30', 'tags': 'Finanzen'},
                 files={'file': ('prot.pdf', handle, 'application/pdf')},
-                headers=get_auth_header(client, 'user5'))
+                headers=get_auth_header(client, USER_INFO_GEO_ALL))
     client.post('/api/v1/proceedings/Informatik',
                 data={'committee': 'FSR', 'date': '2024-05-30', 'tags': ''},
                 files={'file': ('prot.pdf', handle, 'application/pdf')},
-                headers=get_auth_header(client, 'user3'))
+                headers=get_auth_header(client, USER_INFO_ALL))
     response = client.get('/api/v1/proceedings')
     assert response.status_code == 200
     assert response.json() == [
@@ -251,5 +251,5 @@ def test_proceedings_download_outside_of_allowed_network_fails(source_ip: str):
 def test_proceedings_download_outside_of_allowed_network_while_authenticated(source_ip: str):
     with mock.patch('app.routers.proceedings.get_source_ip', return_value=source_ip):
         response = client.get('/api/v1/proceedings/Informatik/Prot-FSV-2024-05-30.pdf',
-                              headers=get_auth_header(client, 'admin'))
+                              headers=get_auth_header(client, ADMIN))
     assert response.status_code == 200

@@ -6,7 +6,8 @@ from freezegun import freeze_time
 
 from app.main import app
 from app.routers.payout_requests import get_default_afsg_completion_deadline, get_default_bfsg_completion_deadline
-from app.test.conftest import get_auth_header
+from app.test.conftest import get_auth_header, ADMIN, USER_NO_PERMS, USER_INFO_READ, USER_INFO_GEO_READ, USER_INFO_ALL, \
+    USER_INFO_GEO_ALL
 
 DEFAULT_PARAMETERS: dict[str, str | int] = {
     'status': 'VOLLSTÄNDIG',
@@ -108,9 +109,9 @@ CREATED_PAYOUT_REQUEST: dict[str, dict[str, str | int | None]] = {
         'request_date': '2023-04-04',
         'completion_deadline': '2025-09-30',
         'reference': None,
-        'requester': 'admin',
+        'requester': ADMIN,
         'last_modified_timestamp': '2023-04-04T10:00:00+00:00',
-        'last_modified_by': 'admin',
+        'last_modified_by': ADMIN,
     },
     'bfsg': {
         'request_id': 'B23S-0001',
@@ -124,9 +125,9 @@ CREATED_PAYOUT_REQUEST: dict[str, dict[str, str | int | None]] = {
         'comment': '',
         'request_date': '2023-04-04',
         'reference': None,
-        'requester': 'admin',
+        'requester': ADMIN,
         'last_modified_timestamp': '2023-04-04T10:00:00+00:00',
-        'last_modified_by': 'admin',
+        'last_modified_by': ADMIN,
         'completion_deadline': '2023-10-04',
     },
     'vorankuendigung': {
@@ -141,9 +142,9 @@ CREATED_PAYOUT_REQUEST: dict[str, dict[str, str | int | None]] = {
         'comment': '',
         'request_date': '2023-04-04',
         'reference': None,
-        'requester': 'admin',
+        'requester': ADMIN,
         'last_modified_timestamp': '2023-04-04T10:00:00+00:00',
-        'last_modified_by': 'admin',
+        'last_modified_by': ADMIN,
         'completion_deadline': '',
     }
 }
@@ -185,7 +186,7 @@ def test_get_all_payout_requests(_type):
     'vorankuendigung',
 ])
 def test_get_all_payout_requests_as_admin(_type):
-    response = client.get(f'/api/v1/payout-request/{_type}', headers=get_auth_header(client, 'admin'))
+    response = client.get(f'/api/v1/payout-request/{_type}', headers=get_auth_header(client, ADMIN))
     assert response.status_code == 200
     assert response.json() == [SAMPLE_FULL_PAYOUT_REQUEST[_type]]
 
@@ -198,9 +199,10 @@ def test_get_all_payout_requests_as_admin(_type):
 @freeze_time("2023-04-04T10:00:00Z")
 def test_create_payout_requests_as_admin(_type):
     response = client.post(f'/api/v1/payout-request/{_type}/create', json=CREATE_PARAMS[_type],
-                           headers=get_auth_header(client, 'admin'))
+                           headers=get_auth_header(client, ADMIN))
     assert response.status_code == 200
     assert response.json() == CREATED_PAYOUT_REQUEST[_type]
+
 
 @pytest.mark.parametrize('_type', [
     'bfsg',
@@ -221,7 +223,7 @@ def test_create_payout_requests_with_all_optional_parameters_as_admin(_type):
         'reference': 'V23S-0001'
     }
     response = client.post(f'/api/v1/payout-request/{_type}/create', json=params,
-                           headers=get_auth_header(client, 'admin'))
+                           headers=get_auth_header(client, ADMIN))
     assert response.status_code == 200
     assert response.json() == {
         **CREATED_PAYOUT_REQUEST[_type],
@@ -239,7 +241,7 @@ def test_create_payout_requests_invalid_semester_format(_type):
     response = client.post('/api/v1/payout-request/afsg/create', json={
         **CREATE_PARAMS[_type],
         'semester': 'SoSe-2022',
-    }, headers=get_auth_header(client, 'admin'))
+    }, headers=get_auth_header(client, ADMIN))
     assert response.status_code == 422
     assert response.json() == {
         'detail': 'Invalid semester format',
@@ -249,14 +251,13 @@ def test_create_payout_requests_invalid_semester_format(_type):
 @freeze_time("2023-04-04T10:00:00Z")
 def test_create_afsg_payout_requests_as_write_user():
     response = client.post('/api/v1/payout-request/afsg/create', json=CREATE_PARAMS['afsg'],
-                           headers=get_auth_header(client, 'user3'))
+                           headers=get_auth_header(client, USER_INFO_ALL))
     assert response.status_code == 200
     assert response.json() == {
         **CREATED_PAYOUT_REQUEST['afsg'],
-        'requester': 'user3',
-        'last_modified_by': 'user3',
+        'requester': USER_INFO_ALL,
+        'last_modified_by': USER_INFO_ALL,
     }
-
 
 
 @pytest.mark.parametrize('_type', [
@@ -266,7 +267,7 @@ def test_create_afsg_payout_requests_as_write_user():
 @freeze_time("2023-04-04T10:00:00Z")
 def test_create_payout_requests_as_write_user_currently_not_allowed(_type):
     response = client.post(f'/api/v1/payout-request/{_type}/create', json=CREATE_PARAMS[_type]
-                           , headers=get_auth_header(client, 'user3'))
+                           , headers=get_auth_header(client, USER_INFO_ALL))
     assert response.status_code == 401
 
 
@@ -278,12 +279,12 @@ def test_create_payout_requests_as_write_user_currently_not_allowed(_type):
 @patch('app.routers.payout_requests.check_user_may_submit_payout_request')
 def test_create_payout_requests_as_write_user_mocked(mocked_func, _type):
     response = client.post(f'/api/v1/payout-request/{_type}/create', json=CREATE_PARAMS[_type],
-                           headers=get_auth_header(client, 'user3'))
+                           headers=get_auth_header(client, USER_INFO_ALL))
     assert response.status_code == 200
     assert response.json() == {
         **CREATED_PAYOUT_REQUEST[_type],
-        'requester': 'user3',
-        'last_modified_by': 'user3',
+        'requester': USER_INFO_ALL,
+        'last_modified_by': USER_INFO_ALL,
     }
 
 
@@ -292,7 +293,7 @@ def test_create_afsg_payout_requests_as_write_user_fails_if_already_exists():
     response = client.post('/api/v1/payout-request/afsg/create', json={
         'fs': 'Informatik',
         'semester': '2022-WiSe',
-    }, headers=get_auth_header(client, 'user3'))
+    }, headers=get_auth_header(client, USER_INFO_ALL))
     assert response.status_code == 422
     assert response.json() == {
         'detail': 'There already is a payout request for this semester',
@@ -307,15 +308,14 @@ def test_create_afsg_payout_requests_as_write_user_fails_if_already_exists():
 @patch('app.routers.payout_requests.check_user_may_submit_payout_request')
 def test_create_payout_requests_as_write_user_does_not_fail_if_already_exists(mocked_func, _type):
     response = client.post(f'/api/v1/payout-request/{_type}/create', json=CREATE_PARAMS[_type],
-                           headers=get_auth_header(client, 'user3'))
+                           headers=get_auth_header(client, USER_INFO_ALL))
     assert response.status_code == 200
     assert response.json() == {
         **CREATED_PAYOUT_REQUEST[_type],
         'last_modified_timestamp': '2023-04-04T10:00:00+00:00',
-        'last_modified_by': 'user3',
-        'requester': 'user3',
+        'last_modified_by': USER_INFO_ALL,
+        'requester': USER_INFO_ALL,
     }
-
 
 
 @pytest.mark.parametrize("timestamp,semester,status_code", [
@@ -337,7 +337,7 @@ def test_create_afsg_payout_requests_checks_semester(timestamp, semester, status
         response = client.post('/api/v1/payout-request/afsg/create', json={
             'fs': 'Geographie',
             'semester': semester,
-        }, headers=get_auth_header(client, 'user5'))
+        }, headers=get_auth_header(client, USER_INFO_GEO_ALL))
     assert response.status_code == status_code
 
 
@@ -367,7 +367,7 @@ def test_create_bfsg_payout_requests_checks_semester(timestamp, semester, status
             'semester': semester,
             'category': 'Erstiarbeit',
             'amount_cents': 6969,
-        }, headers=get_auth_header(client, 'admin'))
+        }, headers=get_auth_header(client, ADMIN))
     assert response.status_code == status_code
 
 
@@ -379,7 +379,7 @@ def test_create_bfsg_payout_requests_checks_semester(timestamp, semester, status
 @freeze_time("2023-04-04T10:00:00Z")
 def test_create_payout_requests_as_read_user_fails(_type):
     response = client.post(f'/api/v1/payout-request/{_type}/create', json=CREATE_PARAMS[_type],
-                           headers=get_auth_header(client, 'user2'))
+                           headers=get_auth_header(client, USER_INFO_READ))
     assert response.status_code == 401
 
 
@@ -391,12 +391,12 @@ def test_create_payout_requests_as_read_user_fails(_type):
 @freeze_time("2023-04-04T10:00:00Z")
 def test_modify_payout_requests_as_admin(_type, request_id):
     response = client.patch(f'/api/v1/payout-request/{_type}/{request_id}', json=DEFAULT_PARAMETERS,
-                            headers=get_auth_header(client, 'admin'))
+                            headers=get_auth_header(client, ADMIN))
     assert response.status_code == 200
     assert response.json() == {
         **SAMPLE_FULL_PAYOUT_REQUEST[_type],
         **DEFAULT_PARAMETERS,
-        'last_modified_by': 'admin',
+        'last_modified_by': ADMIN,
         'last_modified_timestamp': '2023-04-04T10:00:00+00:00',
     }
 
@@ -413,7 +413,7 @@ def test_modify_nonexisting_payout_requests_fails(_type, request_id):
         'status_date': '2023-05-05',
         'amount_cents': 100000,
         'comment': 'This will not work',
-    }, headers=get_auth_header(client, 'admin'))
+    }, headers=get_auth_header(client, ADMIN))
     assert response.status_code == 404
     assert response.json() == {
         'detail': 'PayoutRequest not found',
@@ -432,12 +432,12 @@ def test_modify_payout_requests_set_empty_values(_type, request_id):
         'comment': '',
     }
     response = client.patch(f'/api/v1/payout-request/{_type}/{request_id}', json=parameters,
-                            headers=get_auth_header(client, 'admin'))
+                            headers=get_auth_header(client, ADMIN))
     assert response.status_code == 200
     assert response.json() == {
         **SAMPLE_FULL_PAYOUT_REQUEST[_type],
         **parameters,
-        'last_modified_by': 'admin',
+        'last_modified_by': ADMIN,
         'last_modified_timestamp': '2023-04-04T10:00:00+00:00',
     }
 
@@ -450,11 +450,11 @@ def test_modify_payout_requests_set_empty_values(_type, request_id):
 @freeze_time("2023-04-04T10:00:00Z")
 def test_modify_payout_requests_no_changes(_type, request_id):
     response = client.patch(f'/api/v1/payout-request/{_type}/{request_id}', json={},
-                            headers=get_auth_header(client, 'admin'))
+                            headers=get_auth_header(client, ADMIN))
     assert response.status_code == 200
     assert response.json() == {
         **SAMPLE_FULL_PAYOUT_REQUEST[_type],
-        'last_modified_by': 'admin',
+        'last_modified_by': ADMIN,
         'last_modified_timestamp': '2023-04-04T10:00:00+00:00',
     }
 
@@ -466,7 +466,7 @@ def test_modify_payout_requests_no_changes(_type, request_id):
 ])
 def test_modify_payout_requests_as_user_fails(_type, request_id):
     response = client.patch(f'/api/v1/payout-request/{_type}/{request_id}', json=DEFAULT_PARAMETERS,
-                            headers=get_auth_header(client, 'user3'))
+                            headers=get_auth_header(client, USER_INFO_ALL))
     assert response.status_code == 401
 
 
@@ -479,12 +479,12 @@ def test_modify_payout_requests_as_user_fails(_type, request_id):
 def test_get_payout_request_history_as_admin(_type, request_id):
     edit_request(_type, request_id)
     response = client.get(f'/api/v1/payout-request/{_type}/{request_id}/history',
-                          headers=get_auth_header(client, 'admin'))
+                          headers=get_auth_header(client, ADMIN))
     assert response.json() == [
         {
             **SAMPLE_FULL_PAYOUT_REQUEST[_type],
             **DEFAULT_PARAMETERS,
-            'last_modified_by': 'admin',
+            'last_modified_by': ADMIN,
             'last_modified_timestamp': '2023-04-04T10:00:00+00:00',
         },
         SAMPLE_FULL_PAYOUT_REQUEST[_type],
@@ -493,9 +493,9 @@ def test_get_payout_request_history_as_admin(_type, request_id):
 
 @pytest.mark.parametrize("username", [
     None,
-    "user",
-    "user2",
-    "user4",
+    USER_NO_PERMS,
+    USER_INFO_READ,
+    USER_INFO_GEO_READ,
 ])
 @pytest.mark.parametrize('_type,request_id', [
     ['afsg', 'A22W-0023'],
@@ -520,7 +520,7 @@ def test_get_payout_request_history_no_admin(username: str | None, _type, reques
 
 def edit_request(_type, request_id):
     response = client.patch(f'/api/v1/payout-request/{_type}/{request_id}', json=DEFAULT_PARAMETERS,
-                            headers=get_auth_header(client, 'admin'))
+                            headers=get_auth_header(client, ADMIN))
     assert response.status_code == 200
 
 
@@ -531,7 +531,7 @@ def edit_request(_type, request_id):
 ])
 def test_get_payout_request_history_not_found(_type, request_id):
     response = client.get(f'/api/v1/payout-request/{_type}/{request_id}/history',
-                          headers=get_auth_header(client, 'admin'))
+                          headers=get_auth_header(client, ADMIN))
     assert response.status_code == 404
 
 
@@ -543,7 +543,7 @@ def test_get_payout_request_history_not_found(_type, request_id):
 @freeze_time("2023-04-04T10:00:00Z")
 def test_get_payout_request_with_date_filter(_type):
     response = client.post(f'/api/v1/payout-request/{_type}/create', json=CREATE_PARAMS[_type],
-                           headers=get_auth_header(client, 'admin'))
+                           headers=get_auth_header(client, ADMIN))
     assert response.status_code == 200
 
     response = client.get(f'/api/v1/payout-request/{_type}/2023-04-03')
@@ -562,7 +562,7 @@ def test_get_payout_request_with_date_filter(_type):
         }
     ]
 
-    response = client.get(f'/api/v1/payout-request/{_type}/2023-04-04', headers=get_auth_header(client, 'admin'))
+    response = client.get(f'/api/v1/payout-request/{_type}/2023-04-04', headers=get_auth_header(client, ADMIN))
     assert response.status_code == 200
     assert response.json() == [
         {
@@ -573,9 +573,9 @@ def test_get_payout_request_with_date_filter(_type):
         },
         {
             **CREATED_PAYOUT_REQUEST[_type],
-            'last_modified_by': 'admin',
+            'last_modified_by': ADMIN,
             'last_modified_timestamp': '2023-04-04T10:00:00+00:00',
-            'requester': 'admin',
+            'requester': ADMIN,
         },
     ]
 
@@ -590,6 +590,7 @@ def test_get_payout_request_with_date_filter(_type):
 ])
 def test_get_default_afsg_completion_deadline(semester: str, expiration_date: str):
     assert get_default_afsg_completion_deadline(semester) == expiration_date
+
 
 @pytest.mark.parametrize("today,expiration_date", [
     ['2023-01-01', '2023-07-01'],
