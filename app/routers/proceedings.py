@@ -106,7 +106,7 @@ async def check_uploaded_file_is_pdf(file: UploadFile):
         )
 
 
-@router.post("/proceedings/{fs}")
+@router.post("/{fs}")
 async def upload_proceedings(
         fs: str,
         file: UploadFile,
@@ -144,7 +144,7 @@ async def upload_proceedings(
         session.commit()
 
 
-@router.delete("/proceedings/{fs}/{committee}/{date}")
+@router.delete("/{fs}/{committee}/{date}")
 async def delete_proceedings(
         fs: str,
         committee: CommitteeType,
@@ -170,7 +170,7 @@ async def delete_proceedings(
         session.commit()
 
 
-@router.get("/proceedings/{fs}/{filename}", response_class=FileResponse)
+@router.get("/{fs}/{filename}", response_class=FileResponse)
 async def get_individual_file(fs: str, filename: str, request: Request,
                               current_user: User | None = Depends(get_current_user(auto_error=False))):
     source_ip = get_source_ip(request)
@@ -193,7 +193,7 @@ async def get_individual_file(fs: str, filename: str, request: Request,
     )
 
 
-@router.get("/proceedings", response_model=list[ProceedingsData])
+@router.get("", response_model=list[ProceedingsData])
 async def get_proceedings_index():
     with DBHelper() as session:
         return session.query(Proceedings). \

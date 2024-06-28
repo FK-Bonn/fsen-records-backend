@@ -4,9 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy import func
 from starlette import status
-from starlette.responses import FileResponse
 
-from app.config import Config
 from app.database import User, DBHelper, Permission, FsData, ProtectedFsData
 from app.routers.users import get_current_user, admin_only
 from app.util import ts, to_json
@@ -96,13 +94,6 @@ class FsDataTuple(BaseModel):
     protected_data: ProtectedFsDataResponse | None
 
 
-def get_subfolder_from_filename(filename: str) -> str | None:
-    for key, value in SUBFOLDERS.items():
-        if filename.startswith(key):
-            return value
-    return None
-
-
 def check_permission(current_user: User, fs: str,
                      manage_permissions: bool = False,
                      read_files: bool = False,
@@ -130,25 +121,7 @@ def check_permission(current_user: User, fs: str,
             )
 
 
-@router.get("/file/{fs}/{filename}", response_class=FileResponse)
-async def get_individual_file(fs: str, filename: str, current_user: User = Depends(get_current_user())):
-    check_permission(current_user, fs, read_files=True)
-    subfolder = get_subfolder_from_filename(filename)
-    if not subfolder or '/' in fs or '/' in filename:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Unknown filename format",
-        )
-    file_path = Config.BASE_DATA_DIR / fs / subfolder / filename
-    if file_path.is_file():
-        return file_path
-    raise HTTPException(
-        status_code=status.HTTP_404_NOT_FOUND,
-        detail="File not found",
-    )
-
-
-@router.get("/data", response_model=dict[str, FsDataTuple])
+@router.get("", response_model=dict[str, FsDataTuple])
 async def get_all_fsdata(current_user: User = Depends(get_current_user())):
     retval = {}
     with DBHelper() as session:
@@ -182,7 +155,7 @@ async def get_all_fsdata(current_user: User = Depends(get_current_user())):
         return retval
 
 
-@router.get("/data/{fs}", response_model=FsDataResponse)
+@router.get("/{fs}", response_model=FsDataResponse)
 async def get_fsdata(fs: str, current_user: User = Depends(get_current_user())):
     check_permission(current_user, fs, read_public_data=True)
     with DBHelper() as session:
@@ -199,7 +172,7 @@ async def get_fsdata(fs: str, current_user: User = Depends(get_current_user())):
         return FsDataResponse(data=json.loads(data.data), is_latest=data.id == latest_id)
 
 
-@router.get("/data/{fs}/history", dependencies=[Depends(admin_only)], response_model=list[TimestampedFsDataType])
+@router.get("/{fs}/history", dependencies=[Depends(admin_only)], response_model=list[TimestampedFsDataType])
 async def get_fsdata_history(fs: str):
     with DBHelper() as session:
         data = session.query(FsData). \
@@ -219,7 +192,7 @@ async def get_fsdata_history(fs: str):
                                       approval_timestamp=item.approval_timestamp) for item in data]
 
 
-@router.get("/data/{fs}/protected/history", dependencies=[Depends(admin_only)],
+@router.get("/{fs}/protected/history", dependencies=[Depends(admin_only)],
             response_model=list[TimestampedProtectedFsDataType])
 async def get_protected_fsdata_history(fs: str):
     with DBHelper() as session:
@@ -239,7 +212,7 @@ async def get_protected_fsdata_history(fs: str):
                                                approval_timestamp=item.approval_timestamp) for item in data]
 
 
-@router.put("/data/{fs}")
+@router.put("/{fs}")
 async def set_fsdata(data: FsDataType, fs: str, current_user: User = Depends(get_current_user())):
     check_permission(current_user, fs, write_public_data=True)
     with DBHelper() as session:
@@ -256,7 +229,7 @@ async def set_fsdata(data: FsDataType, fs: str, current_user: User = Depends(get
         session.commit()
 
 
-@router.get("/data/{fs}/protected", response_model=ProtectedFsDataResponse)
+@router.get("/{fs}/protected", response_model=ProtectedFsDataResponse)
 async def get_protected_fsdata(fs: str, current_user: User = Depends(get_current_user())):
     check_permission(current_user, fs, read_protected_data=True)
     with DBHelper() as session:
@@ -273,7 +246,7 @@ async def get_protected_fsdata(fs: str, current_user: User = Depends(get_current
         return ProtectedFsDataResponse(data=json.loads(data.data), is_latest=data.id == latest_id)
 
 
-@router.put("/data/{fs}/protected")
+@router.put("/{fs}/protected")
 async def set_protected_fsdata(data: ProtectedFsDataType, fs: str,
                                current_user: User = Depends(get_current_user())):
     check_permission(current_user, fs, write_protected_data=True)
@@ -292,7 +265,7 @@ async def set_protected_fsdata(data: ProtectedFsDataType, fs: str,
         session.commit()
 
 
-@router.post("/data/approve/{id_}", dependencies=[Depends(admin_only)])
+@router.post("/approve/{id_}", dependencies=[Depends(admin_only)])
 async def approve_fs_data(id_: int, current_user: User = Depends(get_current_user())):
     with DBHelper() as session:
         data = session.get(FsData, id_)
@@ -307,7 +280,7 @@ async def approve_fs_data(id_: int, current_user: User = Depends(get_current_use
         session.commit()
 
 
-@router.post("/data/approve/protected/{id_}", dependencies=[Depends(admin_only)])
+@router.post("/approve/protected/{id_}", dependencies=[Depends(admin_only)])
 async def approve_protected_fs_data(id_: int, current_user: User = Depends(get_current_user())):
     with DBHelper() as session:
         data = session.get(ProtectedFsData, id_)

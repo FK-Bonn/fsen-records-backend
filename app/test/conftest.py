@@ -167,19 +167,23 @@ class DBTestHelper:
 
 @pytest.fixture(autouse=True)
 def fake_db(monkeypatch, tmp_path):
-    monkeypatch.setattr('app.routers.users.DBHelper', lambda: DBTestHelper(tmp_path))
+    monkeypatch.setattr('app.routers.export.DBHelper', lambda: DBTestHelper(tmp_path))
+    monkeypatch.setattr('app.routers.files.DBHelper', lambda: DBTestHelper(tmp_path))
     monkeypatch.setattr('app.routers.fsen.DBHelper', lambda: DBTestHelper(tmp_path))
     monkeypatch.setattr('app.routers.payout_requests.DBHelper', lambda: DBTestHelper(tmp_path))
     monkeypatch.setattr('app.routers.proceedings.DBHelper', lambda: DBTestHelper(tmp_path))
-    monkeypatch.setattr('app.routers.export.DBHelper', lambda: DBTestHelper(tmp_path))
+    monkeypatch.setattr('app.routers.token.DBHelper', lambda: DBTestHelper(tmp_path))
+    monkeypatch.setattr('app.routers.users.DBHelper', lambda: DBTestHelper(tmp_path))
     monkeypatch.setattr('app.database.get_password_hash', _cached_password_hash)
     monkeypatch.setattr('app.routers.users.get_password_hash', _cached_password_hash)
+
 
 def _cached_password_hash(password: str) -> str:
     if password not in HASH_CACHE:
         hash_value = get_password_hash(password)
         HASH_CACHE[password] = hash_value
     return HASH_CACHE[password]
+
 
 def get_token(client: TestClient, user: str):
     response = client.post('/api/v1/token', data={'username': user, 'password': 'password'})

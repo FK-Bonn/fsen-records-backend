@@ -49,6 +49,7 @@ class BfsgPayoutRequestForCreation(PayoutRequestForCreation):
     completion_deadline: str | None = None
     reference: str | None = None
 
+
 class VorankuendigungPayoutRequestForCreation(BfsgPayoutRequestForCreation):
     pass
 
@@ -221,7 +222,7 @@ def get_payout_request_history(session: Session, request_id: str, _type: PayoutR
         order_by(PayoutRequest.last_modified_timestamp.desc()).all()
 
 
-@router.get("/payout-request/{_type}", response_model=list[PayoutRequestData])
+@router.get("/{_type}", response_model=list[PayoutRequestData])
 async def list_requests(_type: PayoutRequestType, current_user: User = Depends(get_current_user(auto_error=False))):
     with DBHelper() as session:
         subquery = session.query(PayoutRequest.request_id, func.max(PayoutRequest.id).label('id')). \
@@ -234,7 +235,7 @@ async def list_requests(_type: PayoutRequestType, current_user: User = Depends(g
             return [PublicPayoutRequest(**item.__dict__) for item in data]
 
 
-@router.get("/payout-request/{_type}/{limit_date}", response_model=list[PayoutRequestData])
+@router.get("/{_type}/{limit_date}", response_model=list[PayoutRequestData])
 async def list_requests_before_date(_type: PayoutRequestType, limit_date: date,
                                          current_user: User = Depends(get_current_user(auto_error=False))):
     limit_date += timedelta(days=1)
@@ -251,7 +252,7 @@ async def list_requests_before_date(_type: PayoutRequestType, limit_date: date,
             return [PublicPayoutRequest(**item.__dict__) for item in data]
 
 
-@router.post("/payout-request/afsg/create", response_model=PayoutRequestData)
+@router.post("/afsg/create", response_model=PayoutRequestData)
 async def create_afsg_request(data: PayoutRequestForCreation, current_user: User = Depends(get_current_user())):
     check_semester_is_valid_format(data.semester)
     check_semester_is_open_for_afsg_submissions(data.semester)
@@ -283,7 +284,7 @@ async def create_afsg_request(data: PayoutRequestForCreation, current_user: User
         return get_payout_request(session, request_id, PayoutRequestType.AFSG)
 
 
-@router.post("/payout-request/bfsg/create", response_model=PayoutRequestData)
+@router.post("/bfsg/create", response_model=PayoutRequestData)
 async def create_bfsg_request(data: BfsgPayoutRequestForCreation, current_user: User = Depends(get_current_user())):
     check_semester_is_valid_format(data.semester)
     # check_semester_is_open_for_bfsg_submissions(data.semester)
@@ -313,7 +314,8 @@ async def create_bfsg_request(data: BfsgPayoutRequestForCreation, current_user: 
         session.commit()
         return get_payout_request(session, request_id, PayoutRequestType.BFSG)
 
-@router.post("/payout-request/vorankuendigung/create", response_model=PayoutRequestData)
+
+@router.post("/vorankuendigung/create", response_model=PayoutRequestData)
 async def create_vorankuendigung_request(data: VorankuendigungPayoutRequestForCreation,
                                          current_user: User = Depends(get_current_user())):
     check_semester_is_valid_format(data.semester)
@@ -344,7 +346,7 @@ async def create_vorankuendigung_request(data: VorankuendigungPayoutRequestForCr
         return get_payout_request(session, request_id, PayoutRequestType.VORANKUENDIGUNG)
 
 
-@router.patch("/payout-request/{_type}/{request_id}", dependencies=[Depends(admin_only)],
+@router.patch("/{_type}/{request_id}", dependencies=[Depends(admin_only)],
               response_model=PayoutRequestData)
 async def modify_request(_type: PayoutRequestType, request_id: str, data: ModifiablePayoutRequestProperties,
                               current_user: User = Depends(get_current_user())):
@@ -377,7 +379,7 @@ async def modify_request(_type: PayoutRequestType, request_id: str, data: Modifi
         return get_payout_request(session, request_id, _type)
 
 
-@router.get("/payout-request/{_type}/{request_id}/history", response_model=list[PayoutRequestData])
+@router.get("/{_type}/{request_id}/history", response_model=list[PayoutRequestData])
 async def get_request_history(_type: PayoutRequestType, request_id: str,
                               current_user: User = Depends(get_current_user(auto_error=False))):
     with DBHelper() as session:

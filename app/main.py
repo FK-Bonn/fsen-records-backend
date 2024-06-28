@@ -4,7 +4,7 @@ import uvicorn
 from fastapi import FastAPI
 from starlette.middleware.cors import CORSMiddleware
 
-from app.routers import fsen, proceedings, export
+from app.routers import fsen, proceedings, export, token, files
 from app.routers import users
 from app.routers import payout_requests
 
@@ -15,12 +15,9 @@ origins = [
     "https://fsen.datendrehschei.be",
 ]
 
-
-app = FastAPI(
-    openapi_url="/api/v1/openapi.json",
-    docs_url="/api/v1/docs",
-    redoc_url="/api/v1/redoc",
-)
+app = FastAPI()
+subapp = FastAPI()
+app.mount('/api/v1', subapp)
 
 
 app.add_middleware(
@@ -31,29 +28,45 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.include_router(
+subapp.include_router(
+    token.router,
+    tags=['token'],
+)
+
+subapp.include_router(
     users.router,
-    prefix="/api/v1"
+    prefix="/user",
+    tags=['users'],
 )
 
-app.include_router(
+subapp.include_router(
+    files.router,
+    prefix="/file",
+    tags=['files'],
+)
+
+subapp.include_router(
     fsen.router,
-    prefix="/api/v1"
+    prefix="/data",
+    tags=['data'],
 )
 
-app.include_router(
+subapp.include_router(
     payout_requests.router,
-    prefix="/api/v1"
+    prefix="/payout-request",
+    tags=['payout requests'],
 )
 
-app.include_router(
+subapp.include_router(
     proceedings.router,
-    prefix="/api/v1"
+    prefix="/proceedings",
+    tags=['proceedings'],
 )
 
-app.include_router(
+subapp.include_router(
     export.router,
-    prefix="/api/v1"
+    prefix="/export",
+    tags=['export'],
 )
 
 if __name__ == "__main__":

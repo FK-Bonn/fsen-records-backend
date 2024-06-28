@@ -3,8 +3,8 @@ from datetime import datetime, timedelta
 from typing import Any, Annotated
 
 from fastapi import HTTPException, Depends, APIRouter
-from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
-from jose import JWTError, jwt
+from fastapi.security import OAuth2PasswordBearer
+from jose import jwt
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import delete
 from sqlalchemy.exc import IntegrityError
@@ -14,6 +14,7 @@ from starlette import status
 from app.config import Config
 from app.database import DBHelper, User, verify_password, Permission as DbPermission, get_password_hash, \
     Base
+from app.routers.token import get_user_for_token
 
 
 class Token(BaseModel):
@@ -73,25 +74,6 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token", auto_error=False)
 router = APIRouter()
 
 
-def get_user(username: str | None) -> User | None:
-    if not username:
-        return None
-    with DBHelper() as session:
-        user = session.get(User, username)
-        if user:
-            return user
-    return None
-
-
-def authenticate_user(username: str, password: str) -> User | None:
-    user = get_user(username)
-    if not user:
-        return None
-    if not verify_password(password, user.hashed_password):
-        return None
-    return user
-
-
 def create_access_token(data: dict, expires_delta: timedelta | None = None):
     to_encode = data.copy()
     if expires_delta:
@@ -119,26 +101,6 @@ async def get_current_user_or_none(token: str = Depends(oauth2_scheme)) -> User 
     return get_user_for_token(token)
 
 
-def get_user_for_token(token: str)->User:
-    credentials_exception = HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Could not validate credentials",
-        headers={"WWW-Authenticate": "Bearer"},
-    )
-    try:
-        payload = jwt.decode(token, Config.SECRET_KEY, algorithms=[Config.ALGORITHM])
-        username: str | None = payload.get("sub")
-        if username is None:
-            raise credentials_exception
-        token_data = TokenData(username=username)
-    except JWTError:
-        raise credentials_exception
-    user = get_user(username=token_data.username)
-    if user is None:
-        raise credentials_exception
-    return user
-
-
 def get_current_user(auto_error: bool = True) -> Callable[[str], Coroutine[Any, Any, User]] | Callable[
     [str], Coroutine[Any, Any, User | None]]:
     if auto_error:
@@ -153,22 +115,6 @@ async def admin_only(current_user: User = Depends(get_current_user())):
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="This requires admin rights",
         )
-
-
-@router.post("/token", response_model=Token)
-async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends()):
-    user = authenticate_user(form_data.username, form_data.password)
-    if not user:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect username or password",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-    access_token_expires = timedelta(days=Config.ACCESS_TOKEN_EXPIRE_DAYS)
-    access_token = create_access_token(
-        data={"sub": user.username}, expires_delta=access_token_expires
-    )
-    return {"access_token": access_token, "token_type": "bearer"}
 
 
 def check_if_user_may_grant_permissions(current_user: User, userdata: PermissionsForUser, session: Session):
@@ -216,7 +162,7 @@ def check_permission_list(userdata: PermissionList):
         seen_permissions.add(t)
 
 
-@router.post("/user/create", response_model=UserWithPermissions)
+@router.post("/create", response_model=UserWithPermissions)
 async def create_user(userdata: UserForCreation, current_user: User = Depends(get_current_user())):
     try:
         with DBHelper() as session:
@@ -252,7 +198,7 @@ def is_empty(p: DbPermission):
                 p.write_public_data or p.read_protected_data or p.write_protected_data or p.submit_payout_request)
 
 
-@router.post("/user/permissions", dependencies=[Depends(admin_only)], response_model=UserWithPermissions)
+@router.post("/permissions", dependencies=[Depends(admin_only)], response_model=UserWithPermissions)
 async def set_user_permissions(userdata: PermissionsForUser):
     check_permission_list(userdata)
     with DBHelper() as session:
@@ -277,7 +223,7 @@ async def set_user_permissions(userdata: PermissionsForUser):
                 'permissions': [p for p in user.permissions]}
 
 
-@router.patch("/user/permissions", response_model=UserWithPermissions)
+@router.patch("/permissions", response_model=UserWithPermissions)
 async def patch_user_permissions(userdata: PermissionList, current_user: User = Depends(get_current_user())):
     check_permission_list(userdata)
     with DBHelper() as session:
@@ -326,7 +272,7 @@ def to_db_permission(p: Permission, username: str):
     return db_permission
 
 
-@router.get("/user", response_model=dict[str, UserWithPermissions])
+@router.get("", response_model=dict[str, UserWithPermissions])
 async def get_user_list(current_user: User = Depends(get_current_user())):
     with DBHelper() as session:
         users: list[User] = session.query(User).all()
@@ -353,7 +299,7 @@ async def get_user_list(current_user: User = Depends(get_current_user())):
         return allusers
 
 
-@router.get("/user/me", response_model=UserWithPermissions)
+@router.get("/me", response_model=UserWithPermissions)
 async def who_am_i(current_user: User = Depends(get_current_user())):
     with DBHelper() as session:
         user: User = session.get(User, current_user.username)
@@ -365,7 +311,7 @@ async def who_am_i(current_user: User = Depends(get_current_user())):
         }
 
 
-@router.post("/user/password", status_code=200)
+@router.post("/password", status_code=200)
 async def change_password(password_change_data: PasswordChangeData, current_user: User = Depends(get_current_user())):
     with DBHelper() as session:
         user: User = session.get(User, current_user.username)
@@ -378,7 +324,7 @@ async def change_password(password_change_data: PasswordChangeData, current_user
         session.commit()
 
 
-@router.post("/user/password/{username}", dependencies=[Depends(admin_only)], status_code=200)
+@router.post("/password/{username}", dependencies=[Depends(admin_only)], status_code=200)
 async def change_password_for_user(username: str, new_password_data: NewPasswordData):
     with DBHelper() as session:
         user: User = session.get(User, username)
