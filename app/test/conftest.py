@@ -171,6 +171,7 @@ def fake_db(monkeypatch, tmp_path):
     monkeypatch.setattr('app.routers.fsen.DBHelper', lambda: DBTestHelper(tmp_path))
     monkeypatch.setattr('app.routers.payout_requests.DBHelper', lambda: DBTestHelper(tmp_path))
     monkeypatch.setattr('app.routers.proceedings.DBHelper', lambda: DBTestHelper(tmp_path))
+    monkeypatch.setattr('app.routers.export.DBHelper', lambda: DBTestHelper(tmp_path))
     monkeypatch.setattr('app.database.get_password_hash', _cached_password_hash)
     monkeypatch.setattr('app.routers.users.get_password_hash', _cached_password_hash)
 

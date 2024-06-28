@@ -4,7 +4,7 @@ import uvicorn
 from fastapi import FastAPI
 from starlette.middleware.cors import CORSMiddleware
 
-from app.routers import fsen, proceedings
+from app.routers import fsen, proceedings, export
 from app.routers import users
 from app.routers import payout_requests
 
@@ -48,6 +48,11 @@ app.include_router(
 
 app.include_router(
     proceedings.router,
+    prefix="/api/v1"
+)
+
+app.include_router(
+    export.router,
     prefix="/api/v1"
 )
 

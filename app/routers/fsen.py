@@ -43,13 +43,16 @@ class RegularMeeting(BaseModel):
     location: str
 
 
-class FsDataType(BaseModel):
-    email: str
+class PublicFsData(BaseModel):
     phone: str
     website: str
     address: str
     serviceTimes: ServiceTimes
     regularMeeting: RegularMeeting
+
+
+class FsDataType(PublicFsData):
+    email: str
     other: dict
 
 
