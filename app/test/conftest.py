@@ -1,3 +1,4 @@
+import base64
 from pathlib import Path
 
 import pytest
@@ -14,6 +15,25 @@ USER_INFO_READ = 'user_info_read'
 USER_INFO_ALL = 'user_info_all'
 USER_INFO_GEO_READ = 'user_geo_read'
 USER_INFO_GEO_ALL = 'user_geo_all'
+
+EMPTY_PDF_PAGE = base64.b64decode("""JVBERi0xLjUKJbXtrvsKNCAwIG9iago8PCAvTGVuZ3RoIDUgMCBSCiAgIC9GaWx0ZXIgL0ZsYXRl
+RGVjb2RlCj4+CnN0cmVhbQp4nDNUMABCXUMgYWFiqGdhYWlubqiQnMtVyBXIBQBPJAWjCmVuZHN0
+cmVhbQplbmRvYmoKNSAwIG9iagogICAzNAplbmRvYmoKMyAwIG9iago8PAo+PgplbmRvYmoKMiAw
+IG9iago8PCAvVHlwZSAvUGFnZSAlIDEKICAgL1BhcmVudCAxIDAgUgogICAvTWVkaWFCb3ggWyAw
+IDAgNTk1LjI3NTU3NCA4NDEuODg5NzcxIF0KICAgL0NvbnRlbnRzIDQgMCBSCiAgIC9Hcm91cCA8
+PAogICAgICAvVHlwZSAvR3JvdXAKICAgICAgL1MgL1RyYW5zcGFyZW5jeQogICAgICAvSSB0cnVl
+CiAgICAgIC9DUyAvRGV2aWNlUkdCCiAgID4+CiAgIC9SZXNvdXJjZXMgMyAwIFIKPj4KZW5kb2Jq
+CjEgMCBvYmoKPDwgL1R5cGUgL1BhZ2VzCiAgIC9LaWRzIFsgMiAwIFIgXQogICAvQ291bnQgMQo+
+PgplbmRvYmoKNiAwIG9iago8PCAvUHJvZHVjZXIgKGNhaXJvIDEuMTYuMCAoaHR0cHM6Ly9jYWly
+b2dyYXBoaWNzLm9yZykpCiAgIC9DcmVhdGlvbkRhdGUgKEQ6MjAyMDA1MDYwMDUzNDUrMDInMDAp
+Cj4+CmVuZG9iago3IDAgb2JqCjw8IC9UeXBlIC9DYXRhbG9nCiAgIC9QYWdlcyAxIDAgUgo+Pgpl
+bmRvYmoKeHJlZgowIDgKMDAwMDAwMDAwMCA2NTUzNSBmIAowMDAwMDAwNDAwIDAwMDAwIG4gCjAw
+MDAwMDAxNjggMDAwMDAgbiAKMDAwMDAwMDE0NyAwMDAwMCBuIAowMDAwMDAwMDE1IDAwMDAwIG4g
+CjAwMDAwMDAxMjYgMDAwMDAgbiAKMDAwMDAwMDQ2NSAwMDAwMCBuIAowMDAwMDAwNTgxIDAwMDAw
+IG4gCnRyYWlsZXIKPDwgL1NpemUgOAogICAvUm9vdCA3IDAgUgogICAvSW5mbyA2IDAgUgo+Pgpz
+dGFydHhyZWYKNjMzCiUlRU9GCg==""")
+
+PDF_HASH = '1b318799de440475e51646b29c4c5a838d031548e0bdf6566802b6731082a23c'
 
 HASH_CACHE = {}
 
@@ -47,17 +67,17 @@ class DBTestHelper:
             self.add_permission(USER_INFO_ALL, 'Informatik', read_files=True, read_permissions=True, write_permissions=True,
                                 read_public_data=True, write_public_data=True, read_protected_data=True,
                                 write_protected_data=True, submit_payout_request=True, upload_proceedings=True,
-                                delete_proceedings=True)
+                                delete_proceedings=True, upload_documents=True)
             self.add_permission(USER_INFO_GEO_READ, 'Informatik', read_files=True, read_permissions=True, read_public_data=True)
             self.add_permission(USER_INFO_GEO_READ, 'Geographie', read_files=True, read_permissions=True, read_public_data=True)
             self.add_permission(USER_INFO_GEO_ALL, 'Informatik', read_files=True, read_permissions=True, write_permissions=True,
                                 read_public_data=True, write_public_data=True, read_protected_data=True,
                                 write_protected_data=True, submit_payout_request=True, upload_proceedings=True,
-                                delete_proceedings=True)
+                                delete_proceedings=True, upload_documents=True)
             self.add_permission(USER_INFO_GEO_ALL, 'Geographie', read_files=True, read_permissions=True, write_permissions=True,
                                 read_public_data=True, write_public_data=True, read_protected_data=True,
                                 write_protected_data=True, submit_payout_request=True, upload_proceedings=True,
-                                delete_proceedings=True)
+                                delete_proceedings=True, upload_documents=True)
             self.add_afsg_payout_request()
             self.add_bfsg_payout_request()
             self.add_vorankuendigung_payout_request()
@@ -84,6 +104,7 @@ class DBTestHelper:
                        submit_payout_request: bool = False,
                        upload_proceedings: bool = False,
                        delete_proceedings: bool = False,
+                       upload_documents: bool = False,
                        locked: bool = False,
                        ):
         assert self._session
@@ -101,6 +122,7 @@ class DBTestHelper:
         permission.submit_payout_request = submit_payout_request
         permission.upload_proceedings = upload_proceedings
         permission.delete_proceedings = delete_proceedings
+        permission.upload_documents = upload_documents
         self._session.add(permission)
 
     def add_afsg_payout_request(self):
@@ -191,5 +213,7 @@ def get_token(client: TestClient, user: str):
 
 
 def get_auth_header(client: TestClient, user: str = USER_INFO_READ):
+    if not user:
+        return {}
     token = get_token(client, user)
     return {'Authorization': f'Bearer {token}'}
