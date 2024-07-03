@@ -12,9 +12,9 @@ class Config:
     DB_CONNECTION_STRING = os.environ["DB_CONNECTION_STRING"] \
         if "DB_CONNECTION_STRING" in os.environ \
         else 'sqlite:///' + str(Path(__file__).resolve().parent.parent / 'data' / 'data.db')
-    BASE_DATA_DIR = Path(os.environ["BASE_DATA_DIR"]) \
-        if "BASE_DATA_DIR" in os.environ \
-        else Path(__file__).parent.resolve().parent / 'data' / 'files'
     BASE_PROCEEDINGS_DIR = Path(os.environ["BASE_PROCEEDINGS_DIR"]) \
         if "BASE_PROCEEDINGS_DIR" in os.environ \
         else Path(__file__).parent.resolve().parent / 'data' / 'proceedings'
+    BASE_DOCUMENTS_DIR = Path(os.environ["BASE_DOCUMENTS_DIR"]) \
+        if "BASE_DOCUMENTS_DIR" in os.environ \
+        else Path(__file__).parent.resolve().parent / 'data' / 'documents'

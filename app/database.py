@@ -44,6 +44,7 @@ class Permission(Base):
     submit_payout_request: Mapped[bool] = mapped_column(nullable=False, default=False)
     upload_proceedings: Mapped[bool] = mapped_column(nullable=False, default=False)
     delete_proceedings: Mapped[bool] = mapped_column(nullable=False, default=False)
+    upload_documents: Mapped[bool] = mapped_column(nullable=False, default=False)
     locked: Mapped[bool] = mapped_column(nullable=False, default=False)
 
 
@@ -102,6 +103,37 @@ class Proceedings(Base):
     upload_date: Mapped[str] = mapped_column(String(200), nullable=False)
     uploaded_by: Mapped[str] = mapped_column(String(200), nullable=False)
     deleted_by: Mapped[str] = mapped_column(String(200), nullable=True, default=None)
+
+
+class Document(Base):
+    __tablename__ = "documents"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    fs: Mapped[str] = mapped_column(String(200), nullable=False)
+    category: Mapped[str] = mapped_column(String(200), nullable=False)
+    request_id: Mapped[str] = mapped_column(Text, nullable=False)
+    base_name: Mapped[str] = mapped_column(String(200), nullable=False)
+    date_start: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    date_end: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    file_extension: Mapped[str] = mapped_column(String(200), nullable=False)
+    sha256hash: Mapped[str] = mapped_column(String(200), nullable=False)
+    created_timestamp: Mapped[str] = mapped_column(String(200), nullable=False)
+    uploaded_by: Mapped[str] = mapped_column(String(200), nullable=False)
+    deleted_by: Mapped[str | None] = mapped_column(String(200), nullable=True, default=None)
+    deleted_timestamp: Mapped[str | None] = mapped_column(String(200), nullable=True, default=None)
+
+
+class Annotation(Base):
+    __tablename__ = "annotations"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    document: Mapped[int] = mapped_column(ForeignKey(Document.id, ondelete='CASCADE'), nullable=False)
+    annotations: Mapped[str | None] = mapped_column(Text, nullable=True)
+    tags: Mapped[str | None] = mapped_column(Text, nullable=True)
+    references: Mapped[str | None] = mapped_column(Text, nullable=True)
+    url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_timestamp: Mapped[str] = mapped_column(String(200), nullable=False)
+    created_by: Mapped[str] = mapped_column(String(200), nullable=False)
+    obsoleted_by: Mapped[str | None] = mapped_column(String(200), nullable=True, default=None)
+    obsoleted_timestamp: Mapped[str | None] = mapped_column(String(200), nullable=True, default=None)
 
 
 class DBHelper:
