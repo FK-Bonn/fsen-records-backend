@@ -130,6 +130,53 @@ def test_update_file_afsg(mocked_base_dir):
 
 
 @mock.patch('app.routers.files.get_base_dir', return_value=Path(TemporaryDirectory().name))
+@pytest.mark.parametrize('tags', [None, 'hype, yolo'])
+@pytest.mark.parametrize('references', [
+    None,
+    [{"category": "AFSG", "base_name": "Prot", "date_start": "2023-10-01", "date_end": None, "request_id": ""}],
+])
+def test_patch_file_afsg(mocked_base_dir, tags, references):
+    handle = BytesIO(EMPTY_PDF_PAGE)
+    response = client.post('/api/v1/file/Informatik',
+                           data=DEFAULT_AFSG_DATA,
+                           files={'file': ('hhp.pdf', handle, 'application/pdf')},
+                           headers=get_auth_header(client, ADMIN))
+    assert response.status_code == 200
+    items = response.json()
+    fs = items['fs']
+    sha256hash = items['sha256hash']
+    response = client.patch(f'/api/v1/file/{fs}/{sha256hash}',
+                            json={
+                                'tags': tags,
+                                'references': references,
+                            },
+                            headers=get_auth_header(client, ADMIN))
+    assert response.status_code == 200
+    # TODO check with history that old one is still there
+    response = client.get('/api/v1/file')
+    assert mask(response.json()) == {
+        'Informatik': [
+            {
+                'category': 'AFSG',
+                'base_name': 'HHP',
+                'date_start': '2023-10-01',
+                'date_end': '2024-09-30',
+                'request_id': '',
+                'references': references or [],
+                'tags': tags or '',
+                'sha256hash': PDF_HASH,
+                'file_extension': 'pdf',
+                'uploaded_by': None,
+                'created_timestamp': None,
+                'annotations': None,
+                'annotations_created_timestamp': None,
+                'annotations_created_by': None,
+            },
+        ],
+    }
+
+
+@mock.patch('app.routers.files.get_base_dir', return_value=Path(TemporaryDirectory().name))
 @pytest.mark.parametrize('user', [
     USER_NO_PERMS,
     USER_INFO_READ,
@@ -493,6 +540,7 @@ def test_retrieve_file_list(mocked_base_dir, user):
 
 
 def test_get_file_history():
+    pass
     raise NotImplementedError
 
 

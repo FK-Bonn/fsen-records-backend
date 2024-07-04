@@ -10,7 +10,7 @@ from typing import Annotated, BinaryIO
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, Form
 from pydantic import BaseModel
 from sqlalchemy import select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, make_transient
 from starlette import status
 from starlette.responses import FileResponse
 
@@ -75,6 +75,11 @@ class DocumentData(DocumentReference):
     annotations: list[DocumentAnnotation] | None
     annotations_created_timestamp: str | None
     annotations_created_by: str | None
+
+
+class EditableDocumentProperties(BaseModel):
+    tags: str | None
+    references: list[DocumentReference] | None
 
 
 def get_base_dir():
@@ -203,6 +208,8 @@ async def upload_document(
         try:
             parsed_references = json.loads(references)
             assert isinstance(parsed_references, list)
+            for reference in parsed_references:
+                DocumentReference(**reference)
         except (JSONDecodeError, AssertionError):
             raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                                 detail='references is not a valid json encoded list of values')
@@ -247,6 +254,32 @@ async def upload_document(
         session.add(document)
         session.commit()
         return DocumentUploadResult(fs=fs, sha256hash=sha256hash)
+
+
+@router.patch("/{fs}/{sha256hash}", dependencies=[Depends(admin_only)])
+async def edit_document(fs: str, sha256hash: str, body: EditableDocumentProperties,
+                        current_user: User = Depends(get_current_user())):
+    with DBHelper() as session:
+        document = session.query(Document). \
+            where(Document.fs == fs,
+                  Document.sha256hash == sha256hash,
+                  Document.deleted_by.is_(None)).one_or_none()
+        if not document:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+        document.deleted_by = current_user.username
+        session.flush()
+        session.expunge(document)
+        make_transient(document)
+        document.id = None
+        document.deleted_by = None
+        if body.tags is not None:
+            document.tags = body.tags
+        if body.references is not None:
+            document.references = to_json(body.references)
+        document.created_timestamp = ts()
+        document.uploaded_by = current_user.username
+        session.add(document)
+        session.commit()
 
 
 @router.post("/{fs}/{sha256hash}", dependencies=[Depends(admin_only)])
