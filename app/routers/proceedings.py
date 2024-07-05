@@ -1,4 +1,5 @@
 import datetime
+import logging
 import shutil
 from enum import Enum
 from hashlib import file_digest
@@ -115,6 +116,7 @@ async def upload_proceedings(
         tags: Annotated[str, Form()] = '',
         current_user: User = Depends(get_current_user()),
 ):
+    logging.info(f'upload_proceedings({fs=}, {file.filename=}, {committee=}, {date=}, {tags=}, {current_user.username=})')
     with DBHelper() as session:
         check_user_may_upload_proceedings(current_user, fs, session)
         await check_uploaded_file_is_pdf(file)
@@ -151,6 +153,7 @@ async def delete_proceedings(
         date: datetime.date,
         current_user: User = Depends(get_current_user()),
 ):
+    logging.info(f'delete_proceedings({fs=}, {committee=}, {date=}, {current_user.username=})')
     with DBHelper() as session:
         check_user_may_delete_proceedings(current_user, fs, session)
         filename = f'Prot-{committee.value}-{date}.pdf'

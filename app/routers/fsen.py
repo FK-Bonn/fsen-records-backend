@@ -1,4 +1,5 @@
 import json
+import logging
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
@@ -214,6 +215,7 @@ async def get_protected_fsdata_history(fs: str):
 
 @router.put("/{fs}")
 async def set_fsdata(data: FsDataType, fs: str, current_user: User = Depends(get_current_user())):
+    logging.info(f'set_fsdata({data=}, {fs=}, {current_user.username=})')
     check_permission(current_user, fs, write_public_data=True)
     with DBHelper() as session:
         db_data = FsData()
@@ -249,6 +251,7 @@ async def get_protected_fsdata(fs: str, current_user: User = Depends(get_current
 @router.put("/{fs}/protected")
 async def set_protected_fsdata(data: ProtectedFsDataType, fs: str,
                                current_user: User = Depends(get_current_user())):
+    logging.info(f'set_protected_fsdata({data=}, {current_user.username=})')
     check_permission(current_user, fs, write_protected_data=True)
     with DBHelper() as session:
         db_data = ProtectedFsData()
@@ -267,6 +270,7 @@ async def set_protected_fsdata(data: ProtectedFsDataType, fs: str,
 
 @router.post("/approve/{id_}", dependencies=[Depends(admin_only)])
 async def approve_fs_data(id_: int, current_user: User = Depends(get_current_user())):
+    logging.info(f'approve_fs_data({id_=}, {current_user.username=})')
     with DBHelper() as session:
         data = session.get(FsData, id_)
         if not data:
@@ -282,6 +286,7 @@ async def approve_fs_data(id_: int, current_user: User = Depends(get_current_use
 
 @router.post("/approve/protected/{id_}", dependencies=[Depends(admin_only)])
 async def approve_protected_fs_data(id_: int, current_user: User = Depends(get_current_user())):
+    logging.info(f'approve_protected_fs_data({id_=}, {current_user.username=})')
     with DBHelper() as session:
         data = session.get(ProtectedFsData, id_)
         if not data:

@@ -1,3 +1,4 @@
+import logging
 from collections.abc import Coroutine, Callable
 from datetime import datetime, timedelta
 from typing import Any, Annotated
@@ -164,6 +165,7 @@ def check_permission_list(userdata: PermissionList):
 
 @router.post("/create", response_model=UserWithPermissions)
 async def create_user(userdata: UserForCreation, current_user: User = Depends(get_current_user())):
+    logging.info(f'create_user({userdata=}, {current_user.username=})')
     try:
         with DBHelper() as session:
             check_if_user_may_grant_permissions(current_user, userdata, session)
@@ -199,7 +201,8 @@ def is_empty(p: DbPermission):
 
 
 @router.post("/permissions", dependencies=[Depends(admin_only)], response_model=UserWithPermissions)
-async def set_user_permissions(userdata: PermissionsForUser):
+async def set_user_permissions(userdata: PermissionsForUser, current_user: User = Depends(get_current_user())):
+    logging.info(f'set_user_permissions({userdata=}, {current_user.username=})')
     check_permission_list(userdata)
     with DBHelper() as session:
         user: User = session.get(User, userdata.username)
@@ -225,6 +228,7 @@ async def set_user_permissions(userdata: PermissionsForUser):
 
 @router.patch("/permissions", response_model=UserWithPermissions)
 async def patch_user_permissions(userdata: PermissionList, current_user: User = Depends(get_current_user())):
+    logging.info(f'patch_user_permissions({userdata=}, {current_user.username=})')
     check_permission_list(userdata)
     with DBHelper() as session:
         user: User = session.get(User, userdata.username)
@@ -313,6 +317,7 @@ async def who_am_i(current_user: User = Depends(get_current_user())):
 
 @router.post("/password", status_code=200)
 async def change_password(password_change_data: PasswordChangeData, current_user: User = Depends(get_current_user())):
+    logging.info(f'{current_user.username} is changing their password')
     with DBHelper() as session:
         user: User = session.get(User, current_user.username)
         if not verify_password(password_change_data.current_password, user.hashed_password):
@@ -325,7 +330,9 @@ async def change_password(password_change_data: PasswordChangeData, current_user
 
 
 @router.post("/password/{username}", dependencies=[Depends(admin_only)], status_code=200)
-async def change_password_for_user(username: str, new_password_data: NewPasswordData):
+async def change_password_for_user(username: str, new_password_data: NewPasswordData,
+                                   current_user: User = Depends(get_current_user())):
+    logging.info(f'{current_user.username} is changing the password for {username}')
     with DBHelper() as session:
         user: User = session.get(User, username)
         if not user:

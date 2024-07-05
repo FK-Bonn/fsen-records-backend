@@ -1,3 +1,4 @@
+import logging
 import re
 from datetime import datetime, date, timedelta
 from enum import Enum
@@ -20,6 +21,7 @@ class PayoutRequestType(Enum):
     AFSG = 'afsg'
     BFSG = 'bfsg'
     VORANKUENDIGUNG = 'vorankuendigung'
+
 
 class PayoutRequestStatus(Enum):
     EINGEREICHT = 'EINGEREICHT'
@@ -64,7 +66,7 @@ class ModifiablePayoutRequestProperties(BaseModel):
 
 
 class PublicPayoutRequest(PayoutRequestForCreation):
-    model_config = ConfigDict(from_attributes= True)
+    model_config = ConfigDict(from_attributes=True)
 
     status: PayoutRequestStatus
     status_date: str
@@ -101,7 +103,6 @@ def check_user_may_submit_payout_request(current_user: User, fs: str, session: S
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="User is not authorized to submit bfsg payout request for this fs",
         )
-
 
     creatorpermissions = {p.fs: p.submit_payout_request for p in creator.permissions}
     if not creatorpermissions.get(fs, False):
@@ -237,7 +238,7 @@ async def list_requests(_type: PayoutRequestType, current_user: User = Depends(g
 
 @router.get("/{_type}/{limit_date}", response_model=list[PayoutRequestData])
 async def list_requests_before_date(_type: PayoutRequestType, limit_date: date,
-                                         current_user: User = Depends(get_current_user(auto_error=False))):
+                                    current_user: User = Depends(get_current_user(auto_error=False))):
     limit_date += timedelta(days=1)
     date_string = str(limit_date)
     with DBHelper() as session:
@@ -254,6 +255,7 @@ async def list_requests_before_date(_type: PayoutRequestType, limit_date: date,
 
 @router.post("/afsg/create", response_model=PayoutRequestData)
 async def create_afsg_request(data: PayoutRequestForCreation, current_user: User = Depends(get_current_user())):
+    logging.info(f'create_afsg_request({data=}, {current_user.username=})')
     check_semester_is_valid_format(data.semester)
     check_semester_is_open_for_afsg_submissions(data.semester)
     with DBHelper() as session:
@@ -286,6 +288,7 @@ async def create_afsg_request(data: PayoutRequestForCreation, current_user: User
 
 @router.post("/bfsg/create", response_model=PayoutRequestData)
 async def create_bfsg_request(data: BfsgPayoutRequestForCreation, current_user: User = Depends(get_current_user())):
+    logging.info(f'create_bfsg_request({data=}, {current_user.username=})')
     check_semester_is_valid_format(data.semester)
     # check_semester_is_open_for_bfsg_submissions(data.semester)
     with DBHelper() as session:
@@ -318,6 +321,7 @@ async def create_bfsg_request(data: BfsgPayoutRequestForCreation, current_user: 
 @router.post("/vorankuendigung/create", response_model=PayoutRequestData)
 async def create_vorankuendigung_request(data: VorankuendigungPayoutRequestForCreation,
                                          current_user: User = Depends(get_current_user())):
+    logging.info(f'create_vorankuendigung_request({data=}, {current_user.username=})')
     check_semester_is_valid_format(data.semester)
     with DBHelper() as session:
         check_user_may_submit_payout_request(current_user, data.fs, session, _type=PayoutRequestType.VORANKUENDIGUNG)
@@ -349,7 +353,8 @@ async def create_vorankuendigung_request(data: VorankuendigungPayoutRequestForCr
 @router.patch("/{_type}/{request_id}", dependencies=[Depends(admin_only)],
               response_model=PayoutRequestData)
 async def modify_request(_type: PayoutRequestType, request_id: str, data: ModifiablePayoutRequestProperties,
-                              current_user: User = Depends(get_current_user())):
+                         current_user: User = Depends(get_current_user())):
+    logging.info(f'modify_request({_type=}, {request_id=}, {data=}, {current_user.username=})')
     with DBHelper() as session:
         payout_request = get_payout_request(session, request_id, _type)
         if not payout_request:
