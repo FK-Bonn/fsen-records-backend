@@ -8,7 +8,7 @@ from fastapi.testclient import TestClient
 
 from app.main import app
 from app.test.conftest import get_auth_header, USER_NO_PERMS, ADMIN, EMPTY_PDF_PAGE, USER_INFO_ALL, PDF_HASH, \
-    USER_INFO_GEO_READ, USER_INFO_GEO_ALL, USER_INFO_READ
+    USER_INFO_GEO_READ, USER_INFO_GEO_ALL, USER_INFO_READ, EMPTY_PDF_PAGE_2, PDF_HASH_2, PDF_HASH_3, EMPTY_PDF_PAGE_3
 
 DEFAULT_AFSG_DATA = {
     'category': 'AFSG',
@@ -16,8 +16,6 @@ DEFAULT_AFSG_DATA = {
     'date_start': '2023-10-01',
     'date_end': '2024-09-30',
     'request_id': '',
-    'references': '',
-    'tags': '',
 }
 DEFAULT_BFSG_DATA = {
     'category': 'BFSG',
@@ -25,8 +23,6 @@ DEFAULT_BFSG_DATA = {
     'date_start': None,
     'date_end': None,
     'request_id': 'B24S-0001',
-    'references': '',
-    'tags': '',
 }
 
 client = TestClient(app)
@@ -75,29 +71,25 @@ def test_upload_file_afsg(mocked_base_dir):
                            files={'file': ('hhp.pdf', handle, 'application/pdf')},
                            headers=get_auth_header(client, ADMIN))
     assert response.status_code == 200
-    assert response.json() == {'fs': 'Informatik', 'sha256hash': PDF_HASH}
     assert (mocked_base_dir() / 'Informatik' / f'AFSG-HHP-2023-10-01--2024-09-30-{PDF_HASH}.pdf').is_file()
 
 
 @mock.patch('app.routers.files.get_base_dir', return_value=Path(TemporaryDirectory().name))
 def test_update_file_afsg(mocked_base_dir):
     handle = BytesIO(EMPTY_PDF_PAGE)
+    handle2 = BytesIO(EMPTY_PDF_PAGE_2)
     response = client.post('/api/v1/file/Informatik',
                            data=DEFAULT_AFSG_DATA,
                            files={'file': ('hhp.pdf', handle, 'application/pdf')},
                            headers=get_auth_header(client, ADMIN))
     assert response.status_code == 200
     response = client.post('/api/v1/file/Informatik',
-                           data={
-                               **DEFAULT_AFSG_DATA,
-                               'references': '[{"category": "AFSG", "base_name": "Prot", "date_start": "2023-10-01",'
-                                             ' "date_end": null, "request_id": ""}]',
-                           },
-                           files={'file': ('hhp.pdf', handle, 'application/pdf')},
+                           data=DEFAULT_AFSG_DATA,
+                           files={'file': ('hhp.pdf', handle2, 'application/pdf')},
                            headers=get_auth_header(client, ADMIN))
     assert response.status_code == 200
-    assert response.json() == {'fs': 'Informatik', 'sha256hash': PDF_HASH}
     assert (mocked_base_dir() / 'Informatik' / f'AFSG-HHP-2023-10-01--2024-09-30-{PDF_HASH}.pdf').is_file()
+    assert (mocked_base_dir() / 'Informatik' / f'AFSG-HHP-2023-10-01--2024-09-30-{PDF_HASH_2}.pdf').is_file()
     response = client.get('/api/v1/file')
     assert mask(response.json()) == {
         'Informatik': [
@@ -107,67 +99,12 @@ def test_update_file_afsg(mocked_base_dir):
                 'date_start': '2023-10-01',
                 'date_end': '2024-09-30',
                 'request_id': '',
-                'references': [
-                    {
-                        "category": "AFSG",
-                        "base_name": "Prot",
-                        "date_start": "2023-10-01",
-                        "date_end": None,
-                        "request_id": "",
-                    }
-                ],
-                'tags': '',
-                'sha256hash': PDF_HASH,
+                'sha256hash': PDF_HASH_2,
                 'file_extension': 'pdf',
                 'uploaded_by': None,
                 'created_timestamp': None,
-                'annotations': None,
-                'annotations_created_timestamp': None,
-                'annotations_created_by': None,
-            },
-        ],
-    }
-
-
-@mock.patch('app.routers.files.get_base_dir', return_value=Path(TemporaryDirectory().name))
-@pytest.mark.parametrize('tags', [None, 'hype, yolo'])
-@pytest.mark.parametrize('references', [
-    None,
-    [{"category": "AFSG", "base_name": "Prot", "date_start": "2023-10-01", "date_end": None, "request_id": ""}],
-])
-def test_patch_file_afsg(mocked_base_dir, tags, references):
-    handle = BytesIO(EMPTY_PDF_PAGE)
-    response = client.post('/api/v1/file/Informatik',
-                           data=DEFAULT_AFSG_DATA,
-                           files={'file': ('hhp.pdf', handle, 'application/pdf')},
-                           headers=get_auth_header(client, ADMIN))
-    assert response.status_code == 200
-    items = response.json()
-    fs = items['fs']
-    sha256hash = items['sha256hash']
-    response = client.patch(f'/api/v1/file/{fs}/{sha256hash}',
-                            json={
-                                'tags': tags,
-                                'references': references,
-                            },
-                            headers=get_auth_header(client, ADMIN))
-    assert response.status_code == 200
-    # TODO check with history that old one is still there
-    response = client.get('/api/v1/file')
-    assert mask(response.json()) == {
-        'Informatik': [
-            {
-                'category': 'AFSG',
-                'base_name': 'HHP',
-                'date_start': '2023-10-01',
-                'date_end': '2024-09-30',
-                'request_id': '',
-                'references': references or [],
-                'tags': tags or '',
-                'sha256hash': PDF_HASH,
-                'file_extension': 'pdf',
-                'uploaded_by': None,
-                'created_timestamp': None,
+                'references': None,
+                'tags': None,
                 'annotations': None,
                 'annotations_created_timestamp': None,
                 'annotations_created_by': None,
@@ -202,7 +139,6 @@ def test_upload_file_bfsg(mocked_base_dir):
                            files={'file': ('kassenbon.pdf', handle, 'application/pdf')},
                            headers=get_auth_header(client, ADMIN))
     assert response.status_code == 200
-    assert response.json() == {'fs': 'Informatik', 'sha256hash': PDF_HASH}
     assert (mocked_base_dir() / 'Informatik' / f'BFSG-B24S-0001-kassenbon-{PDF_HASH}.pdf').is_file()
 
 
@@ -220,7 +156,6 @@ def test_upload_file_bfsg_patched(mocked_base_dir, mocked_only_admin_bfsg, user)
                            files={'file': ('kassenbon.pdf', handle, 'application/pdf')},
                            headers=get_auth_header(client, user))
     assert response.status_code == 200
-    assert response.json() == {'fs': 'Informatik', 'sha256hash': PDF_HASH}
     assert (mocked_base_dir() / 'Informatik' / f'BFSG-B24S-0001-kassenbon-{PDF_HASH}.pdf').is_file()
 
 
@@ -256,37 +191,30 @@ def test_upload_file_invalid_file_type(mocked_base_dir):
 
 
 @mock.patch('app.routers.files.get_base_dir', return_value=Path(TemporaryDirectory().name))
-def test_upload_file_invalid_references_value(mocked_base_dir):
-    handle = BytesIO(EMPTY_PDF_PAGE)
-    response = client.post('/api/v1/file/Informatik',
-                           data={
-                               **DEFAULT_AFSG_DATA,
-                               'references': 'some string but this is invalid',
-                           },
-                           files={'file': ('hhp.pdf', handle, 'application/rtf')},
-                           headers=get_auth_header(client, ADMIN))
-    assert response.status_code == 422
-    assert response.json() == {'detail': 'references is not a valid json encoded list of values'}
-    assert not (mocked_base_dir() / 'Informatik').exists()
-
-
-@mock.patch('app.routers.files.get_base_dir', return_value=Path(TemporaryDirectory().name))
 @pytest.mark.parametrize('user', [
     None,
     ADMIN,
 ])
 def test_add_annotation(mocked_base_dir, user):
     handle = BytesIO(EMPTY_PDF_PAGE)
-    response_data = client.post('/api/v1/file/Informatik',
-                                data=DEFAULT_AFSG_DATA,
-                                files={'file': ('hhp.pdf', handle, 'application/pdf')},
-                                headers=get_auth_header(client, ADMIN)).json()
-    fs = response_data['fs']
-    sha256hash = response_data['sha256hash']
-    response = client.post(f'/api/v1/file/{fs}/{sha256hash}', json=[
-        {'level': 'Warning', 'text': 'Das Haushaltsjahr sollte angegeben werden'},
-        {'level': 'Info', 'text': 'Es handelt sich um das Sose 2023'},
-    ], headers=get_auth_header(client, ADMIN))
+    client.post('/api/v1/file/Informatik',
+                data=DEFAULT_AFSG_DATA,
+                files={'file': ('hhp.pdf', handle, 'application/pdf')},
+                headers=get_auth_header(client, ADMIN)).json()
+    response = client.post('/api/v1/file/Informatik/annotate', json={
+        'target': {
+            'category': 'AFSG',
+            'base_name': 'HHP',
+            'date_start': '2023-10-01',
+            'date_end': '2024-09-30',
+            'request_id': '',
+        },
+        'references': None,
+        'tags': None,
+        'annotations': [
+            {'level': 'Warning', 'text': 'Das Haushaltsjahr sollte angegeben werden'},
+            {'level': 'Info', 'text': 'Es handelt sich um das Sose 2023'},
+        ]}, headers=get_auth_header(client, ADMIN))
     assert response.status_code == 200
     response = client.get('/api/v1/file', headers=get_auth_header(client, user))
     assert mask(response.json()) == {
@@ -297,12 +225,12 @@ def test_add_annotation(mocked_base_dir, user):
                 'date_start': '2023-10-01',
                 'date_end': '2024-09-30',
                 'request_id': '',
-                'references': [],
-                'tags': '',
                 'sha256hash': PDF_HASH,
                 'file_extension': 'pdf',
                 'uploaded_by': ADMIN if user == ADMIN else None,
                 'created_timestamp': '[masked]' if user == ADMIN else None,
+                'references': None,
+                'tags': None,
                 'annotations': [
                     {'level': 'Warning', 'text': 'Das Haushaltsjahr sollte angegeben werden'},
                     {'level': 'Info', 'text': 'Es handelt sich um das Sose 2023'},
@@ -324,17 +252,31 @@ def test_add_annotation(mocked_base_dir, user):
 ])
 def test_add_annotation_forbidden(mocked_base_dir, user):
     handle = BytesIO(EMPTY_PDF_PAGE)
-    response_data = client.post('/api/v1/file/Informatik',
-                                data=DEFAULT_AFSG_DATA,
-                                files={'file': ('hhp.pdf', handle, 'application/pdf')},
-                                headers=get_auth_header(client, ADMIN)).json()
-    fs = response_data['fs']
-    sha256hash = response_data['sha256hash']
-    response = client.post(f'/api/v1/file/{fs}/{sha256hash}', json=[
-        {'level': 'Warning', 'text': 'Das Haushaltsjahr sollte angegeben werden'},
-        {'level': 'Info', 'text': 'Es handelt sich um das Sose 2023'},
-    ], headers=get_auth_header(client, user))
+    client.post('/api/v1/file/Informatik',
+                data=DEFAULT_AFSG_DATA,
+                files={'file': ('hhp.pdf', handle, 'application/pdf')},
+                headers=get_auth_header(client, ADMIN))
+    response = client.post('/api/v1/file/Informatik/annotate', json={
+        'target': DEFAULT_AFSG_DATA,
+        'references': None,
+        'tags': None,
+        'annotations': [
+            {'level': 'Warning', 'text': 'Das Haushaltsjahr sollte angegeben werden'},
+            {'level': 'Info', 'text': 'Es handelt sich um das Sose 2023'},
+        ]}, headers=get_auth_header(client, user))
     assert response.status_code == 401
+
+
+@mock.patch('app.routers.files.get_base_dir', return_value=Path(TemporaryDirectory().name))
+def test_add_annotation_document_not_found(mocked_base_dir):
+    response = client.post('/api/v1/file/Informatik/annotate', json={
+        'target': DEFAULT_AFSG_DATA,
+        'references': None,
+        'tags': None,
+        'annotations': [
+            {'level': 'Warning', 'text': 'Foo Bar'},
+        ]}, headers=get_auth_header(client, ADMIN))
+    assert response.status_code == 404
 
 
 @mock.patch('app.routers.files.get_base_dir', return_value=Path(TemporaryDirectory().name))
@@ -344,20 +286,26 @@ def test_add_annotation_forbidden(mocked_base_dir, user):
 ])
 def test_update_annotation(mocked_base_dir, user):
     handle = BytesIO(EMPTY_PDF_PAGE)
-    response_data = client.post('/api/v1/file/Informatik',
-                                data=DEFAULT_AFSG_DATA,
-                                files={'file': ('hhp.pdf', handle, 'application/pdf')},
-                                headers=get_auth_header(client, ADMIN)).json()
-    fs = response_data['fs']
-    sha256hash = response_data['sha256hash']
-    response = client.post(f'/api/v1/file/{fs}/{sha256hash}', json=[
-        {'level': 'Error', 'text': 'kaputt'},
-    ], headers=get_auth_header(client, ADMIN))
+    client.post('/api/v1/file/Informatik',
+                data=DEFAULT_AFSG_DATA,
+                files={'file': ('hhp.pdf', handle, 'application/pdf')},
+                headers=get_auth_header(client, ADMIN)).json()
+    response = client.post('/api/v1/file/Informatik/annotate', json={
+        'target': DEFAULT_AFSG_DATA,
+        'references': None,
+        'tags': None,
+        'annotations': [
+            {'level': 'Error', 'text': 'kaputt'},
+        ]}, headers=get_auth_header(client, ADMIN))
     assert response.status_code == 200
-    response = client.post(f'/api/v1/file/{fs}/{sha256hash}', json=[
-        {'level': 'Warning', 'text': 'Das Haushaltsjahr sollte angegeben werden'},
-        {'level': 'Info', 'text': 'Es handelt sich um das Sose 2023'},
-    ], headers=get_auth_header(client, ADMIN))
+    response = client.post('/api/v1/file/Informatik/annotate', json={
+        'target': DEFAULT_AFSG_DATA,
+        'references': None,
+        'tags': None,
+        'annotations': [
+            {'level': 'Warning', 'text': 'Das Haushaltsjahr sollte angegeben werden'},
+            {'level': 'Info', 'text': 'Es handelt sich um das Sose 2023'},
+        ]}, headers=get_auth_header(client, ADMIN))
     assert response.status_code == 200
 
     response = client.get('/api/v1/file', headers=get_auth_header(client, user))
@@ -369,12 +317,12 @@ def test_update_annotation(mocked_base_dir, user):
                 'date_start': '2023-10-01',
                 'date_end': '2024-09-30',
                 'request_id': '',
-                'references': [],
-                'tags': '',
                 'sha256hash': PDF_HASH,
                 'file_extension': 'pdf',
                 'uploaded_by': ADMIN if user == ADMIN else None,
                 'created_timestamp': '[masked]' if user == ADMIN else None,
+                'references': None,
+                'tags': None,
                 'annotations': [
                     {'level': 'Warning', 'text': 'Das Haushaltsjahr sollte angegeben werden'},
                     {'level': 'Info', 'text': 'Es handelt sich um das Sose 2023'},
@@ -403,8 +351,29 @@ def test_retrieve_file_list(mocked_base_dir, user):
                     'date_start': '2023-10-01',
                     'date_end': None,
                     'request_id': '',
-                    'references': '',
-                    'tags': 'HHP',
+                },
+                files={'file': ('hhp.pdf', handle, 'application/pdf')},
+                headers=get_auth_header(client, ADMIN))
+    client.post('/api/v1/file/Informatik/annotate', json={
+        'target': {
+            'category': 'AFSG',
+            'base_name': 'Prot',
+            'date_start': '2023-10-01',
+            'date_end': None,
+            'request_id': '',
+        },
+        'references': None,
+        'tags': ['HHP'],
+        'annotations': None,
+    },
+                headers=get_auth_header(client, ADMIN))
+    client.post('/api/v1/file/Informatik',
+                data={
+                    'category': 'AFSG',
+                    'base_name': 'HHP',
+                    'date_start': '2023-10-01',
+                    'date_end': '2024-09-30',
+                    'request_id': '',
                 },
                 files={'file': ('hhp.pdf', handle, 'application/pdf')},
                 headers=get_auth_header(client, ADMIN))
@@ -415,23 +384,22 @@ def test_retrieve_file_list(mocked_base_dir, user):
                     'date_start': '2023-10-01',
                     'date_end': '2024-09-30',
                     'request_id': '',
-                    'references': '',
-                    'tags': '',
                 },
                 files={'file': ('hhp.pdf', handle, 'application/pdf')},
                 headers=get_auth_header(client, ADMIN))
-    client.post('/api/v1/file/Informatik',
-                data={
-                    'category': 'AFSG',
-                    'base_name': 'HHP',
-                    'date_start': '2023-10-01',
-                    'date_end': '2024-09-30',
-                    'request_id': '',
-                    'references': '[{"category": "AFSG", "base_name": "Prot", "date_start": "2023-10-01",'
-                                  ' "date_end": null, "request_id": ""}]',
-                    'tags': '',
-                },
-                files={'file': ('hhp.pdf', handle, 'application/pdf')},
+    client.post('/api/v1/file/Informatik/annotate', json={
+        'target': {
+            'category': 'AFSG',
+            'base_name': 'HHP',
+            'date_start': '2023-10-01',
+            'date_end': '2024-09-30',
+            'request_id': '',
+        },
+        'references': [{"category": "AFSG", "base_name": "Prot", "date_start": "2023-10-01",
+                        "date_end": None, "request_id": ""}],
+        'tags': None,
+        'annotations': None,
+    },
                 headers=get_auth_header(client, ADMIN))
     client.post('/api/v1/file/Geographie',
                 data={
@@ -440,8 +408,6 @@ def test_retrieve_file_list(mocked_base_dir, user):
                     'date_start': '2023-11-11',
                     'date_end': '2023-11-13',
                     'request_id': '',
-                    'references': '',
-                    'tags': '',
                 },
                 files={'file': ('hhp.pdf', handle, 'application/pdf')},
                 headers=get_auth_header(client, ADMIN))
@@ -452,10 +418,21 @@ def test_retrieve_file_list(mocked_base_dir, user):
                     'date_start': None,
                     'date_end': None,
                     'request_id': 'B23W-0003',
-                    'references': '',
-                    'tags': 'Erstifahrt',
                 },
                 files={'file': ('hhp.pdf', handle, 'application/pdf')},
+                headers=get_auth_header(client, ADMIN))
+    client.post('/api/v1/file/Geographie/annotate', json={
+        'target': {
+            'category': 'BFSG',
+            'base_name': 'Abrechnung Getränkebestellung',
+            'date_start': None,
+            'date_end': None,
+            'request_id': 'B23W-0003',
+        },
+        'references': None,
+        'tags': ['Erstifahrt'],
+        'annotations': None,
+    },
                 headers=get_auth_header(client, ADMIN))
     response = client.get('/api/v1/file', headers=get_auth_header(client, user))
     assert response.status_code == 200
@@ -467,8 +444,8 @@ def test_retrieve_file_list(mocked_base_dir, user):
                 'date_start': '2023-11-11',
                 'date_end': '2023-11-13',
                 'request_id': '',
-                'references': [],
-                'tags': '',
+                'references': None,
+                'tags': None,
                 'sha256hash': PDF_HASH,
                 'file_extension': 'pdf',
                 'uploaded_by': ADMIN if user == ADMIN else None,
@@ -483,15 +460,15 @@ def test_retrieve_file_list(mocked_base_dir, user):
                 'date_start': None,
                 'date_end': None,
                 'request_id': 'B23W-0003',
-                'references': [],
-                'tags': 'Erstifahrt',
+                'references': None,
+                'tags': ['Erstifahrt'],
                 'sha256hash': PDF_HASH,
                 'file_extension': 'pdf',
                 'uploaded_by': ADMIN if user == ADMIN else None,
                 'created_timestamp': '[masked]' if user == ADMIN else None,
                 'annotations': None,
-                'annotations_created_timestamp': None,
-                'annotations_created_by': None,
+                'annotations_created_timestamp': '[masked]' if user == ADMIN else None,
+                'annotations_created_by': ADMIN if user == ADMIN else None,
             },
         ],
         'Informatik': [
@@ -501,15 +478,15 @@ def test_retrieve_file_list(mocked_base_dir, user):
                 'date_start': '2023-10-01',
                 'date_end': None,
                 'request_id': '',
-                'references': [],
-                'tags': 'HHP',
+                'references': None,
+                'tags': ['HHP'],
                 'sha256hash': PDF_HASH,
                 'file_extension': 'pdf',
                 'uploaded_by': ADMIN if user == ADMIN else None,
                 'created_timestamp': '[masked]' if user == ADMIN else None,
                 'annotations': None,
-                'annotations_created_timestamp': None,
-                'annotations_created_by': None,
+                'annotations_created_timestamp': '[masked]' if user == ADMIN else None,
+                'annotations_created_by': ADMIN if user == ADMIN else None,
             },
             {
                 'category': 'AFSG',
@@ -526,29 +503,361 @@ def test_retrieve_file_list(mocked_base_dir, user):
                         "request_id": "",
                     },
                 ],
-                'tags': '',
+                'tags': None,
                 'sha256hash': PDF_HASH,
                 'file_extension': 'pdf',
                 'uploaded_by': ADMIN if user == ADMIN else None,
                 'created_timestamp': '[masked]' if user == ADMIN else None,
                 'annotations': None,
-                'annotations_created_timestamp': None,
-                'annotations_created_by': None,
+                'annotations_created_timestamp': '[masked]' if user == ADMIN else None,
+                'annotations_created_by': ADMIN if user == ADMIN else None,
             },
         ],
     }
 
 
-def test_get_file_history():
-    pass
-    raise NotImplementedError
+@mock.patch('app.routers.files.get_base_dir', return_value=Path(TemporaryDirectory().name))
+@pytest.mark.parametrize('user', [
+    None,
+    USER_NO_PERMS,
+    USER_INFO_READ,
+    USER_INFO_ALL,
+    ADMIN,
+])
+def test_get_file_history(mocked_base_dir, user):
+    handle = BytesIO(EMPTY_PDF_PAGE)
+    handle2 = BytesIO(EMPTY_PDF_PAGE_2)
+    handle3 = BytesIO(EMPTY_PDF_PAGE_3)
+    client.post('/api/v1/file/Informatik',
+                data={
+                    'category': 'AFSG',
+                    'base_name': 'Prot',
+                    'date_start': '2023-10-01',
+                    'date_end': None,
+                    'request_id': '',
+                },
+                files={'file': ('hhp.pdf', handle, 'application/pdf')},
+                headers=get_auth_header(client, ADMIN))
+    client.post('/api/v1/file/Informatik/annotate', json={
+        'target': {
+            'category': 'AFSG',
+            'base_name': 'Prot',
+            'date_start': '2023-10-01',
+            'date_end': None,
+            'request_id': '',
+        },
+        'references': None,
+        'tags': ['HHP', 'NHHP'],
+        'annotations': None,
+    })
+    client.post('/api/v1/file/Informatik',
+                data={
+                    'category': 'AFSG',
+                    'base_name': 'HHP',
+                    'date_start': '2023-10-01',
+                    'date_end': '2024-09-30',
+                    'request_id': '',
+                },
+                files={'file': ('hhp.pdf', handle2, 'application/pdf')},
+                headers=get_auth_header(client, ADMIN))
+    client.post('/api/v1/file/Informatik/annotate', json={
+        'target': {
+            'category': 'AFSG',
+            'base_name': 'HHP',
+            'date_start': '2023-10-01',
+            'date_end': '2024-09-30',
+            'request_id': '',
+        },
+        'references': None,
+        'tags': None,
+        'annotations': [
+            {'level': 'Error', 'text': 'kaputt'},
+        ]}, headers=get_auth_header(client, ADMIN))
+    client.post('/api/v1/file/Informatik/annotate', json={
+        'target': {
+            'category': 'AFSG',
+            'base_name': 'HHP',
+            'date_start': '2023-10-01',
+            'date_end': '2024-09-30',
+            'request_id': '',
+        },
+        'references': None,
+        'tags': None,
+        'annotations': [
+            {'level': 'Warning', 'text': 'Das Haushaltsjahr sollte angegeben werden'},
+            {'level': 'Info', 'text': 'Es handelt sich um das Sose 2023'},
+        ]}, headers=get_auth_header(client, ADMIN))
+    client.post('/api/v1/file/Informatik',
+                data={
+                    'category': 'AFSG',
+                    'base_name': 'HHP',
+                    'date_start': '2023-10-01',
+                    'date_end': '2024-09-30',
+                    'request_id': '',
+                },
+                files={'file': ('hhp.pdf', handle3, 'application/pdf')},
+                headers=get_auth_header(client, ADMIN))
+    client.post('/api/v1/file/Informatik/annotate', json={
+        'target': {
+            'category': 'AFSG',
+            'base_name': 'HHP',
+            'date_start': '2023-10-01',
+            'date_end': '2024-09-30',
+            'request_id': '',
+        },
+        'references': [{"category": "AFSG", "base_name": "Prot", "date_start": "2023-10-01",
+                        "date_end": None, "request_id": ""}],
+        'tags': None,
+        'annotations': [
+            {'level': 'Error', 'text': 'Rechenfehler in der Summe der Einnahmen'},
+        ]}, headers=get_auth_header(client, ADMIN))
+    client.post('/api/v1/file/Informatik',
+                data={
+                    'category': 'AFSG',
+                    'base_name': 'HHP',
+                    'date_start': '2023-10-01',
+                    'date_end': '2024-09-30',
+                    'request_id': '',
+                },
+                files={'file': ('hhp.pdf', handle2, 'application/pdf')},
+                headers=get_auth_header(client, ADMIN))
+
+    client.post('/api/v1/file/Informatik/annotate', json={
+        'target': {
+            'category': 'AFSG',
+            'base_name': 'HHP',
+            'date_start': '2023-10-01',
+            'date_end': '2024-09-30',
+            'request_id': '',
+        },
+        'references': [{"category": "AFSG", "base_name": "Prot", "date_start": "2023-10-01",
+                        "date_end": None, "request_id": ""}],
+        'tags': None,
+        'annotations': None,
+    }, headers=get_auth_header(client, ADMIN))
+    response = client.post('/api/v1/file/Informatik/history',
+                           json={
+                               'category': 'AFSG',
+                               'base_name': 'HHP',
+                               'date_start': '2023-10-01',
+                               'date_end': '2024-09-30',
+                               'request_id': '',
+                           },
+                           headers=get_auth_header(client, user))
+    assert response.status_code == 200
+    assert mask_list(response.json()) == [
+        {
+            'annotations': [
+                {
+                    'level': 'Error',
+                    'text': 'kaputt',
+                },
+            ],
+            'annotations_created_by': ADMIN if user == ADMIN else None,
+            'annotations_created_timestamp': '[masked]' if user == ADMIN else None,
+            'base_name': 'HHP',
+            'category': 'AFSG',
+            'created_timestamp': '[masked]' if user == ADMIN else None,
+            'date_end': '2024-09-30',
+            'date_start': '2023-10-01',
+            'file_extension': 'pdf',
+            'references': None,
+            'request_id': '',
+            'sha256hash': PDF_HASH_2,
+            'tags': None,
+            'uploaded_by': ADMIN if user == ADMIN else None,
+        },
+        {
+            'annotations': [
+                {
+                    'level': 'Warning',
+                    'text': 'Das Haushaltsjahr sollte angegeben werden'
+                },
+                {
+                    'level': 'Info',
+                    'text': 'Es handelt sich um das Sose 2023',
+                },
+            ],
+            'annotations_created_by': ADMIN if user == ADMIN else None,
+            'annotations_created_timestamp': '[masked]' if user == ADMIN else None,
+            'base_name': 'HHP',
+            'category': 'AFSG',
+            'created_timestamp': '[masked]' if user == ADMIN else None,
+            'date_end': '2024-09-30',
+            'date_start': '2023-10-01',
+            'file_extension': 'pdf',
+            'references': None,
+            'request_id': '',
+            'sha256hash': PDF_HASH_2,
+            'tags': None,
+            'uploaded_by': ADMIN if user == ADMIN else None,
+        },
+        {
+            'annotations': [
+                {
+                    'level': 'Error',
+                    'text': 'Rechenfehler in der Summe der Einnahmen',
+                },
+            ],
+            'annotations_created_by': ADMIN if user == ADMIN else None,
+            'annotations_created_timestamp': '[masked]' if user == ADMIN else None,
+            'base_name': 'HHP',
+            'category': 'AFSG',
+            'created_timestamp': '[masked]' if user == ADMIN else None,
+            'date_end': '2024-09-30',
+            'date_start': '2023-10-01',
+            'file_extension': 'pdf',
+            'references': [{
+                'base_name': 'Prot',
+                'category': 'AFSG',
+                'date_end': None,
+                'date_start': '2023-10-01',
+                'request_id': '',
+            }],
+            'request_id': '',
+            'sha256hash': PDF_HASH_3,
+            'tags': None,
+            'uploaded_by': ADMIN if user == ADMIN else None,
+        },
+        {
+            'annotations': None,
+            'annotations_created_by': ADMIN if user == ADMIN else None,
+            'annotations_created_timestamp': '[masked]' if user == ADMIN else None,
+            'base_name': 'HHP',
+            'category': 'AFSG',
+            'created_timestamp': '[masked]' if user == ADMIN else None,
+            'date_end': '2024-09-30',
+            'date_start': '2023-10-01',
+            'file_extension': 'pdf',
+            'references': [{
+                'base_name': 'Prot',
+                'category': 'AFSG',
+                'date_end': None,
+                'date_start': '2023-10-01',
+                'request_id': '',
+            }],
+            'request_id': '',
+            'sha256hash': PDF_HASH_2,
+            'tags': None,
+            'uploaded_by': ADMIN if user == ADMIN else None,
+        },
+    ]
+
+
+@mock.patch('app.routers.files.get_base_dir', return_value=Path(TemporaryDirectory().name))
+def test_use_file_twice_with_different_annotations(mocked_base_dir):
+    handle = BytesIO(EMPTY_PDF_PAGE)
+    client.post('/api/v1/file/Informatik',
+                data={
+                    'category': 'BFSG',
+                    'base_name': 'Nachhaltigkeitskonzept',
+                    'date_start': None,
+                    'date_end': None,
+                    'request_id': 'B24S-0012',
+                },
+                files={'file': ('hhp.pdf', handle, 'application/pdf')},
+                headers=get_auth_header(client, ADMIN))
+    client.post('/api/v1/file/Informatik/annotate', json={
+        'target': {
+            'category': 'BFSG',
+            'base_name': 'Nachhaltigkeitskonzept',
+            'date_start': None,
+            'date_end': None,
+            'request_id': 'B24S-0012',
+        },
+        'references': None,
+        'tags': ['Nachhaltigkeitskonzept'],
+        'annotations': [{
+            'level': 'Error',
+            'text': 'Dieses Nachhaltigkeitskonzept gab es zum Zeitpunkt der Veranstaltung noch gar nicht',
+        }],
+    }, headers=get_auth_header(client, ADMIN))
+    client.post('/api/v1/file/Informatik',
+                data={
+                    'category': 'BFSG',
+                    'base_name': 'Nachhaltigkeitskonzept',
+                    'date_start': None,
+                    'date_end': None,
+                    'request_id': 'B24S-0032',
+                },
+                files={'file': ('hhp.pdf', handle, 'application/pdf')},
+                headers=get_auth_header(client, ADMIN))
+    client.post('/api/v1/file/Informatik/annotate', json={
+        'target': {
+            'category': 'BFSG',
+            'base_name': 'Nachhaltigkeitskonzept',
+            'date_start': None,
+            'date_end': None,
+            'request_id': 'B24S-0032',
+        },
+        'references': None,
+        'tags': ['Nachhaltigkeitskonzept'],
+        'annotations': [{
+            'level': 'Info',
+            'text': 'Ein mustergültiges Konzept, wundervoll!',
+        }],
+    }, headers=get_auth_header(client, ADMIN))
+    assert (mocked_base_dir() / 'Informatik' / f'BFSG-B24S-0012-Nachhaltigkeitskonzept-{PDF_HASH}.pdf').is_file()
+    assert (mocked_base_dir() / 'Informatik' / f'BFSG-B24S-0032-Nachhaltigkeitskonzept-{PDF_HASH}.pdf').is_file()
+    response = client.get('/api/v1/file', headers=get_auth_header(client, ADMIN))
+    assert mask(response.json()) == {
+        'Informatik': [
+            {
+                'annotations': [
+                    {
+                        'level': 'Error',
+                        'text': 'Dieses Nachhaltigkeitskonzept gab es zum Zeitpunkt der Veranstaltung noch gar nicht',
+                    },
+                ],
+                'annotations_created_by': 'admin',
+                'annotations_created_timestamp': '[masked]',
+                'base_name': 'Nachhaltigkeitskonzept',
+                'category': 'BFSG',
+                'created_timestamp': '[masked]',
+                'date_end': None,
+                'date_start': None,
+                'file_extension': 'pdf',
+                'references': None,
+                'request_id': 'B24S-0012',
+                'sha256hash': PDF_HASH,
+                'tags': ['Nachhaltigkeitskonzept'],
+                'uploaded_by': 'admin',
+            },
+            {
+                'annotations': [
+                    {
+                        'level': 'Info',
+                        'text': 'Ein mustergültiges Konzept, wundervoll!',
+                    },
+                ],
+                'annotations_created_by': 'admin',
+                'annotations_created_timestamp': '[masked]',
+                'base_name': 'Nachhaltigkeitskonzept',
+                'category': 'BFSG',
+                'created_timestamp': '[masked]',
+                'date_end': None,
+                'date_start': None,
+                'file_extension': 'pdf',
+                'references': None,
+                'request_id': 'B24S-0032',
+                'sha256hash': PDF_HASH,
+                'tags': ['Nachhaltigkeitskonzept'],
+                'uploaded_by': 'admin',
+            },
+        ],
+    }
 
 
 def mask(elements: dict[str, list[dict]]):
     for key, value in elements.items():
-        for element in value:
-            if element['created_timestamp']:
-                element['created_timestamp'] = '[masked]'
-            if element['annotations_created_timestamp']:
-                element['annotations_created_timestamp'] = '[masked]'
+        mask_list(value)
     return elements
+
+
+def mask_list(value: list[dict]):
+    for element in value:
+        if element['created_timestamp']:
+            element['created_timestamp'] = '[masked]'
+        if element['annotations_created_timestamp']:
+            element['annotations_created_timestamp'] = '[masked]'
+    return value
