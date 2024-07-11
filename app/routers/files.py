@@ -9,7 +9,7 @@ from typing import Annotated, BinaryIO
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, Form
 from pydantic import BaseModel
-from sqlalchemy import select
+from sqlalchemy import select, or_, and_
 from sqlalchemy.orm import Session
 from starlette import status
 from starlette.responses import FileResponse
@@ -75,6 +75,13 @@ class DocumentData(DocumentReference):
     annotations: list[DocumentAnnotation] | None
     annotations_created_timestamp: str | None
     annotations_created_by: str | None
+
+
+class DocumentHistoryData(DocumentData):
+    deleted_by: str | None
+    deleted_timestamp: str | None
+    obsoleted_by: str | None
+    obsoleted_timestamp: str | None
 
 
 class EditableDocumentProperties(BaseModel):
@@ -195,9 +202,11 @@ async def list_documents(current_user: User = Depends(get_current_user(auto_erro
     return items
 
 
-@router.post("/{fs}/history", response_model=list[DocumentData])
-async def document_history(reference: DocumentReference,
-                           current_user: User = Depends(get_current_user(auto_error=False))):
+@router.get("/{limit_date}", response_model=dict[str, list[DocumentData]])
+async def list_documents_with_limit(limit_date: datetime.date, current_user: User = Depends(get_current_user(auto_error=False))):
+    limit_date += datetime.timedelta(days=1)
+    date_string = str(limit_date)
+    items = defaultdict(list)
     with DBHelper() as session:
         is_admin = False
         if current_user:
@@ -221,6 +230,64 @@ async def document_history(reference: DocumentReference,
             Annotation.created_by,
         ). \
             select_from(Document). \
+            outerjoin(Annotation, and_(
+            Annotation.created_timestamp < date_string,
+            or_(Annotation.obsoleted_by.is_(None), Annotation.obsoleted_timestamp >= date_string))
+                      ). \
+            where(Document.created_timestamp < date_string,
+                  or_(Document.deleted_by.is_(None), Document.deleted_timestamp >= date_string)). \
+            order_by(Document.fs, Document.created_timestamp)
+        result = session.execute(statement)
+    for item in result:
+        items[item.fs].append(DocumentData(
+            category=item.category,
+            request_id=item.request_id,
+            base_name=item.base_name,
+            date_start=item.date_start,
+            date_end=item.date_end,
+            file_extension=item.file_extension,
+            sha256hash=item.sha256hash,
+            annotations=json.loads(item.annotations) if item.annotations else None,
+            tags=json.loads(item.tags) if item.tags else None,
+            references=json.loads(item.references) if item.references else None,
+            annotations_created_timestamp=item.annotations_created_timestamp if is_admin else None,
+            annotations_created_by=item.created_by if is_admin else None,
+            created_timestamp=item.created_timestamp if is_admin else None,
+            uploaded_by=item.uploaded_by if is_admin else None,
+        ))
+    return items
+
+
+@router.post("/{fs}/history", response_model=list[DocumentHistoryData])
+async def document_history(reference: DocumentReference,
+                           current_user: User = Depends(get_current_user(auto_error=False))):
+    with DBHelper() as session:
+        is_admin = False
+        if current_user:
+            user = session.get(User, current_user.username)
+            is_admin = user.admin if user else False
+        statement = select(
+            Document.fs,
+            Document.category,
+            Document.request_id,
+            Document.base_name,
+            Document.date_start,
+            Document.date_end,
+            Document.file_extension,
+            Document.sha256hash,
+            Document.created_timestamp,
+            Document.uploaded_by,
+            Document.deleted_by,
+            Document.deleted_timestamp,
+            Annotation.annotations,
+            Annotation.tags,
+            Annotation.references,
+            Annotation.created_timestamp.label('annotations_created_timestamp'),
+            Annotation.created_by,
+            Annotation.obsoleted_by,
+            Annotation.obsoleted_timestamp,
+        ). \
+            select_from(Document). \
             outerjoin(Annotation). \
             where(Document.category == reference.category.value,
                   Document.request_id == reference.request_id,
@@ -231,7 +298,7 @@ async def document_history(reference: DocumentReference,
         result = session.execute(statement)
     items = []
     for item in result:
-        items.append(DocumentData(
+        items.append(DocumentHistoryData(
             category=item.category,
             request_id=item.request_id,
             base_name=item.base_name,
@@ -246,6 +313,10 @@ async def document_history(reference: DocumentReference,
             annotations_created_by=item.created_by if is_admin else None,
             created_timestamp=item.created_timestamp if is_admin else None,
             uploaded_by=item.uploaded_by if is_admin else None,
+            deleted_by=item.deleted_by if is_admin else None,
+            deleted_timestamp=item.deleted_timestamp if is_admin else None,
+            obsoleted_by=item.obsoleted_by if is_admin else None,
+            obsoleted_timestamp=item.obsoleted_timestamp if is_admin else None,
         ))
     return items
 
@@ -281,6 +352,7 @@ async def upload_document(
         target_file = target_dir / filename
         with target_file.open('wb+') as f:
             shutil.copyfileobj(file.file, f)
+        now = ts()
         session.query(Document). \
             where(Document.fs == fs,
                   Document.category == category.value,
@@ -289,7 +361,7 @@ async def upload_document(
                   Document.date_start == (date_start.isoformat() if date_start else None),
                   Document.date_end == (date_end.isoformat() if date_end else None),
                   Document.deleted_by.is_(None)). \
-            update({'deleted_by': current_user.username})
+            update({'deleted_by': current_user.username, 'deleted_timestamp': now})
         document = Document()
         document.fs = fs
         document.category = category.value
@@ -299,7 +371,7 @@ async def upload_document(
         document.date_end = date_end.isoformat() if date_end else None
         document.file_extension = file_extension
         document.sha256hash = sha256hash
-        document.created_timestamp = ts()
+        document.created_timestamp = now
         document.uploaded_by = current_user.username
         session.add(document)
         session.commit()
@@ -321,9 +393,10 @@ async def annotate(fs: str, data: AnnotateData,
             scalar()
         if not document_id:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+        now = ts()
         session.query(Annotation). \
             where(Annotation.document == document_id, Annotation.obsoleted_by.is_(None)). \
-            update({'obsoleted_by': current_user.username})
+            update({'obsoleted_by': current_user.username, 'obsoleted_timestamp': now})
         annotation = Annotation()
         annotation.document = document_id
         if data.annotations is not None:
@@ -332,7 +405,7 @@ async def annotate(fs: str, data: AnnotateData,
             annotation.tags = to_json(data.tags)
         if data.references is not None:
             annotation.references = to_json(data.references)
-        annotation.created_timestamp = ts()
+        annotation.created_timestamp = now
         annotation.created_by = current_user.username
         session.add(annotation)
         session.commit()

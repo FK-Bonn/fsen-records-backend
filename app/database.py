@@ -1,5 +1,5 @@
 from passlib.context import CryptContext
-from sqlalchemy import String, ForeignKey, Text, Index
+from sqlalchemy import String, ForeignKey, Text
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, relationship, Mapped, mapped_column, DeclarativeBase
 from sqlalchemy_utils import create_database, database_exists
@@ -119,9 +119,7 @@ class Document(Base):
     created_timestamp: Mapped[str] = mapped_column(String(200), nullable=False)
     uploaded_by: Mapped[str] = mapped_column(String(200), nullable=False)
     deleted_by: Mapped[str | None] = mapped_column(String(200), nullable=True, default=None)
-    __table_args__ = (
-        Index('idx_documents_fs_sha256hash', 'fs', 'sha256hash'),
-    )
+    deleted_timestamp: Mapped[str | None] = mapped_column(String(200), nullable=True, default=None)
 
 
 class Annotation(Base):
@@ -133,7 +131,8 @@ class Annotation(Base):
     references: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_timestamp: Mapped[str] = mapped_column(String(200), nullable=False)
     created_by: Mapped[str] = mapped_column(String(200), nullable=False)
-    obsoleted_by: Mapped[str] = mapped_column(String(200), nullable=True, default=None)
+    obsoleted_by: Mapped[str | None] = mapped_column(String(200), nullable=True, default=None)
+    obsoleted_timestamp: Mapped[str | None] = mapped_column(String(200), nullable=True, default=None)
 
 
 class DBHelper:

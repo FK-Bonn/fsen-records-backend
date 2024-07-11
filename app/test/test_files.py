@@ -5,6 +5,7 @@ from unittest import mock
 
 import pytest
 from fastapi.testclient import TestClient
+from freezegun import freeze_time
 
 from app.main import app
 from app.test.conftest import get_auth_header, USER_NO_PERMS, ADMIN, EMPTY_PDF_PAGE, USER_INFO_ALL, PDF_HASH, \
@@ -660,7 +661,11 @@ def test_get_file_history(mocked_base_dir, user):
             'created_timestamp': '[masked]' if user == ADMIN else None,
             'date_end': '2024-09-30',
             'date_start': '2023-10-01',
+            'deleted_by': ADMIN if user == ADMIN else None,
+            'deleted_timestamp': '[masked]' if user == ADMIN else None,
             'file_extension': 'pdf',
+            'obsoleted_by': ADMIN if user == ADMIN else None,
+            'obsoleted_timestamp': '[masked]' if user == ADMIN else None,
             'references': None,
             'request_id': '',
             'sha256hash': PDF_HASH_2,
@@ -685,7 +690,11 @@ def test_get_file_history(mocked_base_dir, user):
             'created_timestamp': '[masked]' if user == ADMIN else None,
             'date_end': '2024-09-30',
             'date_start': '2023-10-01',
+            'deleted_by': ADMIN if user == ADMIN else None,
+            'deleted_timestamp': '[masked]' if user == ADMIN else None,
             'file_extension': 'pdf',
+            'obsoleted_by': None,
+            'obsoleted_timestamp': None,
             'references': None,
             'request_id': '',
             'sha256hash': PDF_HASH_2,
@@ -706,7 +715,11 @@ def test_get_file_history(mocked_base_dir, user):
             'created_timestamp': '[masked]' if user == ADMIN else None,
             'date_end': '2024-09-30',
             'date_start': '2023-10-01',
+            'deleted_by': ADMIN if user == ADMIN else None,
+            'deleted_timestamp': '[masked]' if user == ADMIN else None,
             'file_extension': 'pdf',
+            'obsoleted_by': None,
+            'obsoleted_timestamp': None,
             'references': [{
                 'base_name': 'Prot',
                 'category': 'AFSG',
@@ -728,7 +741,11 @@ def test_get_file_history(mocked_base_dir, user):
             'created_timestamp': '[masked]' if user == ADMIN else None,
             'date_end': '2024-09-30',
             'date_start': '2023-10-01',
+            'deleted_by': None,
+            'deleted_timestamp': None,
             'file_extension': 'pdf',
+            'obsoleted_by': None,
+            'obsoleted_timestamp': None,
             'references': [{
                 'base_name': 'Prot',
                 'category': 'AFSG',
@@ -848,6 +865,131 @@ def test_use_file_twice_with_different_annotations(mocked_base_dir):
     }
 
 
+@mock.patch('app.routers.files.get_base_dir', return_value=Path(TemporaryDirectory().name))
+def test_fixed_date_annotations(mocked_base_dir):
+    handle = BytesIO(EMPTY_PDF_PAGE)
+    handle2 = BytesIO(EMPTY_PDF_PAGE_2)
+    with freeze_time("2023-04-03T10:00:00Z"):
+        client.post('/api/v1/file/Informatik',
+                    data=DEFAULT_AFSG_DATA,
+                    files={'file': ('hhp.pdf', handle2, 'application/pdf')},
+                    headers=get_auth_header(client, ADMIN)).json()
+    with freeze_time("2023-04-04T10:00:00Z"):
+        client.post('/api/v1/file/Informatik',
+                    data=DEFAULT_AFSG_DATA,
+                    files={'file': ('hhp.pdf', handle, 'application/pdf')},
+                    headers=get_auth_header(client, ADMIN)).json()
+    with freeze_time("2023-04-05T10:00:00Z"):
+        client.post('/api/v1/file/Informatik/annotate', json={
+            'target': DEFAULT_AFSG_DATA,
+            'references': None,
+            'tags': None,
+            'annotations': [
+                {'level': 'Error', 'text': 'kaputt'},
+            ]}, headers=get_auth_header(client, ADMIN))
+    with freeze_time("2023-04-06T10:00:00Z"):
+        client.post('/api/v1/file/Informatik/annotate', json={
+            'target': DEFAULT_AFSG_DATA,
+            'references': None,
+            'tags': None,
+            'annotations': [
+                {'level': 'Warning', 'text': 'Das Haushaltsjahr sollte angegeben werden'},
+                {'level': 'Info', 'text': 'Es handelt sich um das Sose 2023'},
+            ]}, headers=get_auth_header(client, ADMIN))
+
+    response = client.get('/api/v1/file/2023-04-02', headers=get_auth_header(client, ADMIN))
+    assert mask(response.json()) == {}
+    response = client.get('/api/v1/file/2023-04-03', headers=get_auth_header(client, ADMIN))
+    assert mask(response.json()) == {
+        'Informatik': [
+            {
+                'category': 'AFSG',
+                'base_name': 'HHP',
+                'date_start': '2023-10-01',
+                'date_end': '2024-09-30',
+                'request_id': '',
+                'sha256hash': PDF_HASH_2,
+                'file_extension': 'pdf',
+                'uploaded_by': ADMIN,
+                'created_timestamp': '[masked]',
+                'references': None,
+                'tags': None,
+                'annotations': None,
+                'annotations_created_timestamp': None,
+                'annotations_created_by': None,
+            },
+        ],
+    }
+    response = client.get('/api/v1/file/2023-04-04', headers=get_auth_header(client, ADMIN))
+    assert mask(response.json()) == {
+        'Informatik': [
+            {
+                'category': 'AFSG',
+                'base_name': 'HHP',
+                'date_start': '2023-10-01',
+                'date_end': '2024-09-30',
+                'request_id': '',
+                'sha256hash': PDF_HASH,
+                'file_extension': 'pdf',
+                'uploaded_by': ADMIN,
+                'created_timestamp': '[masked]',
+                'references': None,
+                'tags': None,
+                'annotations': None,
+                'annotations_created_timestamp': None,
+                'annotations_created_by': None,
+            },
+        ],
+    }
+    response = client.get('/api/v1/file/2023-04-05', headers=get_auth_header(client, ADMIN))
+    assert mask(response.json()) == {
+        'Informatik': [
+            {
+                'category': 'AFSG',
+                'base_name': 'HHP',
+                'date_start': '2023-10-01',
+                'date_end': '2024-09-30',
+                'request_id': '',
+                'sha256hash': PDF_HASH,
+                'file_extension': 'pdf',
+                'uploaded_by': ADMIN,
+                'created_timestamp': '[masked]',
+                'references': None,
+                'tags': None,
+                'annotations': [
+                    {'level': 'Error', 'text': 'kaputt'},
+                ],
+                'annotations_created_timestamp': '[masked]',
+                'annotations_created_by': ADMIN,
+            },
+        ],
+    }
+    response = client.get('/api/v1/file/2023-04-06', headers=get_auth_header(client, ADMIN))
+    assert mask(response.json()) == {
+        'Informatik': [
+            {
+                'category': 'AFSG',
+                'base_name': 'HHP',
+                'date_start': '2023-10-01',
+                'date_end': '2024-09-30',
+                'request_id': '',
+                'sha256hash': PDF_HASH,
+                'file_extension': 'pdf',
+                'uploaded_by': ADMIN,
+                'created_timestamp': '[masked]',
+                'references': None,
+                'tags': None,
+                'annotations': [
+                    {'level': 'Warning', 'text': 'Das Haushaltsjahr sollte angegeben werden'},
+                    {'level': 'Info', 'text': 'Es handelt sich um das Sose 2023'},
+                ],
+                'annotations_created_timestamp': '[masked]',
+                'annotations_created_by': ADMIN,
+            },
+        ],
+    }
+
+
 def mask(elements: dict[str, list[dict]]):
     for key, value in elements.items():
         mask_list(value)
@@ -856,8 +998,7 @@ def mask(elements: dict[str, list[dict]]):
 
 def mask_list(value: list[dict]):
     for element in value:
-        if element['created_timestamp']:
-            element['created_timestamp'] = '[masked]'
-        if element['annotations_created_timestamp']:
-            element['annotations_created_timestamp'] = '[masked]'
+        for key in ('created_timestamp', 'annotations_created_timestamp', 'deleted_timestamp', 'obsoleted_timestamp'):
+            if key in element and element[key]:
+                element[key] = '[masked]'
     return value
