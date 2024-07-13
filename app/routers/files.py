@@ -5,6 +5,7 @@ import json
 import logging
 import shutil
 from collections import defaultdict
+from pathlib import Path
 from typing import Annotated, BinaryIO
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, Form
@@ -20,14 +21,6 @@ from app.routers.users import get_current_user, admin_only
 from app.util import ts, to_json
 
 LAST_FS_DATA_FORMAT_UPDATE = '2023-01-01'
-
-SUBFOLDERS = {
-    'HHP-': 'HHP',
-    'HHR-': 'HHR',
-    'KP-': 'Kassenpruefungen',
-    'Prot-': 'Protokolle',
-    'Wahlergebnis-': 'Wahlergebnisse',
-}
 
 ALLOWED_EXTENSIONS = ('pdf', 'odt', 'ods', 'txt', 'md', 'doc', 'docx', 'xls', 'xlsx')
 
@@ -101,13 +94,6 @@ def get_base_dir():
     return Config.BASE_DOCUMENTS_DIR
 
 
-def get_subfolder_from_filename(filename: str) -> str | None:
-    for key, value in SUBFOLDERS.items():
-        if filename.startswith(key):
-            return value
-    return None
-
-
 def check_permission(current_user: User, fs: str,
                      manage_permissions: bool = False,
                      read_files: bool = False,
@@ -135,16 +121,29 @@ def check_permission(current_user: User, fs: str,
             )
 
 
+def is_subpath(shorter: Path, longer: Path) -> bool:
+    try:
+        longer.resolve().relative_to(shorter.resolve())
+        return True
+    except ValueError:
+        return False
+
+
+def hook_for_testing(fs: str) -> str:
+    return fs
+
+
 @router.get("/{fs}/{filename}", response_class=FileResponse)
 async def get_individual_file(fs: str, filename: str, current_user: User = Depends(get_current_user())):
     check_permission(current_user, fs, read_files=True)
-    subfolder = get_subfolder_from_filename(filename)
-    if not subfolder or '/' in fs or '/' in filename:
+    fs = hook_for_testing(fs)
+    base_dir = get_base_dir()
+    file_path = base_dir / fs / filename
+    if '/' in fs or '/' in filename or not is_subpath(shorter=base_dir, longer=file_path):
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Unknown filename format",
         )
-    file_path = Config.BASE_DATA_DIR / fs / subfolder / filename
     if file_path.is_file():
         return file_path
     raise HTTPException(
