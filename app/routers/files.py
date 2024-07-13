@@ -68,6 +68,7 @@ class DocumentReference(BaseModel):
 class DocumentData(DocumentReference):
     file_extension: str
     sha256hash: str
+    filename: str
     created_timestamp: str | None
     uploaded_by: str | None
     tags: list[str] | None
@@ -183,6 +184,9 @@ async def list_documents(current_user: User = Depends(get_current_user(auto_erro
             order_by(Document.fs, Document.created_timestamp)
         result = session.execute(statement)
     for item in result:
+        filename = build_filename_str(request_id=item.request_id, category=item.category, base_name=item.base_name,
+                                      date_start=item.date_start, date_end=item.date_end,
+                                      file_extension=item.file_extension, sha256hash=item.sha256hash)
         items[item.fs].append(DocumentData(
             category=item.category,
             request_id=item.request_id,
@@ -191,6 +195,7 @@ async def list_documents(current_user: User = Depends(get_current_user(auto_erro
             date_end=item.date_end,
             file_extension=item.file_extension,
             sha256hash=item.sha256hash,
+            filename=filename,
             annotations=json.loads(item.annotations) if item.annotations else None,
             tags=json.loads(item.tags) if item.tags else None,
             references=json.loads(item.references) if item.references else None,
@@ -203,7 +208,8 @@ async def list_documents(current_user: User = Depends(get_current_user(auto_erro
 
 
 @router.get("/{limit_date}", response_model=dict[str, list[DocumentData]])
-async def list_documents_with_limit(limit_date: datetime.date, current_user: User = Depends(get_current_user(auto_error=False))):
+async def list_documents_with_limit(limit_date: datetime.date,
+                                    current_user: User = Depends(get_current_user(auto_error=False))):
     limit_date += datetime.timedelta(days=1)
     date_string = str(limit_date)
     items = defaultdict(list)
@@ -239,6 +245,9 @@ async def list_documents_with_limit(limit_date: datetime.date, current_user: Use
             order_by(Document.fs, Document.created_timestamp)
         result = session.execute(statement)
     for item in result:
+        filename = build_filename_str(request_id=item.request_id, category=item.category, base_name=item.base_name,
+                                      date_start=item.date_start, date_end=item.date_end,
+                                      file_extension=item.file_extension, sha256hash=item.sha256hash)
         items[item.fs].append(DocumentData(
             category=item.category,
             request_id=item.request_id,
@@ -247,6 +256,7 @@ async def list_documents_with_limit(limit_date: datetime.date, current_user: Use
             date_end=item.date_end,
             file_extension=item.file_extension,
             sha256hash=item.sha256hash,
+            filename=filename,
             annotations=json.loads(item.annotations) if item.annotations else None,
             tags=json.loads(item.tags) if item.tags else None,
             references=json.loads(item.references) if item.references else None,
@@ -298,6 +308,9 @@ async def document_history(reference: DocumentReference,
         result = session.execute(statement)
     items = []
     for item in result:
+        filename = build_filename_str(request_id=item.request_id, category=item.category, base_name=item.base_name,
+                                      date_start=item.date_start, date_end=item.date_end,
+                                      file_extension=item.file_extension, sha256hash=item.sha256hash)
         items.append(DocumentHistoryData(
             category=item.category,
             request_id=item.request_id,
@@ -306,6 +319,7 @@ async def document_history(reference: DocumentReference,
             date_end=item.date_end,
             file_extension=item.file_extension,
             sha256hash=item.sha256hash,
+            filename=filename,
             annotations=json.loads(item.annotations) if item.annotations else None,
             tags=item.tags,
             references=json.loads(item.references) if item.references else None,
@@ -421,7 +435,15 @@ def calculate_sha256(uploaded_file: BinaryIO):
 
 def build_filename(request_id: str, category: DocumentCategory, base_name: str, date_start: datetime.date | None,
                    date_end: datetime.date | None, file_extension: str, sha256hash: str) -> str:
-    filename = f'{category.value}-{request_id}-{base_name}'.replace('--', '-')
+    date_start_str = date_start.isoformat() if date_start else None
+    date_end_str = date_end.isoformat() if date_end else None
+    return build_filename_str(request_id, category.value, base_name, date_start_str, date_end_str, file_extension,
+                              sha256hash)
+
+
+def build_filename_str(request_id: str, category: str, base_name: str, date_start: str | None,
+                       date_end: str | None, file_extension: str, sha256hash: str) -> str:
+    filename = f'{category}-{request_id}-{base_name}'.replace('--', '-')
     if date_start:
         filename += f'-{date_start}'
         if date_end:
