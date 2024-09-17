@@ -48,8 +48,20 @@ class Permission(Base):
     locked: Mapped[bool] = mapped_column(nullable=False, default=False)
 
 
-class FsData(Base):
-    __tablename__ = "fs_data"
+class BaseFsData(Base):
+    __tablename__ = "base_fs_data"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    fs: Mapped[str] = mapped_column(String(200), nullable=False)
+    data: Mapped[str] = mapped_column(Text, nullable=False)
+    user: Mapped[str] = mapped_column(String(200), nullable=False)
+    timestamp: Mapped[str] = mapped_column(String(200), nullable=False)
+    approved: Mapped[bool] = mapped_column(nullable=False, default=False)
+    approved_by: Mapped[str] = mapped_column(String(200), nullable=True, default=None)
+    approval_timestamp: Mapped[str] = mapped_column(String(200), nullable=True, default=None)
+
+
+class PublicFsData(Base):
+    __tablename__ = "public_fs_data"
     id: Mapped[int] = mapped_column(primary_key=True)
     fs: Mapped[str] = mapped_column(String(200), nullable=False)
     data: Mapped[str] = mapped_column(Text, nullable=False)

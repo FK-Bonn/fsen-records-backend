@@ -7,7 +7,7 @@ from app.test.conftest import get_auth_header, USER_INFO_READ, USER_INFO_ALL, AD
 
 client = TestClient(app)
 
-SAMPLE_DATA = {
+SAMPLE_PUBLIC_DATA = {
     'email': 'informatik@example.org',
     'phone': '+49228730123',
     'website': 'https://example.org',
@@ -32,13 +32,26 @@ SAMPLE_PROTECTED_DATA = {
     'other': {},
 }
 
-
-def test_get_all_fsdata_needs_authentication():
-    response = client.get('/api/v1/data')
-    assert response.status_code == 401
+SAMPLE_BASE_DATA = {
+    'fs_id': 'Informatik',
+    'name': 'Informatik',
+    'statutes': '',
+    'financial_year_start': '01.04.',
+    'financial_year_override': {
+        'previous': {'date_start': '2023-01-01', 'date_end': '2023-12-31'},
+        'current': {'date_start': '2024-01-01', 'date_end': '2024-03-31'}
+    },
+    'proceedings_urls': [
+        {'url': 'https://example.org/proceedings-a', 'annotation': 'Proceedings A'},
+        {'url': 'https://example.org/proceedings-f', 'annotation': ''},
+    ],
+    'annotation': '',
+    'active': True,
+}
 
 
 @pytest.mark.parametrize('user', [
+    None,
     USER_INFO_READ,
     USER_INFO_ALL,
     ADMIN,
@@ -50,56 +63,82 @@ def test_get_all_fsdata_no_data_set(user: str):
 
 
 def test_get_all_fsdata_no_permissions():
-    set_sample_data()
+    set_sample_base_data()
+    set_sample_public_data()
     set_sample_protected_data()
     response = client.get('/api/v1/data', headers=get_auth_header(client, USER_NO_PERMS))
     assert response.status_code == 200
-    assert response.json() == {}
+    assert response.json() == {
+        'Informatik': {
+            'base': {'data': SAMPLE_BASE_DATA, 'is_latest': True},
+            'public': None,
+            'protected': None,
+        }
+    }
 
 
-def test_get_all_fsdata():
-    set_sample_data(fs='Informatik')
+def test_get_all_fsdata_filters_inactive_fsen():
+    set_sample_base_data(fs='Informatik')
+    set_sample_public_data(fs='Informatik')
     set_sample_protected_data(fs='Informatik')
-    set_sample_data(fs='Metaphysik-Astrologie')
+    set_sample_base_data(fs='Metaphysik-Astrologie')
+    set_sample_public_data(fs='Metaphysik-Astrologie')
     set_sample_protected_data(fs='Metaphysik-Astrologie')
+    set_sample_base_data(fs='Inactive')
+    set_sample_public_data(fs='Inactive')
+    set_sample_protected_data(fs='Inactive')
+    client.put('/api/v1/data/Inactive/base', json={**SAMPLE_BASE_DATA, 'active': False},
+               headers=get_auth_header(client, ADMIN))
     response = client.get('/api/v1/data', headers=get_auth_header(client, USER_INFO_ALL))
     assert response.status_code == 200
     assert response.json() == {
         'Informatik': {
-            'data': {'data': SAMPLE_DATA, 'is_latest': True},
-            'protected_data': {'data': SAMPLE_PROTECTED_DATA, 'is_latest': True},
+            'base': {'data': SAMPLE_BASE_DATA, 'is_latest': True},
+            'public': {'data': SAMPLE_PUBLIC_DATA, 'is_latest': True},
+            'protected': {'data': SAMPLE_PROTECTED_DATA, 'is_latest': True},
+        },
+        'Metaphysik-Astrologie': {
+            'base': {'data': SAMPLE_BASE_DATA, 'is_latest': True},
+            'public': None,
+            'protected': None,
         }
     }
 
 
 def test_get_all_fsdata_multiple_fs():
-    set_sample_data(fs='Informatik')
+    set_sample_base_data(fs='Informatik')
+    set_sample_public_data(fs='Informatik')
     set_sample_protected_data(fs='Informatik')
-    set_sample_data(fs='Metaphysik-Astrologie')
+    set_sample_base_data(fs='Metaphysik-Astrologie')
+    set_sample_public_data(fs='Metaphysik-Astrologie')
     set_sample_protected_data(fs='Metaphysik-Astrologie')
     response = client.get('/api/v1/data', headers=get_auth_header(client, ADMIN))
     assert response.status_code == 200
     assert response.json() == {
         'Informatik': {
-            'data': {'data': SAMPLE_DATA, 'is_latest': True},
-            'protected_data': {'data': SAMPLE_PROTECTED_DATA, 'is_latest': True},
+            'base': {'data': SAMPLE_BASE_DATA, 'is_latest': True},
+            'public': {'data': SAMPLE_PUBLIC_DATA, 'is_latest': True},
+            'protected': {'data': SAMPLE_PROTECTED_DATA, 'is_latest': True},
         },
         'Metaphysik-Astrologie': {
-            'data': {'data': SAMPLE_DATA, 'is_latest': True},
-            'protected_data': {'data': SAMPLE_PROTECTED_DATA, 'is_latest': True},
+            'base': {'data': SAMPLE_BASE_DATA, 'is_latest': True},
+            'public': {'data': SAMPLE_PUBLIC_DATA, 'is_latest': True},
+            'protected': {'data': SAMPLE_PROTECTED_DATA, 'is_latest': True},
         }
     }
 
 
-def test_get_all_fsdata_only_data_no_protected_data():
-    set_sample_data()
+def test_get_all_fsdata_only_public_data_no_protected_data():
+    set_sample_base_data()
+    set_sample_public_data()
     set_sample_protected_data()
     response = client.get('/api/v1/data', headers=get_auth_header(client, USER_INFO_READ))
     assert response.status_code == 200
     assert response.json() == {
         'Informatik': {
-            'data': {'data': SAMPLE_DATA, 'is_latest': True},
-            'protected_data': None,
+            'base': {'data': SAMPLE_BASE_DATA, 'is_latest': True},
+            'public': {'data': SAMPLE_PUBLIC_DATA, 'is_latest': True},
+            'protected': None,
         }
     }
 
@@ -110,69 +149,50 @@ def test_get_all_fsdata_only_protected_data_present():
     assert response.status_code == 200
     assert response.json() == {
         'Informatik': {
-            'data': None,
-            'protected_data': {'data': SAMPLE_PROTECTED_DATA, 'is_latest': True},
+            'base': None,
+            'public': None,
+            'protected': {'data': SAMPLE_PROTECTED_DATA, 'is_latest': True},
         }
     }
 
 
 @pytest.mark.parametrize('user', [
+    None,
     USER_INFO_READ,
     USER_INFO_ALL,
     ADMIN,
 ])
-def test_get_fsdata_no_data_set(user: str):
-    response = client.get('/api/v1/data/Informatik', headers=get_auth_header(client, user))
+def test_get_base_fsdata_no_data_set(user: str):
+    response = client.get('/api/v1/data/Informatik/base', headers=get_auth_header(client, user))
     assert response.status_code == 404
 
 
-@pytest.mark.parametrize('user,fs', [
-    [USER_NO_PERMS, 'Informatik'],
-    [USER_INFO_ALL, 'Metaphysik-Astrologie'],
-])
-def test_get_fsdata_insufficient_permissions(user: str, fs: str):
-    response = client.get(f'/api/v1/data/{fs}', headers=get_auth_header(client, user))
-    assert response.status_code == 401
-
-
-@pytest.mark.parametrize('user,fs', [
-    [USER_NO_PERMS, 'Informatik'],
-    [USER_INFO_READ, 'Informatik'],
-    [USER_INFO_ALL, 'Metaphysik-Astrologie'],
-])
-def test_set_fsdata_insufficient_permissions(user: str, fs: str):
-    response = client.put(f'/api/v1/data/{fs}', json=SAMPLE_DATA, headers=get_auth_header(client, user))
-    assert response.status_code == 401
-
-
-@pytest.mark.parametrize('user', [
-    USER_INFO_ALL,
-    ADMIN,
-])
-def test_set_and_get_fsdata(user):
-    response = client.put('/api/v1/data/Informatik', json=SAMPLE_DATA, headers=get_auth_header(client, user))
+def test_set_and_get_base_fsdata():
+    response = client.put('/api/v1/data/Informatik/base', json=SAMPLE_BASE_DATA,
+                          headers=get_auth_header(client, ADMIN))
     assert response.status_code == 200
 
-    response = client.get('/api/v1/data/Informatik', headers=get_auth_header(client, user))
+    response = client.get('/api/v1/data/Informatik/base', headers=get_auth_header(client, ADMIN))
     assert response.status_code == 200
-    assert response.json() == {'data': SAMPLE_DATA, 'is_latest': True}
+    assert response.json() == {'data': SAMPLE_BASE_DATA, 'is_latest': True}
 
 
 @freeze_time("2023-04-04T10:00:00Z")
-def test_set_and_approve_fsdata():
-    response = client.put('/api/v1/data/Informatik', json=SAMPLE_DATA, headers=get_auth_header(client, USER_INFO_ALL))
+def test_set_and_approve_base_fsdata():
+    response = client.put('/api/v1/data/Informatik/base', json=SAMPLE_BASE_DATA,
+                          headers=get_auth_header(client, ADMIN))
     assert response.status_code == 200
 
-    response = client.get('/api/v1/data/Informatik/history', headers=get_auth_header(client, ADMIN))
+    response = client.get('/api/v1/data/Informatik/base/history', headers=get_auth_header(client, ADMIN))
     data_id = response.json()[0]['id']
-    response = client.post(f'/api/v1/data/approve/{data_id}', headers=get_auth_header(client, ADMIN))
+    response = client.post(f'/api/v1/data/approve/base/{data_id}', headers=get_auth_header(client, ADMIN))
     assert response.status_code == 200
 
-    response = client.get('/api/v1/data/Informatik/history', headers=get_auth_header(client, ADMIN))
+    response = client.get('/api/v1/data/Informatik/base/history', headers=get_auth_header(client, ADMIN))
     assert response.json() == [{
-        **SAMPLE_DATA,
+        **SAMPLE_BASE_DATA,
         'id': 1,
-        'user': USER_INFO_ALL,
+        'user': ADMIN,
         'timestamp': '2023-04-04T10:00:00+00:00',
         'approval_timestamp': '2023-04-04T10:00:00+00:00',
         'approved': True,
@@ -180,17 +200,17 @@ def test_set_and_approve_fsdata():
     }]
 
 
-def test_fsdata_history_as_admin():
-    data1 = SAMPLE_DATA
-    data2 = {**SAMPLE_DATA, 'website': 'https://changed.xyz', }
+def test_base_fsdata_history_as_admin():
+    data1 = SAMPLE_BASE_DATA
+    data2 = {**SAMPLE_BASE_DATA, 'annotation': 'Warning! Do not use!', 'financial_year_override': None}
     with freeze_time("2023-04-04T10:00:00Z"):
-        response = client.put('/api/v1/data/Informatik', json=data1, headers=get_auth_header(client, ADMIN))
+        response = client.put('/api/v1/data/Informatik/base', json=data1, headers=get_auth_header(client, ADMIN))
         assert response.status_code == 200
     with freeze_time("2023-07-07T17:00:00Z"):
-        response = client.put('/api/v1/data/Informatik', json=data2, headers=get_auth_header(client, ADMIN))
+        response = client.put('/api/v1/data/Informatik/base', json=data2, headers=get_auth_header(client, ADMIN))
         assert response.status_code == 200
 
-    response = client.get('/api/v1/data/Informatik/history', headers=get_auth_header(client, ADMIN))
+    response = client.get('/api/v1/data/Informatik/base/history', headers=get_auth_header(client, ADMIN))
     assert response.status_code == 200
     assert response.json() == [
         {
@@ -214,13 +234,123 @@ def test_fsdata_history_as_admin():
     ]
 
 
-def test_fsdata_history_unauthorized():
-    response = client.get('/api/v1/data/Informatik/history', headers=get_auth_header(client, USER_NO_PERMS))
+def test_base_fsdata_history_unauthorized():
+    response = client.get('/api/v1/data/Informatik/base/history', headers=get_auth_header(client, USER_NO_PERMS))
     assert response.status_code == 401
 
 
-def test_fsdata_history_does_not_exist():
-    response = client.get('/api/v1/data/Metaphysik-Astrologie/history', headers=get_auth_header(client, ADMIN))
+def test_base_fsdata_history_does_not_exist():
+    response = client.get('/api/v1/data/Metaphysik-Astrologie/base/history', headers=get_auth_header(client, ADMIN))
+    assert response.status_code == 404
+
+
+@pytest.mark.parametrize('user', [
+    USER_INFO_READ,
+    USER_INFO_ALL,
+    ADMIN,
+])
+def test_get_public_fsdata_no_data_set(user: str):
+    response = client.get('/api/v1/data/Informatik/public', headers=get_auth_header(client, user))
+    assert response.status_code == 404
+
+
+@pytest.mark.parametrize('user,fs', [
+    [USER_NO_PERMS, 'Informatik'],
+    [USER_INFO_ALL, 'Metaphysik-Astrologie'],
+])
+def test_get_public_fsdata_insufficient_permissions(user: str, fs: str):
+    response = client.get(f'/api/v1/data/{fs}/public', headers=get_auth_header(client, user))
+    assert response.status_code == 401
+
+
+@pytest.mark.parametrize('user,fs', [
+    [USER_NO_PERMS, 'Informatik'],
+    [USER_INFO_READ, 'Informatik'],
+    [USER_INFO_ALL, 'Metaphysik-Astrologie'],
+])
+def test_set_public_fsdata_insufficient_permissions(user: str, fs: str):
+    response = client.put(f'/api/v1/data/{fs}/public', json=SAMPLE_PUBLIC_DATA, headers=get_auth_header(client, user))
+    assert response.status_code == 401
+
+
+@pytest.mark.parametrize('user', [
+    USER_INFO_ALL,
+    ADMIN,
+])
+def test_set_and_get_public_fsdata(user):
+    response = client.put('/api/v1/data/Informatik/public', json=SAMPLE_PUBLIC_DATA,
+                          headers=get_auth_header(client, user))
+    assert response.status_code == 200
+
+    response = client.get('/api/v1/data/Informatik/public', headers=get_auth_header(client, user))
+    assert response.status_code == 200
+    assert response.json() == {'data': SAMPLE_PUBLIC_DATA, 'is_latest': True}
+
+
+@freeze_time("2023-04-04T10:00:00Z")
+def test_set_and_approve_public_fsdata():
+    response = client.put('/api/v1/data/Informatik/public', json=SAMPLE_PUBLIC_DATA,
+                          headers=get_auth_header(client, USER_INFO_ALL))
+    assert response.status_code == 200
+
+    response = client.get('/api/v1/data/Informatik/public/history', headers=get_auth_header(client, ADMIN))
+    data_id = response.json()[0]['id']
+    response = client.post(f'/api/v1/data/approve/public/{data_id}', headers=get_auth_header(client, ADMIN))
+    assert response.status_code == 200
+
+    response = client.get('/api/v1/data/Informatik/public/history', headers=get_auth_header(client, ADMIN))
+    assert response.json() == [{
+        **SAMPLE_PUBLIC_DATA,
+        'id': 1,
+        'user': USER_INFO_ALL,
+        'timestamp': '2023-04-04T10:00:00+00:00',
+        'approval_timestamp': '2023-04-04T10:00:00+00:00',
+        'approved': True,
+        'approved_by': ADMIN,
+    }]
+
+
+def test_public_fsdata_history_as_admin():
+    data1 = SAMPLE_PUBLIC_DATA
+    data2 = {**SAMPLE_PUBLIC_DATA, 'website': 'https://changed.xyz', }
+    with freeze_time("2023-04-04T10:00:00Z"):
+        response = client.put('/api/v1/data/Informatik/public', json=data1, headers=get_auth_header(client, ADMIN))
+        assert response.status_code == 200
+    with freeze_time("2023-07-07T17:00:00Z"):
+        response = client.put('/api/v1/data/Informatik/public', json=data2, headers=get_auth_header(client, ADMIN))
+        assert response.status_code == 200
+
+    response = client.get('/api/v1/data/Informatik/public/history', headers=get_auth_header(client, ADMIN))
+    assert response.status_code == 200
+    assert response.json() == [
+        {
+            **data2,
+            'id': 2,
+            'user': ADMIN,
+            'timestamp': '2023-07-07T17:00:00+00:00',
+            'approval_timestamp': '2023-07-07T17:00:00+00:00',
+            'approved': True,
+            'approved_by': 'auto',
+        },
+        {
+            **data1,
+            'id': 1,
+            'user': ADMIN,
+            'timestamp': '2023-04-04T10:00:00+00:00',
+            'approval_timestamp': '2023-04-04T10:00:00+00:00',
+            'approved': True,
+            'approved_by': 'auto',
+        },
+    ]
+
+
+def test_public_fsdata_history_unauthorized():
+    response = client.get('/api/v1/data/Informatik/public/history', headers=get_auth_header(client, USER_NO_PERMS))
+    assert response.status_code == 401
+
+
+def test_public_fsdata_history_does_not_exist():
+    response = client.get('/api/v1/data/Metaphysik-Astrologie/public/history', headers=get_auth_header(client, ADMIN))
     assert response.status_code == 404
 
 
@@ -230,8 +360,8 @@ def test_protected_fsdata_history_does_not_exist():
     assert response.status_code == 404
 
 
-def test_approve_fsdata_does_not_exist():
-    response = client.post('/api/v1/data/approve/69', headers=get_auth_header(client, ADMIN))
+def test_approve_public_fsdata_does_not_exist():
+    response = client.post('/api/v1/data/approve/public/69', headers=get_auth_header(client, ADMIN))
     assert response.status_code == 404
 
 
@@ -328,8 +458,13 @@ def test_set_and_get_protected_fsdata(user: str):
     assert queryresponse.json() == {'data': SAMPLE_PROTECTED_DATA, 'is_latest': True}
 
 
-def set_sample_data(fs='Informatik'):
-    response = client.put(f'/api/v1/data/{fs}', json=SAMPLE_DATA, headers=get_auth_header(client, ADMIN))
+def set_sample_base_data(fs='Informatik'):
+    response = client.put(f'/api/v1/data/{fs}/base', json=SAMPLE_BASE_DATA, headers=get_auth_header(client, ADMIN))
+    assert response.status_code == 200
+
+
+def set_sample_public_data(fs='Informatik'):
+    response = client.put(f'/api/v1/data/{fs}/public', json=SAMPLE_PUBLIC_DATA, headers=get_auth_header(client, ADMIN))
     assert response.status_code == 200
 
 
