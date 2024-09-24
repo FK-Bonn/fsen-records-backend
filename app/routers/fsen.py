@@ -1,6 +1,6 @@
 import json
 import logging
-from datetime import date
+from datetime import date, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
@@ -214,6 +214,61 @@ async def get_all_fsdata(current_user: User = Depends(get_current_user(auto_erro
         retval = {key: item for key, item in retval.items() if (not item.base or item.base.data.active)}
         return retval
 
+@router.get("/{limit_date}", response_model=dict[str, FsDataTuple])
+async def get_all_fsdata_for_date(limit_date: date, current_user: User = Depends(get_current_user(auto_error=False))):
+    limit_date += timedelta(days=1)
+    date_string = str(limit_date)
+    retval = {}
+    with DBHelper() as session:
+        base_subquery = session.query(func.max(BaseFsData.id).label('id'), BaseFsData.fs). \
+            where(BaseFsData.approval_timestamp <= date_string). \
+            group_by(BaseFsData.fs).subquery()
+        base_data = session.query(BaseFsData).join(base_subquery, BaseFsData.id == base_subquery.c.id).all()
+        latest_ids_for_base_data = {row.fs: row.id for row in
+                                    session.query(func.max(BaseFsData.id).label('id'), BaseFsData.fs). \
+                                        where(BaseFsData.timestamp <= date_string). \
+                                        group_by(BaseFsData.fs).all()}
+        for row in base_data:
+            retval[row.fs] = FsDataTuple(base=None, public=None, protected=None)
+            retval[row.fs].base = BaseFsDataResponse(data=json.loads(row.data), is_latest=(
+                    row.id == latest_ids_for_base_data.get(row.fs, None)))
+
+        if current_user:
+            public_subquery = session.query(func.max(PublicFsData.id).label('id'), PublicFsData.fs). \
+                where(PublicFsData.approval_timestamp <= date_string). \
+                group_by(PublicFsData.fs).subquery()
+            public_data = session.query(PublicFsData).join(public_subquery,
+                                                           PublicFsData.id == public_subquery.c.id).all()
+            latest_ids_for_public_data = {row.fs: row.id for row in
+                                          session.query(func.max(PublicFsData.id).label('id'), PublicFsData.fs). \
+                                              where(PublicFsData.timestamp <= date_string). \
+                                              group_by(PublicFsData.fs).all()}
+            prot_subquery = session.query(func.max(ProtectedFsData.id).label('id'), ProtectedFsData.fs). \
+                where(ProtectedFsData.approval_timestamp < date_string). \
+                group_by(ProtectedFsData.fs).subquery()
+            prot_data = session.query(ProtectedFsData).join(prot_subquery,
+                                                            ProtectedFsData.id == prot_subquery.c.id).all()
+            latest_ids_for_prot_data = {row.fs: row.id for row in
+                                        session.query(func.max(ProtectedFsData.id).label('id'), ProtectedFsData.fs). \
+                                            where(ProtectedFsData.timestamp <= date_string). \
+                                            group_by(ProtectedFsData.fs).all()}
+            for row in public_data:
+                permission = session.get(Permission, (current_user.username, row.fs))
+                if current_user.admin or (permission and permission.read_public_data):
+                    if row.fs not in retval:
+                        retval[row.fs] = FsDataTuple(base=None, public=None, protected=None)
+                    retval[row.fs].public = PublicFsDataResponse(data=json.loads(row.data), is_latest=(
+                            row.id == latest_ids_for_public_data.get(row.fs, None)))
+            for row in prot_data:
+                permission = session.get(Permission, (current_user.username, row.fs))
+                if current_user.admin or (permission and permission.read_protected_data):
+                    if row.fs not in retval:
+                        retval[row.fs] = FsDataTuple(base=None, public=None, protected=None)
+                    retval[row.fs].protected = ProtectedFsDataResponse(data=json.loads(row.data), is_latest=(
+                            row.id == latest_ids_for_prot_data.get(row.fs, None)))
+        retval = {key: item for key, item in retval.items() if (not item.base or item.base.data.active)}
+        return retval
+
 
 @router.get("/{fs}/base", response_model=BaseFsDataResponse)
 async def get_base_fsdata(fs: str):
@@ -270,7 +325,7 @@ async def get_protected_fsdata(fs: str, current_user: User = Depends(get_current
 async def get_base_fsdata_history(fs: str):
     with DBHelper() as session:
         data = session.query(BaseFsData). \
-            filter(BaseFsData.fs == fs, BaseFsData.timestamp > LAST_FS_DATA_FORMAT_UPDATE). \
+            filter(BaseFsData.fs == fs). \
             order_by(BaseFsData.timestamp.desc()).all()
         if not len(data):
             raise HTTPException(

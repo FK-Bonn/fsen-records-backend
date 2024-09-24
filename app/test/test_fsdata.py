@@ -128,6 +128,57 @@ def test_get_all_fsdata_multiple_fs():
     }
 
 
+def test_get_all_fsdata_limit_date():
+    with freeze_time("2023-04-04T10:00:00Z"):
+        set_sample_base_data(fs='Informatik')
+        set_sample_public_data(fs='Informatik')
+        set_sample_protected_data(fs='Informatik')
+        set_sample_base_data(fs='Metaphysik-Astrologie')
+        set_sample_public_data(fs='Metaphysik-Astrologie')
+        set_sample_protected_data(fs='Metaphysik-Astrologie')
+
+    modified_base_data = {**SAMPLE_BASE_DATA, 'annotation': 'Warning! Do not use!', 'financial_year_override': None}
+    modified_public_data = {**SAMPLE_PUBLIC_DATA, 'email': 'foo@bar.xyz'}
+    modified_protected_data = {**SAMPLE_PROTECTED_DATA, 'iban': 'DE0123456789'}
+    with freeze_time("2023-05-05T10:00:00Z"):
+        response = client.put('/api/v1/data/Informatik/base', json=modified_base_data, headers=get_auth_header(client, ADMIN))
+        assert response.status_code == 200
+        response = client.put('/api/v1/data/Informatik/public', json=modified_public_data, headers=get_auth_header(client, ADMIN))
+        assert response.status_code == 200
+        response = client.put('/api/v1/data/Informatik/protected', json=modified_protected_data, headers=get_auth_header(client, ADMIN))
+        assert response.status_code == 200
+
+    with freeze_time("2023-06-06T10:00:00Z"):
+        response = client.get('/api/v1/data/2023-05-01', headers=get_auth_header(client, ADMIN))
+        assert response.status_code == 200
+        assert response.json() == {
+            'Informatik': {
+                'base': {'data': SAMPLE_BASE_DATA, 'is_latest': True},
+                'public': {'data': SAMPLE_PUBLIC_DATA, 'is_latest': True},
+                'protected': {'data': SAMPLE_PROTECTED_DATA, 'is_latest': True},
+            },
+            'Metaphysik-Astrologie': {
+                'base': {'data': SAMPLE_BASE_DATA, 'is_latest': True},
+                'public': {'data': SAMPLE_PUBLIC_DATA, 'is_latest': True},
+                'protected': {'data': SAMPLE_PROTECTED_DATA, 'is_latest': True},
+            }
+        }
+        response = client.get('/api/v1/data/2023-06-01', headers=get_auth_header(client, ADMIN))
+        assert response.status_code == 200
+        assert response.json() == {
+            'Informatik': {
+                'base': {'data': modified_base_data, 'is_latest': True},
+                'public': {'data': modified_public_data, 'is_latest': True},
+                'protected': {'data': modified_protected_data, 'is_latest': True},
+            },
+            'Metaphysik-Astrologie': {
+                'base': {'data': SAMPLE_BASE_DATA, 'is_latest': True},
+                'public': {'data': SAMPLE_PUBLIC_DATA, 'is_latest': True},
+                'protected': {'data': SAMPLE_PROTECTED_DATA, 'is_latest': True},
+            }
+        }
+
+
 def test_get_all_fsdata_only_public_data_no_protected_data():
     set_sample_base_data()
     set_sample_public_data()
