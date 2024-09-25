@@ -98,7 +98,10 @@ def test_get_all_fsdata_filters_inactive_fsen():
             'protected': {'data': SAMPLE_PROTECTED_DATA, 'is_latest': True},
         },
         'Metaphysik-Astrologie': {
-            'base': {'data': SAMPLE_BASE_DATA, 'is_latest': True},
+            'base': {
+                'data': {**SAMPLE_BASE_DATA, 'fs_id': 'Metaphysik-Astrologie', 'name': 'Metaphysik-Astrologie'},
+                'is_latest': True,
+            },
             'public': None,
             'protected': None,
         }
@@ -121,7 +124,10 @@ def test_get_all_fsdata_multiple_fs():
             'protected': {'data': SAMPLE_PROTECTED_DATA, 'is_latest': True},
         },
         'Metaphysik-Astrologie': {
-            'base': {'data': SAMPLE_BASE_DATA, 'is_latest': True},
+            'base': {
+                'data': {**SAMPLE_BASE_DATA, 'fs_id': 'Metaphysik-Astrologie', 'name': 'Metaphysik-Astrologie'},
+                'is_latest': True,
+            },
             'public': {'data': SAMPLE_PUBLIC_DATA, 'is_latest': True},
             'protected': {'data': SAMPLE_PROTECTED_DATA, 'is_latest': True},
         }
@@ -158,7 +164,10 @@ def test_get_all_fsdata_limit_date():
                 'protected': {'data': SAMPLE_PROTECTED_DATA, 'is_latest': True},
             },
             'Metaphysik-Astrologie': {
-                'base': {'data': SAMPLE_BASE_DATA, 'is_latest': True},
+                'base': {
+                    'data': {**SAMPLE_BASE_DATA, 'fs_id': 'Metaphysik-Astrologie', 'name': 'Metaphysik-Astrologie'},
+                    'is_latest': True,
+                },
                 'public': {'data': SAMPLE_PUBLIC_DATA, 'is_latest': True},
                 'protected': {'data': SAMPLE_PROTECTED_DATA, 'is_latest': True},
             }
@@ -172,7 +181,10 @@ def test_get_all_fsdata_limit_date():
                 'protected': {'data': modified_protected_data, 'is_latest': True},
             },
             'Metaphysik-Astrologie': {
-                'base': {'data': SAMPLE_BASE_DATA, 'is_latest': True},
+                'base': {
+                    'data': {**SAMPLE_BASE_DATA, 'fs_id': 'Metaphysik-Astrologie', 'name': 'Metaphysik-Astrologie'},
+                    'is_latest': True,
+                },
                 'public': {'data': SAMPLE_PUBLIC_DATA, 'is_latest': True},
                 'protected': {'data': SAMPLE_PROTECTED_DATA, 'is_latest': True},
             }
@@ -510,7 +522,8 @@ def test_set_and_get_protected_fsdata(user: str):
 
 
 def set_sample_base_data(fs='Informatik'):
-    response = client.put(f'/api/v1/data/{fs}/base', json=SAMPLE_BASE_DATA, headers=get_auth_header(client, ADMIN))
+    response = client.put(f'/api/v1/data/{fs}/base', json={**SAMPLE_BASE_DATA, 'fs_id': fs, 'name': fs},
+                          headers=get_auth_header(client, ADMIN))
     assert response.status_code == 200
 
 

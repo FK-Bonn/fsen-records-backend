@@ -3,17 +3,34 @@ import json
 from fastapi import APIRouter
 from sqlalchemy import func
 
-from app.database import DBHelper, PublicFsData
+from app.database import DBHelper, PublicFsData, BaseFsData
 from app.routers.fsen import PublicFsDataType
 
 router = APIRouter()
 
 
-@router.get("/public-fs-data", response_model=dict[str, PublicFsDataType])
+class ExportFsDataType(PublicFsDataType):
+    name: str
+
+
+@router.get("/public-fs-data", response_model=dict[str, ExportFsDataType])
 async def export_public_fs_data():
     with DBHelper() as session:
-        subquery = session.query(func.max(PublicFsData.id).label('id'), PublicFsData.fs). \
+        base_subquery = session.query(func.max(BaseFsData.id).label('id'), BaseFsData.fs). \
+            where(BaseFsData.approved.is_(True)). \
+            group_by(BaseFsData.fs).subquery()
+        public_subquery = session.query(func.max(PublicFsData.id).label('id'), PublicFsData.fs). \
             where(PublicFsData.approved.is_(True)). \
             group_by(PublicFsData.fs).subquery()
-        data = session.query(PublicFsData).join(subquery, PublicFsData.id == subquery.c.id).order_by(PublicFsData.fs).all()
-        return {d.fs: json.loads(d.data) for d in data}
+        data = session.query(PublicFsData.fs, PublicFsData.data.label('publicData'), BaseFsData.data.label('baseData')). \
+            select_from(PublicFsData). \
+            join(BaseFsData, BaseFsData.fs == PublicFsData.fs). \
+            join(public_subquery, PublicFsData.id == public_subquery.c.id). \
+            join(base_subquery, BaseFsData.id == base_subquery.c.id). \
+            order_by(PublicFsData.fs).all()
+        retval = {}
+        for d in data:
+            public_data = json.loads(d.publicData)
+            base_data = json.loads(d.baseData)
+            retval[d.fs] = {**public_data, 'name': base_data['name']}
+        return retval
