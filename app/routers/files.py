@@ -10,7 +10,7 @@ from typing import Annotated, BinaryIO
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, Form
 from pydantic import BaseModel
-from sqlalchemy import select, or_, and_, desc
+from sqlalchemy import select, or_, and_, desc, func
 from sqlalchemy.orm import Session
 from starlette import status
 from starlette.responses import FileResponse
@@ -90,6 +90,10 @@ class AnnotateData(BaseModel):
     tags: list[str] | None
     references: list[DocumentReference] | None
     url: str | None
+
+
+class DeleteData(BaseModel):
+    target: DocumentReference
 
 
 def get_base_dir():
@@ -434,6 +438,47 @@ async def annotate(fs: str, data: AnnotateData,
         annotation.created_timestamp = now
         annotation.created_by = current_user.username
         session.add(annotation)
+        session.commit()
+
+@router.post("/{fs}/delete", dependencies=[Depends(admin_only)])
+async def delete(fs: str, data: DeleteData,
+                   current_user: User = Depends(get_current_user())):
+    logging.info(f'delete({fs=}, {data=}, {current_user.username=})')
+    with DBHelper() as session:
+        now = ts()
+        inner_subquery = select(Document.id). \
+            where(Document.fs == fs,
+                  Document.category == data.target.category.value,
+                  Document.request_id == data.target.request_id,
+                  Document.base_name == data.target.base_name,
+                  Document.date_start == (data.target.date_start.isoformat() if data.target.date_start else None),
+                  Document.date_end == (data.target.date_end.isoformat() if data.target.date_end else None),
+                  Document.deleted_by.is_(None))
+        previous_document_id = session.query(func.max(Document.id).label('id')). \
+            where(Document.fs == fs,
+                  Document.category == data.target.category.value,
+                  Document.request_id == data.target.request_id,
+                  Document.base_name == data.target.base_name,
+                  Document.date_start == (data.target.date_start.isoformat() if data.target.date_start else None),
+                  Document.date_end == (data.target.date_end.isoformat() if data.target.date_end else None)). \
+            where(Document.id < inner_subquery.c.id). \
+            scalar()
+
+        session.query(Document). \
+            where(Document.fs == fs,
+                  Document.category == data.target.category.value,
+                  Document.request_id == data.target.request_id,
+                  Document.base_name == data.target.base_name,
+                  Document.date_start == (data.target.date_start.isoformat() if data.target.date_start else None),
+                  Document.date_end == (data.target.date_end.isoformat() if data.target.date_end else None),
+                  Document.deleted_by.is_(None)). \
+            update({'deleted_by': current_user.username, 'deleted_timestamp': now})
+
+        if previous_document_id:
+            logging.info(f'restoring previous document with {previous_document_id=})')
+            session.query(Document). \
+                where(Document.id == previous_document_id). \
+                update({'deleted_by': None, 'deleted_timestamp': None})
         session.commit()
 
 

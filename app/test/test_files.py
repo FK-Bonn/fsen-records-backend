@@ -1128,6 +1128,569 @@ def test_fixed_date_annotations(mocked_base_dir):
         ],
     }
 
+@mock.patch('app.routers.files.get_base_dir', return_value=Path(TemporaryDirectory().name))
+@pytest.mark.parametrize('user', [
+    None,
+    USER_NO_PERMS,
+    USER_INFO_READ,
+    USER_INFO_ALL,
+    ADMIN,
+])
+def test_delete_file(mocked_base_dir, user):
+    handle = BytesIO(EMPTY_PDF_PAGE)
+    handle2 = BytesIO(EMPTY_PDF_PAGE_2)
+    handle3 = BytesIO(EMPTY_PDF_PAGE_3)
+    with freeze_time("2023-04-03T10:00:00Z"):
+        client.post('/api/v1/file/Informatik',
+                    data=DEFAULT_AFSG_DATA,
+                    files={'file': ('hhp.pdf', handle, 'application/pdf')},
+                    headers=get_auth_header(client, ADMIN)).json()
+        client.post('/api/v1/file/Informatik/annotate', json={
+            'target': DEFAULT_AFSG_DATA,
+            'references': None,
+            'tags': ['HHP'],
+            'annotations': None,
+            'url': None,
+        }, headers=get_auth_header(client, ADMIN))
+    with freeze_time("2023-04-04T10:00:00Z"):
+        client.post('/api/v1/file/Informatik',
+                    data=DEFAULT_AFSG_DATA,
+                    files={'file': ('hhp.pdf', handle2, 'application/pdf')},
+                    headers=get_auth_header(client, ADMIN)).json()
+        client.post('/api/v1/file/Informatik/annotate', json={
+            'target': DEFAULT_AFSG_DATA,
+            'references': None,
+            'tags': ['NHHP'],
+            'annotations': None,
+            'url': None,
+        }, headers=get_auth_header(client, ADMIN))
+    with freeze_time("2023-04-05T10:00:00Z"):
+        client.post('/api/v1/file/Informatik',
+                    data=DEFAULT_AFSG_DATA,
+                    files={'file': ('hhp.pdf', handle3, 'application/pdf')},
+                    headers=get_auth_header(client, ADMIN)).json()
+        client.post('/api/v1/file/Informatik/annotate', json={
+            'target': DEFAULT_AFSG_DATA,
+            'references': None,
+            'tags': ['NHHP2'],
+            'annotations': None,
+            'url': None,
+        }, headers=get_auth_header(client, ADMIN))
+
+    response = client.get('/api/v1/file/AFSG', headers=get_auth_header(client, user))
+    assert response.status_code == 200
+    assert mask(response.json()) == {
+        'Informatik': [
+            {
+                'category': 'AFSG',
+                'base_name': 'HHP',
+                'date_start': '2023-10-01',
+                'date_end': '2024-09-30',
+                'request_id': '',
+                'references': None,
+                'filename': f'AFSG-HHP-2023-10-01--2024-09-30-{PDF_HASH_3}.pdf',
+                'tags': ['NHHP2'],
+                'sha256hash': PDF_HASH_3,
+                'file_extension': 'pdf',
+                'uploaded_by': ADMIN if user == ADMIN else None,
+                'created_timestamp': '[masked]' if user == ADMIN else None,
+                'annotations': None,
+                'url': None,
+                'annotations_created_timestamp': '[masked]' if user == ADMIN else None,
+                'annotations_created_by': ADMIN if user == ADMIN else None,
+            },
+        ],
+    }
+
+    response = client.post('/api/v1/file/Informatik/delete', json={
+        'target': DEFAULT_AFSG_DATA,
+    }, headers=get_auth_header(client, ADMIN))
+    assert response.status_code == 200
+
+    response = client.get('/api/v1/file/AFSG', headers=get_auth_header(client, user))
+    assert response.status_code == 200
+    assert mask(response.json()) == {
+        'Informatik': [
+            {
+                'category': 'AFSG',
+                'base_name': 'HHP',
+                'date_start': '2023-10-01',
+                'date_end': '2024-09-30',
+                'request_id': '',
+                'references': None,
+                'filename': f'AFSG-HHP-2023-10-01--2024-09-30-{PDF_HASH_2}.pdf',
+                'tags': ['NHHP'],
+                'sha256hash': PDF_HASH_2,
+                'file_extension': 'pdf',
+                'uploaded_by': ADMIN if user == ADMIN else None,
+                'created_timestamp': '[masked]' if user == ADMIN else None,
+                'annotations': None,
+                'url': None,
+                'annotations_created_timestamp': '[masked]' if user == ADMIN else None,
+                'annotations_created_by': ADMIN if user == ADMIN else None,
+            },
+        ],
+    }
+
+    response = client.post('/api/v1/file/Informatik/delete', json={
+        'target': DEFAULT_AFSG_DATA,
+    }, headers=get_auth_header(client, ADMIN))
+    assert response.status_code == 200
+
+    response = client.get('/api/v1/file/AFSG', headers=get_auth_header(client, user))
+    assert response.status_code == 200
+    assert mask(response.json()) == {
+        'Informatik': [
+            {
+                'category': 'AFSG',
+                'base_name': 'HHP',
+                'date_start': '2023-10-01',
+                'date_end': '2024-09-30',
+                'request_id': '',
+                'references': None,
+                'filename': f'AFSG-HHP-2023-10-01--2024-09-30-{PDF_HASH}.pdf',
+                'tags': ['HHP'],
+                'sha256hash': PDF_HASH,
+                'file_extension': 'pdf',
+                'uploaded_by': ADMIN if user == ADMIN else None,
+                'created_timestamp': '[masked]' if user == ADMIN else None,
+                'annotations': None,
+                'url': None,
+                'annotations_created_timestamp': '[masked]' if user == ADMIN else None,
+                'annotations_created_by': ADMIN if user == ADMIN else None,
+            },
+        ],
+    }
+
+    response = client.post('/api/v1/file/Informatik/delete', json={
+        'target': DEFAULT_AFSG_DATA,
+    }, headers=get_auth_header(client, ADMIN))
+    assert response.status_code == 200
+
+    response = client.get('/api/v1/file/AFSG', headers=get_auth_header(client, user))
+    assert response.status_code == 200
+    assert mask(response.json()) == {}
+
+@mock.patch('app.routers.files.get_base_dir', return_value=Path(TemporaryDirectory().name))
+@pytest.mark.parametrize('user', [
+    None,
+    USER_NO_PERMS,
+    USER_INFO_READ,
+    USER_INFO_ALL,
+])
+def test_delete_file_not_allowed(mocked_base_dir, user):
+    handle = BytesIO(EMPTY_PDF_PAGE)
+    with freeze_time("2023-04-03T10:00:00Z"):
+        client.post('/api/v1/file/Informatik',
+                    data=DEFAULT_AFSG_DATA,
+                    files={'file': ('hhp.pdf', handle, 'application/pdf')},
+                    headers=get_auth_header(client, ADMIN)).json()
+
+    response = client.post('/api/v1/file/Informatik/delete', json={
+        'target': DEFAULT_AFSG_DATA,
+    }, headers=get_auth_header(client, user))
+    assert response.status_code == 401
+
+    response = client.get('/api/v1/file/AFSG', headers=get_auth_header(client, ADMIN))
+    assert response.status_code == 200
+    assert mask(response.json()) == {
+        'Informatik': [
+            {
+                'category': 'AFSG',
+                'base_name': 'HHP',
+                'date_start': '2023-10-01',
+                'date_end': '2024-09-30',
+                'request_id': '',
+                'references': None,
+                'filename': f'AFSG-HHP-2023-10-01--2024-09-30-{PDF_HASH}.pdf',
+                'tags': None,
+                'sha256hash': PDF_HASH,
+                'file_extension': 'pdf',
+                'uploaded_by': ADMIN,
+                'created_timestamp': '[masked]',
+                'annotations': None,
+                'url': None,
+                'annotations_created_timestamp': None,
+                'annotations_created_by': None,
+            },
+        ],
+    }
+
+
+
+@mock.patch('app.routers.files.get_base_dir', return_value=Path(TemporaryDirectory().name))
+def test_delete_file_history(mocked_base_dir):
+    handle = BytesIO(EMPTY_PDF_PAGE)
+    handle2 = BytesIO(EMPTY_PDF_PAGE_2)
+    handle3 = BytesIO(EMPTY_PDF_PAGE_3)
+    with freeze_time("2023-04-03T10:00:00Z"):
+        client.post('/api/v1/file/Informatik',
+                    data=DEFAULT_AFSG_DATA,
+                    files={'file': ('hhp.pdf', handle, 'application/pdf')},
+                    headers=get_auth_header(client, ADMIN)).json()
+        client.post('/api/v1/file/Informatik/annotate', json={
+            'target': DEFAULT_AFSG_DATA,
+            'references': None,
+            'tags': ['HHP'],
+            'annotations': None,
+            'url': None,
+        }, headers=get_auth_header(client, ADMIN))
+    with freeze_time("2023-04-04T10:00:00Z"):
+        client.post('/api/v1/file/Informatik',
+                    data=DEFAULT_AFSG_DATA,
+                    files={'file': ('hhp.pdf', handle2, 'application/pdf')},
+                    headers=get_auth_header(client, ADMIN)).json()
+        client.post('/api/v1/file/Informatik/annotate', json={
+            'target': DEFAULT_AFSG_DATA,
+            'references': None,
+            'tags': ['NHHP'],
+            'annotations': None,
+            'url': None,
+        }, headers=get_auth_header(client, ADMIN))
+    with freeze_time("2023-04-05T10:00:00Z"):
+        client.post('/api/v1/file/Informatik',
+                    data=DEFAULT_AFSG_DATA,
+                    files={'file': ('hhp.pdf', handle3, 'application/pdf')},
+                    headers=get_auth_header(client, ADMIN)).json()
+        client.post('/api/v1/file/Informatik/annotate', json={
+            'target': DEFAULT_AFSG_DATA,
+            'references': None,
+            'tags': ['NHHP2'],
+            'annotations': None,
+            'url': None,
+        }, headers=get_auth_header(client, ADMIN))
+
+    response = client.post('/api/v1/file/Informatik/history',
+                           json={
+                               'category': 'AFSG',
+                               'base_name': 'HHP',
+                               'date_start': '2023-10-01',
+                               'date_end': '2024-09-30',
+                               'request_id': '',
+                           },
+                           headers=get_auth_header(client, ADMIN))
+    assert response.status_code == 200
+    assert mask_list(response.json()) == [
+            {
+                'category': 'AFSG',
+                'base_name': 'HHP',
+                'date_start': '2023-10-01',
+                'date_end': '2024-09-30',
+                'request_id': '',
+                'references': None,
+                'filename': f'AFSG-HHP-2023-10-01--2024-09-30-{PDF_HASH_3}.pdf',
+                'tags': ['NHHP2'],
+                'sha256hash': PDF_HASH_3,
+                'file_extension': 'pdf',
+                'uploaded_by': ADMIN,
+                'created_timestamp': '[masked]',
+                'annotations': None,
+                'url': None,
+                'annotations_created_timestamp': '[masked]',
+                'annotations_created_by': ADMIN,
+                'obsoleted_by': None,
+                'obsoleted_timestamp': None,
+                'deleted_by': None,
+                'deleted_timestamp': None,
+            },
+            {
+                'category': 'AFSG',
+                'base_name': 'HHP',
+                'date_start': '2023-10-01',
+                'date_end': '2024-09-30',
+                'request_id': '',
+                'references': None,
+                'filename': f'AFSG-HHP-2023-10-01--2024-09-30-{PDF_HASH_2}.pdf',
+                'tags': ['NHHP'],
+                'sha256hash': PDF_HASH_2,
+                'file_extension': 'pdf',
+                'uploaded_by': ADMIN,
+                'created_timestamp': '[masked]',
+                'annotations': None,
+                'url': None,
+                'annotations_created_timestamp': '[masked]',
+                'annotations_created_by': ADMIN,
+                'obsoleted_by': None,
+                'obsoleted_timestamp': None,
+                'deleted_by': ADMIN,
+                'deleted_timestamp': '[masked]',
+            },
+            {
+                'category': 'AFSG',
+                'base_name': 'HHP',
+                'date_start': '2023-10-01',
+                'date_end': '2024-09-30',
+                'request_id': '',
+                'references': None,
+                'filename': f'AFSG-HHP-2023-10-01--2024-09-30-{PDF_HASH}.pdf',
+                'tags': ['HHP'],
+                'sha256hash': PDF_HASH,
+                'file_extension': 'pdf',
+                'uploaded_by': ADMIN,
+                'created_timestamp': '[masked]',
+                'annotations': None,
+                'url': None,
+                'annotations_created_timestamp': '[masked]',
+                'annotations_created_by': ADMIN,
+                'obsoleted_by': None,
+                'obsoleted_timestamp': None,
+                'deleted_by': ADMIN,
+                'deleted_timestamp': '[masked]',
+            },
+        ]
+
+    response = client.post('/api/v1/file/Informatik/delete', json={
+        'target': DEFAULT_AFSG_DATA,
+    }, headers=get_auth_header(client, ADMIN))
+    assert response.status_code == 200
+
+    response = client.post('/api/v1/file/Informatik/history',
+                           json={
+                               'category': 'AFSG',
+                               'base_name': 'HHP',
+                               'date_start': '2023-10-01',
+                               'date_end': '2024-09-30',
+                               'request_id': '',
+                           },
+                           headers=get_auth_header(client, ADMIN))
+    assert response.status_code == 200
+    assert mask_list(response.json()) == [
+        {
+            'category': 'AFSG',
+            'base_name': 'HHP',
+            'date_start': '2023-10-01',
+            'date_end': '2024-09-30',
+            'request_id': '',
+            'references': None,
+            'filename': f'AFSG-HHP-2023-10-01--2024-09-30-{PDF_HASH_3}.pdf',
+            'tags': ['NHHP2'],
+            'sha256hash': PDF_HASH_3,
+            'file_extension': 'pdf',
+            'uploaded_by': ADMIN,
+            'created_timestamp': '[masked]',
+            'annotations': None,
+            'url': None,
+            'annotations_created_timestamp': '[masked]',
+            'annotations_created_by': ADMIN,
+            'obsoleted_by': None,
+            'obsoleted_timestamp': None,
+            'deleted_by': ADMIN,
+            'deleted_timestamp': '[masked]',
+        },
+        {
+            'category': 'AFSG',
+            'base_name': 'HHP',
+            'date_start': '2023-10-01',
+            'date_end': '2024-09-30',
+            'request_id': '',
+            'references': None,
+            'filename': f'AFSG-HHP-2023-10-01--2024-09-30-{PDF_HASH_2}.pdf',
+            'tags': ['NHHP'],
+            'sha256hash': PDF_HASH_2,
+            'file_extension': 'pdf',
+            'uploaded_by': ADMIN,
+            'created_timestamp': '[masked]',
+            'annotations': None,
+            'url': None,
+            'annotations_created_timestamp': '[masked]',
+            'annotations_created_by': ADMIN,
+            'obsoleted_by': None,
+            'obsoleted_timestamp': None,
+            'deleted_by': None,
+            'deleted_timestamp': None,
+        },
+        {
+            'category': 'AFSG',
+            'base_name': 'HHP',
+            'date_start': '2023-10-01',
+            'date_end': '2024-09-30',
+            'request_id': '',
+            'references': None,
+            'filename': f'AFSG-HHP-2023-10-01--2024-09-30-{PDF_HASH}.pdf',
+            'tags': ['HHP'],
+            'sha256hash': PDF_HASH,
+            'file_extension': 'pdf',
+            'uploaded_by': ADMIN,
+            'created_timestamp': '[masked]',
+            'annotations': None,
+            'url': None,
+            'annotations_created_timestamp': '[masked]',
+            'annotations_created_by': ADMIN,
+            'obsoleted_by': None,
+            'obsoleted_timestamp': None,
+            'deleted_by': ADMIN,
+            'deleted_timestamp': '[masked]',
+        },
+    ]
+
+    response = client.post('/api/v1/file/Informatik/delete', json={
+        'target': DEFAULT_AFSG_DATA,
+    }, headers=get_auth_header(client, ADMIN))
+    assert response.status_code == 200
+
+    response = client.post('/api/v1/file/Informatik/history',
+                           json={
+                               'category': 'AFSG',
+                               'base_name': 'HHP',
+                               'date_start': '2023-10-01',
+                               'date_end': '2024-09-30',
+                               'request_id': '',
+                           },
+                           headers=get_auth_header(client, ADMIN))
+    assert response.status_code == 200
+    assert mask_list(response.json()) == [
+        {
+            'category': 'AFSG',
+            'base_name': 'HHP',
+            'date_start': '2023-10-01',
+            'date_end': '2024-09-30',
+            'request_id': '',
+            'references': None,
+            'filename': f'AFSG-HHP-2023-10-01--2024-09-30-{PDF_HASH_3}.pdf',
+            'tags': ['NHHP2'],
+            'sha256hash': PDF_HASH_3,
+            'file_extension': 'pdf',
+            'uploaded_by': ADMIN,
+            'created_timestamp': '[masked]',
+            'annotations': None,
+            'url': None,
+            'annotations_created_timestamp': '[masked]',
+            'annotations_created_by': ADMIN,
+            'obsoleted_by': None,
+            'obsoleted_timestamp': None,
+            'deleted_by': ADMIN,
+            'deleted_timestamp': '[masked]',
+        },
+        {
+            'category': 'AFSG',
+            'base_name': 'HHP',
+            'date_start': '2023-10-01',
+            'date_end': '2024-09-30',
+            'request_id': '',
+            'references': None,
+            'filename': f'AFSG-HHP-2023-10-01--2024-09-30-{PDF_HASH_2}.pdf',
+            'tags': ['NHHP'],
+            'sha256hash': PDF_HASH_2,
+            'file_extension': 'pdf',
+            'uploaded_by': ADMIN,
+            'created_timestamp': '[masked]',
+            'annotations': None,
+            'url': None,
+            'annotations_created_timestamp': '[masked]',
+            'annotations_created_by': ADMIN,
+            'obsoleted_by': None,
+            'obsoleted_timestamp': None,
+            'deleted_by': ADMIN,
+            'deleted_timestamp': '[masked]',
+        },
+        {
+            'category': 'AFSG',
+            'base_name': 'HHP',
+            'date_start': '2023-10-01',
+            'date_end': '2024-09-30',
+            'request_id': '',
+            'references': None,
+            'filename': f'AFSG-HHP-2023-10-01--2024-09-30-{PDF_HASH}.pdf',
+            'tags': ['HHP'],
+            'sha256hash': PDF_HASH,
+            'file_extension': 'pdf',
+            'uploaded_by': ADMIN,
+            'created_timestamp': '[masked]',
+            'annotations': None,
+            'url': None,
+            'annotations_created_timestamp': '[masked]',
+            'annotations_created_by': ADMIN,
+            'obsoleted_by': None,
+            'obsoleted_timestamp': None,
+            'deleted_by': None,
+            'deleted_timestamp': None,
+        },
+    ]
+
+    response = client.post('/api/v1/file/Informatik/delete', json={
+        'target': DEFAULT_AFSG_DATA,
+    }, headers=get_auth_header(client, ADMIN))
+    assert response.status_code == 200
+
+    response = client.post('/api/v1/file/Informatik/history',
+                           json={
+                               'category': 'AFSG',
+                               'base_name': 'HHP',
+                               'date_start': '2023-10-01',
+                               'date_end': '2024-09-30',
+                               'request_id': '',
+                           },
+                           headers=get_auth_header(client, ADMIN))
+    assert response.status_code == 200
+    assert mask_list(response.json()) == [
+        {
+            'category': 'AFSG',
+            'base_name': 'HHP',
+            'date_start': '2023-10-01',
+            'date_end': '2024-09-30',
+            'request_id': '',
+            'references': None,
+            'filename': f'AFSG-HHP-2023-10-01--2024-09-30-{PDF_HASH_3}.pdf',
+            'tags': ['NHHP2'],
+            'sha256hash': PDF_HASH_3,
+            'file_extension': 'pdf',
+            'uploaded_by': ADMIN,
+            'created_timestamp': '[masked]',
+            'annotations': None,
+            'url': None,
+            'annotations_created_timestamp': '[masked]',
+            'annotations_created_by': ADMIN,
+            'obsoleted_by': None,
+            'obsoleted_timestamp': None,
+            'deleted_by': ADMIN,
+            'deleted_timestamp': '[masked]',
+        },
+        {
+            'category': 'AFSG',
+            'base_name': 'HHP',
+            'date_start': '2023-10-01',
+            'date_end': '2024-09-30',
+            'request_id': '',
+            'references': None,
+            'filename': f'AFSG-HHP-2023-10-01--2024-09-30-{PDF_HASH_2}.pdf',
+            'tags': ['NHHP'],
+            'sha256hash': PDF_HASH_2,
+            'file_extension': 'pdf',
+            'uploaded_by': ADMIN,
+            'created_timestamp': '[masked]',
+            'annotations': None,
+            'url': None,
+            'annotations_created_timestamp': '[masked]',
+            'annotations_created_by': ADMIN,
+            'obsoleted_by': None,
+            'obsoleted_timestamp': None,
+            'deleted_by': ADMIN,
+            'deleted_timestamp': '[masked]',
+        },
+        {
+            'category': 'AFSG',
+            'base_name': 'HHP',
+            'date_start': '2023-10-01',
+            'date_end': '2024-09-30',
+            'request_id': '',
+            'references': None,
+            'filename': f'AFSG-HHP-2023-10-01--2024-09-30-{PDF_HASH}.pdf',
+            'tags': ['HHP'],
+            'sha256hash': PDF_HASH,
+            'file_extension': 'pdf',
+            'uploaded_by': ADMIN,
+            'created_timestamp': '[masked]',
+            'annotations': None,
+            'url': None,
+            'annotations_created_timestamp': '[masked]',
+            'annotations_created_by': ADMIN,
+            'obsoleted_by': None,
+            'obsoleted_timestamp': None,
+            'deleted_by': ADMIN,
+            'deleted_timestamp': '[masked]',
+        },
+    ]
+
 
 def mask(elements: dict[str, list[dict]]):
     for key, value in elements.items():
