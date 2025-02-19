@@ -187,7 +187,7 @@ async def get_individual_file(fs: str, filename: str, request: Request,
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Unknown filename format",
         )
-    file_path = Config.BASE_PROCEEDINGS_DIR / fs / filename
+    file_path = get_base_dir() / fs / filename
     if file_path.is_file():
         return file_path
     raise HTTPException(

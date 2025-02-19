@@ -5,9 +5,10 @@ import uvicorn
 from fastapi import FastAPI
 from starlette.middleware.cors import CORSMiddleware
 
+from app.routers import electoral_registers
 from app.routers import fsen, proceedings, export, token, files
-from app.routers import users
 from app.routers import payout_requests
+from app.routers import users
 
 logging.basicConfig(
     level=logging.INFO,
@@ -67,6 +68,12 @@ subapp.include_router(
     proceedings.router,
     prefix="/proceedings",
     tags=['proceedings'],
+)
+
+subapp.include_router(
+    electoral_registers.router,
+    prefix="/electoral-registers",
+    tags=['electoral registers'],
 )
 
 subapp.include_router(

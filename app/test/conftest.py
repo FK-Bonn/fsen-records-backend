@@ -198,6 +198,7 @@ class DBTestHelper:
 
 @pytest.fixture(autouse=True)
 def fake_db(monkeypatch, tmp_path):
+    monkeypatch.setattr('app.routers.electoral_registers.DBHelper', lambda: DBTestHelper(tmp_path))
     monkeypatch.setattr('app.routers.export.DBHelper', lambda: DBTestHelper(tmp_path))
     monkeypatch.setattr('app.routers.files.DBHelper', lambda: DBTestHelper(tmp_path))
     monkeypatch.setattr('app.routers.fsen.DBHelper', lambda: DBTestHelper(tmp_path))

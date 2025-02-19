@@ -18,3 +18,6 @@ class Config:
     BASE_DOCUMENTS_DIR = Path(os.environ["BASE_DOCUMENTS_DIR"]) \
         if "BASE_DOCUMENTS_DIR" in os.environ \
         else Path(__file__).parent.resolve().parent / 'data' / 'documents'
+    BASE_ELECTORAL_REGISTERS_DIR = Path(os.environ["BASE_ELECTORAL_REGISTERS_DIR"]) \
+        if "BASE_ELECTORAL_REGISTERS_DIR" in os.environ \
+        else Path(__file__).parent.resolve().parent / 'data' / 'electoral-registers'
