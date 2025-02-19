@@ -1,18 +1,15 @@
 import logging
 from collections.abc import Coroutine, Callable
-from datetime import datetime, timedelta
 from typing import Any, Annotated
 
 from fastapi import HTTPException, Depends, APIRouter
 from fastapi.security import OAuth2PasswordBearer
-from jose import jwt
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import delete
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from starlette import status
 
-from app.config import Config
 from app.database import DBHelper, User, verify_password, Permission as DbPermission, get_password_hash, \
     Base
 from app.routers.token import get_user_for_token
@@ -73,17 +70,6 @@ class NewPasswordData(BaseModel):
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token", auto_error=False)
 
 router = APIRouter()
-
-
-def create_access_token(data: dict, expires_delta: timedelta | None = None):
-    to_encode = data.copy()
-    if expires_delta:
-        expire = datetime.utcnow() + expires_delta
-    else:
-        expire = datetime.utcnow() + timedelta(minutes=15)
-    to_encode.update({"exp": expire})
-    encoded_jwt = jwt.encode(to_encode, Config.SECRET_KEY, algorithm=Config.ALGORITHM)
-    return encoded_jwt
 
 
 async def get_current_user_or_raise(token: str = Depends(oauth2_scheme)) -> User:
