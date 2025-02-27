@@ -453,7 +453,7 @@ async def delete(fs: str, data: DeleteData,
                   Document.base_name == data.target.base_name,
                   Document.date_start == (data.target.date_start.isoformat() if data.target.date_start else None),
                   Document.date_end == (data.target.date_end.isoformat() if data.target.date_end else None),
-                  Document.deleted_by.is_(None))
+                  Document.deleted_by.is_(None)).subquery()
         previous_document_id = session.query(func.max(Document.id).label('id')). \
             where(Document.fs == fs,
                   Document.category == data.target.category.value,
