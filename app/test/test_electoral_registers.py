@@ -68,6 +68,21 @@ def test_electoral_registers_download_succeeds_for_admin(mocked_base_dir):
     assert result.read() == ZIP_FILE
 
 
+@mock.patch('app.routers.electoral_registers.get_base_dir', return_value=Path(TemporaryDirectory().name))
+def test_electoral_registers_only_three_downloads_per_day(mocked_base_dir):
+    create_register(mocked_base_dir.return_value / '2024-11-11' / 'Informatik.zip')
+    for i in range(3):
+        result = client.get('/api/v1/electoral-registers/2024-11-11/Informatik.zip',
+                        headers=get_auth_header(client, ADMIN))
+        assert result.status_code == 200
+        assert result.read() == ZIP_FILE
+
+    result = client.get('/api/v1/electoral-registers/2024-11-11/Informatik.zip',
+                        headers=get_auth_header(client, ADMIN))
+    assert result.status_code == 403
+    assert result.json() == {'detail': 'Only three electoral registers may be downloaded every day'}
+
+
 @pytest.mark.parametrize('user', [
     None,
     ADMIN,
