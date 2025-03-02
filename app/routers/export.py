@@ -32,5 +32,6 @@ async def export_public_fs_data():
         for d in data:
             public_data = json.loads(d.publicData)
             base_data = json.loads(d.baseData)
-            retval[d.fs] = {**public_data, 'name': base_data['name']}
+            if base_data['active']:
+                retval[d.fs] = {**public_data, 'name': base_data['name']}
         return retval

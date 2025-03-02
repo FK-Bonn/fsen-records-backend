@@ -1,7 +1,8 @@
 from fastapi.testclient import TestClient
 
 from app.main import app
-from app.test.test_fsdata import set_sample_public_data, SAMPLE_PUBLIC_DATA, set_sample_base_data
+from app.test.conftest import get_auth_header, ADMIN
+from app.test.test_fsdata import set_sample_public_data, SAMPLE_PUBLIC_DATA, set_sample_base_data, SAMPLE_BASE_DATA
 
 client = TestClient(app)
 
@@ -13,6 +14,10 @@ def test_export_public_fs_data():
     set_sample_public_data()
     set_sample_base_data(fs='Geographie')
     set_sample_public_data(fs='Geographie')
+    set_sample_base_data(fs='Inactive')
+    set_sample_public_data(fs='Inactive')
+    client.put('/api/v1/data/Inactive/base', json={**SAMPLE_BASE_DATA, 'name': 'Inactive', 'active': False},
+               headers=get_auth_header(client, ADMIN))
     response = client.get('/api/v1/export/public-fs-data')
     assert response.status_code == 200
     assert response.json() == {
