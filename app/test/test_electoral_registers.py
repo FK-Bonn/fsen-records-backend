@@ -195,6 +195,52 @@ def test_electoral_registers_status_issue_unassigned_faks(mocked_base_dir, user)
     assert result.json() == expected
 
 
+@pytest.mark.parametrize('user', [
+    None,
+    ADMIN,
+    USER_NO_PERMS,
+    USER_INFO_READ,
+    USER_INFO_ALL,
+])
+@mock.patch('app.routers.electoral_registers.get_base_dir', return_value=Path(TemporaryDirectory().name))
+def test_electoral_registers_get_funds(mocked_base_dir, user):
+    expected = {
+        "unknown": {
+            "numerator": 105809,
+            "denominator": 20
+        },
+        "Psychologie": {
+            "numerator": 62279,
+            "denominator": 60
+        },
+        "Lehramt": {
+            "numerator": 202917,
+            "denominator": 140
+        },
+    }
+    date_dir = mocked_base_dir.return_value / '2025-03-03'
+    date_dir.mkdir(exist_ok=True, parents=True)
+    (date_dir / 'funds-distribution.json').write_text(json.dumps(expected))
+    result = client.get('/api/v1/electoral-registers/2025-03-03/funds', headers=get_auth_header(client, user))
+    assert result.status_code == 200
+    assert result.json() == expected
+
+
+@pytest.mark.parametrize('user', [
+    None,
+    ADMIN,
+    USER_NO_PERMS,
+    USER_INFO_READ,
+    USER_INFO_ALL,
+])
+@mock.patch('app.routers.electoral_registers.get_base_dir', return_value=Path(TemporaryDirectory().name))
+def test_electoral_registers_get_funds_not_found(mocked_base_dir, user):
+    date_dir = mocked_base_dir.return_value / '2025-03-03'
+    date_dir.mkdir(exist_ok=True, parents=True)
+    result = client.get('/api/v1/electoral-registers/2025-03-03/funds', headers=get_auth_header(client, user))
+    assert result.status_code == 404
+
+
 def create_register(target_file: Path):
     target_file.parent.mkdir(parents=True, exist_ok=True)
     target_file.write_bytes(ZIP_FILE)

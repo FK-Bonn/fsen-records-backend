@@ -28,9 +28,23 @@ class ElectoralRegisterStatusData(BaseModel):
     unassigned_faks: list[str]
 
 
+class Fraction(BaseModel):
+    numerator: int
+    denominator: int
+
 def get_base_dir():
     return Config.BASE_ELECTORAL_REGISTERS_DIR
 
+
+@router.get("/{deadline_date}/funds", response_model=dict[str, Fraction])
+async def get_funds(deadline_date: date):
+    file_path = get_base_dir() / str(deadline_date) / 'funds-distribution.json'
+    if file_path.is_file():
+        return json.loads(file_path.read_text())
+    raise HTTPException(
+        status_code=status.HTTP_404_NOT_FOUND,
+        detail="File not found",
+    )
 
 @router.get("/{deadline_date}/{filename}", response_class=FileResponse, dependencies=[Depends(admin_only)])
 async def get_individual_file(deadline_date: date, filename: str,
