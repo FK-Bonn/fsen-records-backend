@@ -36,15 +36,16 @@ def get_base_dir():
     return Config.BASE_ELECTORAL_REGISTERS_DIR
 
 
-@router.get("/{deadline_date}/funds", response_model=dict[str, Fraction])
-async def get_funds(deadline_date: date):
-    file_path = get_base_dir() / str(deadline_date) / 'funds-distribution.json'
-    if file_path.is_file():
-        return json.loads(file_path.read_text())
-    raise HTTPException(
-        status_code=status.HTTP_404_NOT_FOUND,
-        detail="File not found",
-    )
+@router.get("/funds", response_model=dict[date, dict[str, Fraction]])
+async def get_funds():
+    funds = {}
+    for subdir in sorted(d for d in get_base_dir().glob('*') if d.is_dir()):
+        file_path = subdir / 'funds-distribution.json'
+        if file_path.is_file():
+            value = json.loads(file_path.read_text())
+            funds[subdir.name] = dict(sorted(value.items()))
+    return funds
+
 
 @router.get("/{deadline_date}/{filename}", response_class=FileResponse, dependencies=[Depends(admin_only)])
 async def get_individual_file(deadline_date: date, filename: str,

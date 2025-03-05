@@ -203,10 +203,26 @@ def test_electoral_registers_status_issue_unassigned_faks(mocked_base_dir, user)
     USER_INFO_ALL,
 ])
 @mock.patch('app.routers.electoral_registers.get_base_dir', return_value=Path(TemporaryDirectory().name))
-def test_electoral_registers_get_funds(mocked_base_dir, user):
-    expected = {
+def test_funds_index(mocked_base_dir, user):
+    expected1 = create_funds(mocked_base_dir.return_value / '2024-11-11', 69)
+    expected2 = create_funds(mocked_base_dir.return_value / '2024-11-12', 420)
+    result = client.get('/api/v1/electoral-registers/funds', headers=get_auth_header(client, user))
+    assert result.status_code == 200
+    assert result.json() == {
+        '2024-11-11': expected1,
+        '2024-11-12': expected2,
+    }
+
+
+def create_register(target_file: Path):
+    target_file.parent.mkdir(parents=True, exist_ok=True)
+    target_file.write_bytes(ZIP_FILE)
+
+
+def create_funds(target_dir: Path, value: int) -> dict:
+    content = {
         "unknown": {
-            "numerator": 105809,
+            "numerator": value,
             "denominator": 20
         },
         "Psychologie": {
@@ -218,29 +234,6 @@ def test_electoral_registers_get_funds(mocked_base_dir, user):
             "denominator": 140
         },
     }
-    date_dir = mocked_base_dir.return_value / '2025-03-03'
-    date_dir.mkdir(exist_ok=True, parents=True)
-    (date_dir / 'funds-distribution.json').write_text(json.dumps(expected))
-    result = client.get('/api/v1/electoral-registers/2025-03-03/funds', headers=get_auth_header(client, user))
-    assert result.status_code == 200
-    assert result.json() == expected
-
-
-@pytest.mark.parametrize('user', [
-    None,
-    ADMIN,
-    USER_NO_PERMS,
-    USER_INFO_READ,
-    USER_INFO_ALL,
-])
-@mock.patch('app.routers.electoral_registers.get_base_dir', return_value=Path(TemporaryDirectory().name))
-def test_electoral_registers_get_funds_not_found(mocked_base_dir, user):
-    date_dir = mocked_base_dir.return_value / '2025-03-03'
-    date_dir.mkdir(exist_ok=True, parents=True)
-    result = client.get('/api/v1/electoral-registers/2025-03-03/funds', headers=get_auth_header(client, user))
-    assert result.status_code == 404
-
-
-def create_register(target_file: Path):
-    target_file.parent.mkdir(parents=True, exist_ok=True)
-    target_file.write_bytes(ZIP_FILE)
+    target_dir.mkdir(exist_ok=True, parents=True)
+    (target_dir / 'funds-distribution.json').write_text(json.dumps(content))
+    return content
