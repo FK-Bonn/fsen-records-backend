@@ -148,6 +148,10 @@ def test_electoral_registers_status_success(mocked_base_dir, user):
     result = client.get('/api/v1/electoral-registers/status', headers=get_auth_header(client, user))
     assert result.status_code == 200
     assert result.json() == expected
+    result = client.get('/api/v1/electoral-registers/status/unassigned-faks', headers=get_auth_header(client, user))
+    assert result.status_code == 200
+    result = client.get('/api/v1/electoral-registers/status/last-run', headers=get_auth_header(client, user))
+    assert result.status_code == 200
 
 
 @pytest.mark.parametrize('user', [
@@ -168,8 +172,12 @@ def test_electoral_registers_status_issue_missed_run(mocked_base_dir, user):
     mocked_base_dir.return_value.mkdir(exist_ok=True, parents=True)
     (mocked_base_dir.return_value / 'status.json').write_text(json.dumps(expected))
     result = client.get('/api/v1/electoral-registers/status', headers=get_auth_header(client, user))
-    assert result.status_code == 500
+    assert result.status_code == 200
     assert result.json() == expected
+    result = client.get('/api/v1/electoral-registers/status/unassigned-faks', headers=get_auth_header(client, user))
+    assert result.status_code == 200
+    result = client.get('/api/v1/electoral-registers/status/last-run', headers=get_auth_header(client, user))
+    assert result.status_code == 500
 
 
 @pytest.mark.parametrize('user', [
@@ -191,8 +199,39 @@ def test_electoral_registers_status_issue_unassigned_faks(mocked_base_dir, user)
     mocked_base_dir.return_value.mkdir(exist_ok=True, parents=True)
     (mocked_base_dir.return_value / 'status.json').write_text(json.dumps(expected))
     result = client.get('/api/v1/electoral-registers/status', headers=get_auth_header(client, user))
-    assert result.status_code == 500
+    assert result.status_code == 200
     assert result.json() == expected
+    result = client.get('/api/v1/electoral-registers/status/unassigned-faks', headers=get_auth_header(client, user))
+    assert result.status_code == 500
+    result = client.get('/api/v1/electoral-registers/status/last-run', headers=get_auth_header(client, user))
+    assert result.status_code == 200
+
+@pytest.mark.parametrize('user', [
+    None,
+    ADMIN,
+    USER_NO_PERMS,
+    USER_INFO_READ,
+    USER_INFO_ALL,
+])
+@mock.patch('app.routers.electoral_registers.get_base_dir', return_value=Path(TemporaryDirectory().name))
+def test_electoral_registers_status_issue_unassigned_faks_and_last_run(mocked_base_dir, user):
+    error_ts = (datetime.now(tz=timezone.utc) - timedelta(hours=26)).isoformat()
+    expected = {
+        'last_successful_run': error_ts,
+        'last_data_change': '1970-01-01T00:00:00Z',
+        'unassigned_faks': [
+            "FAK(degree='Promotion', subject='Didaktik der Naturwiss.')"
+        ],
+    }
+    mocked_base_dir.return_value.mkdir(exist_ok=True, parents=True)
+    (mocked_base_dir.return_value / 'status.json').write_text(json.dumps(expected))
+    result = client.get('/api/v1/electoral-registers/status', headers=get_auth_header(client, user))
+    assert result.status_code == 200
+    assert result.json() == expected
+    result = client.get('/api/v1/electoral-registers/status/unassigned-faks', headers=get_auth_header(client, user))
+    assert result.status_code == 500
+    result = client.get('/api/v1/electoral-registers/status/last-run', headers=get_auth_header(client, user))
+    assert result.status_code == 500
 
 
 @pytest.mark.parametrize('user', [
