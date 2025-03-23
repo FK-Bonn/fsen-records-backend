@@ -97,7 +97,7 @@ async def get_individual_file(deadline_date: date, filename: str,
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Unknown filename format",
         )
-    raise_if_more_than_three_downloads_today()
+    raise_if_more_than_five_downloads_today()
     file_path = get_base_dir() / str(deadline_date) / filename
     if file_path.is_file():
         log_access(file_path, current_user.username)
@@ -108,15 +108,15 @@ async def get_individual_file(deadline_date: date, filename: str,
     )
 
 
-def raise_if_more_than_three_downloads_today():
+def raise_if_more_than_five_downloads_today():
     start_of_today = datetime.now(tz=timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0).isoformat()
     with DBHelper() as session:
         count = session.query(func.count(ElectoralRegisterDownload.id)). \
             where(ElectoralRegisterDownload.timestamp > start_of_today).scalar()
-        if count >= 3:
+        if count >= 5:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="Only three electoral registers may be downloaded every day",
+                detail="Only five electoral registers may be downloaded every day",
             )
 
 def log_access(file_path: Path, username: str):
