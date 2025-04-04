@@ -155,6 +155,26 @@ class ElectoralRegisterDownload(Base):
     username: Mapped[str] = mapped_column(String(200), nullable=False)
     filepath: Mapped[str | None] = mapped_column(Text, nullable=False)
 
+
+class Election(Base):
+    __tablename__ = "elections"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    election_id: Mapped[str] = mapped_column(String(200), nullable=False)
+    fs: Mapped[str] = mapped_column(String(200), nullable=False)
+    committee: Mapped[str] = mapped_column(String(200), nullable=False)
+    election_method: Mapped[str] = mapped_column(String(200), nullable=False)
+    first_election_day: Mapped[str] = mapped_column(String(200), nullable=False)
+    last_election_day: Mapped[str] = mapped_column(String(200), nullable=False)
+    electoral_register_request_date: Mapped[str] = mapped_column(String(200), nullable=False)
+    electoral_register_hand_out_date: Mapped[str] = mapped_column(String(200), nullable=False)
+    result_url: Mapped[str] = mapped_column(String(200), nullable=False)
+    result_published_date: Mapped[str] = mapped_column(String(200), nullable=False)
+    scrutiny_status: Mapped[str] = mapped_column(String(200), nullable=False)
+    comments: Mapped[str] = mapped_column(Text, nullable=False)
+    last_modified_timestamp: Mapped[str] = mapped_column(String(200), nullable=False)
+    last_modified_by: Mapped[str] = mapped_column(String(200), nullable=False)
+
+
 class DBHelper:
     def __init__(self):
         self.connection_str = Config.DB_CONNECTION_STRING

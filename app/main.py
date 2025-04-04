@@ -5,6 +5,7 @@ import uvicorn
 from fastapi import FastAPI
 from starlette.middleware.cors import CORSMiddleware
 
+from app.routers import elections
 from app.routers import electoral_registers
 from app.routers import fsen, proceedings, export, token, files
 from app.routers import payout_requests
@@ -74,6 +75,12 @@ subapp.include_router(
     electoral_registers.router,
     prefix="/electoral-registers",
     tags=['electoral registers'],
+)
+
+subapp.include_router(
+    elections.router,
+    prefix="/elections",
+    tags=['elections'],
 )
 
 subapp.include_router(

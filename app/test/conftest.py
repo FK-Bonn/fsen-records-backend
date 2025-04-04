@@ -198,6 +198,7 @@ class DBTestHelper:
 
 @pytest.fixture(autouse=True)
 def fake_db(monkeypatch, tmp_path):
+    monkeypatch.setattr('app.routers.elections.DBHelper', lambda: DBTestHelper(tmp_path))
     monkeypatch.setattr('app.routers.electoral_registers.DBHelper', lambda: DBTestHelper(tmp_path))
     monkeypatch.setattr('app.routers.export.DBHelper', lambda: DBTestHelper(tmp_path))
     monkeypatch.setattr('app.routers.files.DBHelper', lambda: DBTestHelper(tmp_path))
@@ -222,7 +223,7 @@ def get_token(client: TestClient, user: str):
     return response.json()['access_token']
 
 
-def get_auth_header(client: TestClient, user: str = USER_INFO_READ):
+def get_auth_header(client: TestClient, user: str | None = USER_INFO_READ):
     if not user:
         return {}
     token = get_token(client, user)
