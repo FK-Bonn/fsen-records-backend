@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 from starlette import status
 
 from app.database import DBHelper, User, verify_password, Permission as DbPermission, get_password_hash, \
-    Base
+    Base, AdminPermission, UserPassword
 from app.routers.token import get_user_for_token
 
 
@@ -96,12 +96,23 @@ def get_current_user(auto_error: bool = True) -> Callable[[str], Coroutine[Any, 
         return get_current_user_or_none
 
 
+def is_admin(username: str, session: Session | None = None) -> bool:
+    if session:
+        user = session.get(AdminPermission, username)
+        return user is not None
+    with DBHelper() as session:
+        user = session.get(AdminPermission, username)
+        return user is not None
+
+
 async def admin_only(current_user: User = Depends(get_current_user())):
-    if not current_user.admin:
+    if not is_admin(current_user.username):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="This requires admin rights",
         )
+    else:
+        pass
 
 
 def check_if_user_may_grant_permissions(current_user: User, userdata: PermissionsForUser, session: Session):
@@ -160,10 +171,14 @@ async def create_user(userdata: UserForCreation, current_user: User = Depends(ge
             items: list[Base] = []
             user = User()
             user.username = userdata.username
-            user.hashed_password = get_password_hash(userdata.password)
-            user.admin = userdata.admin
+            user.full_name = userdata.username
             user.created_by = current_user.username
             items.append(user)
+            user_password = UserPassword(user=userdata.username, hashed_password=get_password_hash(userdata.password))
+            items.append(user_password)
+            if userdata.admin:
+                admin_permission = AdminPermission(user=userdata.username, created_by=current_user.username)
+                items.append(admin_permission)
             for p in userdata.permissions:
                 permission = to_db_permission(p, userdata.username)
                 items.append(permission)
@@ -171,7 +186,7 @@ async def create_user(userdata: UserForCreation, current_user: User = Depends(ge
             session.add_all(items)
             session.commit()
             return {'username': user.username,
-                    'admin': user.admin,
+                    'admin': bool(user.admin),
                     'created_by': user.created_by,
                     'permissions': [p for p in user.permissions]}
     except IntegrityError:
@@ -197,7 +212,11 @@ async def set_user_permissions(userdata: PermissionsForUser, current_user: User 
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="User not found",
             )
-        user.admin = userdata.admin
+        stmt = delete(AdminPermission).where(AdminPermission.user == user.username).execution_options(
+            synchronize_session="fetch")
+        session.execute(stmt)
+        if userdata.admin:
+            session.add(AdminPermission(user=userdata.username, created_by=current_user.username))
         stmt = delete(DbPermission).where(DbPermission.user == user.username).execution_options(
             synchronize_session="fetch")
         session.execute(stmt)
@@ -207,7 +226,7 @@ async def set_user_permissions(userdata: PermissionsForUser, current_user: User 
                 session.add(permission)
         session.commit()
         return {'username': user.username,
-                'admin': user.admin,
+                'admin': bool(user.admin),
                 'created_by': user.created_by,
                 'permissions': [p for p in user.permissions]}
 
@@ -239,7 +258,7 @@ async def patch_user_permissions(userdata: PermissionList, current_user: User = 
         actor: User = session.get(User, current_user.username)
         managed_fs = {p.fs for p in actor.permissions if p.write_permissions}
         return {'username': user.username,
-                'admin': user.admin,
+                'admin': bool(user.admin),
                 'created_by': user.created_by,
                 'permissions': [p for p in user.permissions if p.fs in managed_fs]}
 
@@ -267,11 +286,11 @@ async def get_user_list(current_user: User = Depends(get_current_user())):
     with DBHelper() as session:
         users: list[User] = session.query(User).all()
         allusers = {}
-        if current_user.admin:
+        if is_admin(current_user.username, session):
             for user in users:
                 allusers[user.username] = {
                     'username': user.username,
-                    'admin': user.admin,
+                    'admin': bool(user.admin),
                     'created_by': user.created_by,
                     'permissions': [p for p in user.permissions],
                 }
@@ -282,7 +301,7 @@ async def get_user_list(current_user: User = Depends(get_current_user())):
                 if {p.fs for p in user.permissions}.intersection(readable_fs):
                     allusers[user.username] = {
                         'username': user.username,
-                        'admin': user.admin,
+                        'admin': bool(user.admin),
                         'created_by': user.created_by,
                         'permissions': [p for p in user.permissions if p.fs in readable_fs],
                     }
@@ -295,7 +314,7 @@ async def who_am_i(current_user: User = Depends(get_current_user())):
         user: User = session.get(User, current_user.username)
         return {
             'username': user.username,
-            'admin': user.admin,
+            'admin': bool(user.admin),
             'created_by': user.created_by,
             'permissions': [p for p in user.permissions],
         }
@@ -306,12 +325,13 @@ async def change_password(password_change_data: PasswordChangeData, current_user
     logging.info(f'{current_user.username} is changing their password')
     with DBHelper() as session:
         user: User = session.get(User, current_user.username)
-        if not verify_password(password_change_data.current_password, user.hashed_password):
+        hashed_password = user.password.hashed_password if user.password else None
+        if not verify_password(password_change_data.current_password, hashed_password):
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Wrong current password",
             )
-        user.hashed_password = get_password_hash(password_change_data.new_password)
+        user.password.hashed_password = get_password_hash(password_change_data.new_password)
         session.commit()
 
 
@@ -326,5 +346,10 @@ async def change_password_for_user(username: str, new_password_data: NewPassword
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="That user does not exist",
             )
-        user.hashed_password = get_password_hash(new_password_data.new_password)
+        if not user.password:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="That user does not have a password",
+            )
+        user.password.hashed_password = get_password_hash(new_password_data.new_password)
         session.commit()

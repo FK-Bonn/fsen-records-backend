@@ -7,7 +7,7 @@ from sqlalchemy_utils import create_database, database_exists
 from app.config import Config
 
 
-def verify_password(plain_password, hashed_password):
+def verify_password(plain_password: str, hashed_password: str | None):
     pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
     return pwd_context.verify(plain_password, hashed_password)
 
@@ -24,9 +24,24 @@ class Base(DeclarativeBase):
 class User(Base):
     __tablename__ = "users"
     username: Mapped[str] = mapped_column(String(200), unique=True, primary_key=True)
-    hashed_password: Mapped[str] = mapped_column(String(200))
-    admin: Mapped[bool] = mapped_column(default=False)
+    full_name: Mapped[str] = mapped_column(String(200))
+    password: Mapped['UserPassword'] = relationship(back_populates='user_obj')
+    admin: Mapped['AdminPermission'] = relationship(back_populates='user_obj')
     permissions = relationship('Permission')
+    created_by: Mapped[str] = mapped_column(String(200))
+
+
+class UserPassword(Base):
+    __tablename__ = "user_passwords"
+    user: Mapped[str] = mapped_column(ForeignKey(User.username, ondelete='CASCADE'), primary_key=True)
+    user_obj: Mapped['User'] = relationship(back_populates='password')
+    hashed_password: Mapped[str] = mapped_column(String(200))
+
+
+class AdminPermission(Base):
+    __tablename__ = "admin_permissions"
+    user: Mapped[str] = mapped_column(ForeignKey(User.username, ondelete='CASCADE'), primary_key=True)
+    user_obj: Mapped['User'] = relationship(back_populates='admin')
     created_by: Mapped[str] = mapped_column(String(200))
 
 

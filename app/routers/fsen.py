@@ -8,7 +8,7 @@ from sqlalchemy import func
 from starlette import status
 
 from app.database import User, DBHelper, Permission, PublicFsData, ProtectedFsData, BaseFsData
-from app.routers.users import get_current_user, admin_only
+from app.routers.users import get_current_user, admin_only, is_admin
 from app.util import ts, to_json
 
 LAST_FS_DATA_FORMAT_UPDATE = '2023-01-01'
@@ -146,7 +146,7 @@ def check_permission(current_user: User, fs: str,
                      write_protected_data: bool = False,
                      submit_payout_request: bool = False,
                      ):
-    if current_user.admin:
+    if is_admin(current_user.username):
         return
     with DBHelper() as session:
         permission = session.get(Permission, (current_user.username, fs))
@@ -199,14 +199,14 @@ async def get_all_fsdata(current_user: User = Depends(get_current_user(auto_erro
                                             group_by(ProtectedFsData.fs).all()}
             for row in public_data:
                 permission = session.get(Permission, (current_user.username, row.fs))
-                if current_user.admin or (permission and permission.read_public_data):
+                if is_admin(current_user.username, session) or (permission and permission.read_public_data):
                     if row.fs not in retval:
                         retval[row.fs] = FsDataTuple(base=None, public=None, protected=None)
                     retval[row.fs].public = PublicFsDataResponse(data=json.loads(row.data), is_latest=(
                             row.id == latest_ids_for_public_data.get(row.fs, None)))
             for row in prot_data:
                 permission = session.get(Permission, (current_user.username, row.fs))
-                if current_user.admin or (permission and permission.read_protected_data):
+                if is_admin(current_user.username, session) or (permission and permission.read_protected_data):
                     if row.fs not in retval:
                         retval[row.fs] = FsDataTuple(base=None, public=None, protected=None)
                     retval[row.fs].protected = ProtectedFsDataResponse(data=json.loads(row.data), is_latest=(
@@ -254,14 +254,14 @@ async def get_all_fsdata_for_date(limit_date: date, current_user: User = Depends
                                             group_by(ProtectedFsData.fs).all()}
             for row in public_data:
                 permission = session.get(Permission, (current_user.username, row.fs))
-                if current_user.admin or (permission and permission.read_public_data):
+                if is_admin(current_user.username, session) or (permission and permission.read_public_data):
                     if row.fs not in retval:
                         retval[row.fs] = FsDataTuple(base=None, public=None, protected=None)
                     retval[row.fs].public = PublicFsDataResponse(data=json.loads(row.data), is_latest=(
                             row.id == latest_ids_for_public_data.get(row.fs, None)))
             for row in prot_data:
                 permission = session.get(Permission, (current_user.username, row.fs))
-                if current_user.admin or (permission and permission.read_protected_data):
+                if is_admin(current_user.username, session) or (permission and permission.read_protected_data):
                     if row.fs not in retval:
                         retval[row.fs] = FsDataTuple(base=None, public=None, protected=None)
                     retval[row.fs].protected = ProtectedFsDataResponse(data=json.loads(row.data), is_latest=(
@@ -426,7 +426,7 @@ async def set_protected_fsdata(data: ProtectedFsDataType, fs: str,
         now = ts()
         db_data.timestamp = now
         db_data.data = to_json(data)
-        if current_user.admin:
+        if is_admin(current_user.username, session):
             db_data.approved = True
             db_data.approved_by = 'auto'
             db_data.approval_timestamp = now

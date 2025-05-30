@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy_utils import database_exists, create_database
 from starlette.testclient import TestClient
 
-from app.database import Base, User, get_password_hash, Permission, PayoutRequest
+from app.database import Base, User, get_password_hash, Permission, PayoutRequest, AdminPermission, UserPassword
 
 ADMIN = 'admin'
 USER_NO_PERMS = 'user_no_perms'
@@ -97,10 +97,15 @@ class DBTestHelper:
         assert self._session
         user = User()
         user.username = username
+        user.full_name = username
         user.created_by = created_by
-        user.hashed_password = _cached_password_hash("password")
-        user.admin = admin
         self._session.add(user)
+        user_password = UserPassword(user=username, hashed_password=_cached_password_hash("password"))
+        self._session.add(user_password)
+        if admin:
+            admin_permission = AdminPermission(user=username, created_by='test')
+            self._session.add(admin_permission)
+
 
     def add_permission(self, username: str, fs: str,
                        read_permissions: bool = False,

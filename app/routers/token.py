@@ -7,7 +7,7 @@ from pydantic import BaseModel
 from starlette import status
 
 from app.config import Config
-from app.database import DBHelper, User, verify_password
+from app.database import DBHelper, User, verify_password, UserPassword
 
 
 class Token(BaseModel):
@@ -24,21 +24,23 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token", auto_error=False)
 router = APIRouter()
 
 
-def get_user(username: str | None) -> User | None:
+def get_user(username: str | None) -> tuple[User | None, str|None]:
     if not username:
-        return None
+        return None, None
     with DBHelper() as session:
         user = session.get(User, username)
-        if user:
-            return user
-    return None
+        password_hash = None
+        user_hash = session.get(UserPassword, username)
+        if user_hash:
+            password_hash = user_hash.hashed_password
+        return user, password_hash
 
 
 def authenticate_user(username: str, password: str) -> User | None:
-    user = get_user(username)
+    user, hashed_password = get_user(username)
     if not user:
         return None
-    if not verify_password(password, user.hashed_password):
+    if not verify_password(password, hashed_password):
         return None
     return user
 
@@ -68,7 +70,7 @@ def get_user_for_token(token: str) -> User:
         token_data = TokenData(username=username)
     except JWTError:
         raise credentials_exception
-    user = get_user(username=token_data.username)
+    user, _ = get_user(username=token_data.username)
     if user is None:
         raise credentials_exception
     return user

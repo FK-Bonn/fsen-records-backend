@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session, make_transient
 from starlette import status
 
 from app.database import User, DBHelper, PayoutRequest
-from app.routers.users import get_current_user, admin_only
+from app.routers.users import get_current_user, admin_only, is_admin
 from app.util import ts, get_europe_berlin_date
 
 router = APIRouter()
@@ -94,7 +94,7 @@ def check_user_may_submit_payout_request(current_user: User, fs: str, session: S
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="User not found",
         )
-    if creator.admin:
+    if is_admin(current_user.username, session):
         return
 
     # TODO remove this block when regular users may request BFSG/VORANKUENDIGUNG themselves
@@ -230,7 +230,7 @@ async def list_requests(_type: PayoutRequestType, current_user: User = Depends(g
             filter(PayoutRequest.type == _type.value). \
             group_by(PayoutRequest.request_id).subquery()
         data = session.query(PayoutRequest).join(subquery, PayoutRequest.id == subquery.c.id).all()
-        if current_user and current_user.admin:
+        if current_user and is_admin(current_user.username, session):
             return data
         else:
             return [PublicPayoutRequest(**item.__dict__) for item in data]
@@ -247,7 +247,7 @@ async def list_requests_before_date(_type: PayoutRequestType, limit_date: date,
             filter(PayoutRequest.type == _type.value). \
             group_by(PayoutRequest.request_id).subquery()
         data = session.query(PayoutRequest).join(subquery, PayoutRequest.id == subquery.c.id).all()
-        if current_user and current_user.admin:
+        if current_user and is_admin(current_user.username, session):
             return data
         else:
             return [PublicPayoutRequest(**item.__dict__) for item in data]
@@ -394,6 +394,6 @@ async def get_request_history(_type: PayoutRequestType, request_id: str,
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="PayoutRequest not found",
             )
-        if current_user and current_user.admin:
+        if current_user and is_admin(current_user.username, session):
             return payout_request_history
         return [PublicPayoutRequest(**item.__dict__) for item in payout_request_history]

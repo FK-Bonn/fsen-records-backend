@@ -17,7 +17,7 @@ from starlette.responses import FileResponse
 
 from app.config import Config
 from app.database import User, DBHelper, Permission, Document, Annotation
-from app.routers.users import get_current_user, admin_only
+from app.routers.users import get_current_user, admin_only, is_admin
 from app.util import ts, to_json
 
 LAST_FS_DATA_FORMAT_UPDATE = '2023-01-01'
@@ -109,7 +109,7 @@ def check_permission(current_user: User, fs: str,
                      write_protected_data: bool = False,
                      submit_payout_request: bool = False,
                      ):
-    if current_user.admin:
+    if is_admin(current_user.username):
         return
     with DBHelper() as session:
         permission = session.get(Permission, (current_user.username, fs))
@@ -162,10 +162,9 @@ async def get_individual_file(fs: str, filename: str, current_user: User = Depen
 async def list_documents(category: DocumentCategory, current_user: User = Depends(get_current_user(auto_error=False))):
     items = defaultdict(list)
     with DBHelper() as session:
-        is_admin = False
+        is_admin_ = False
         if current_user:
-            user = session.get(User, current_user.username)
-            is_admin = user.admin if user else False
+            is_admin_ = is_admin(current_user.username, session)
         statement = select(
             Document.fs,
             Document.category,
@@ -208,10 +207,10 @@ async def list_documents(category: DocumentCategory, current_user: User = Depend
             tags=json.loads(item.tags) if item.tags else None,
             references=json.loads(item.references) if item.references else None,
             url=item.url if item.url else None,
-            annotations_created_timestamp=item.annotations_created_timestamp if is_admin else None,
-            annotations_created_by=item.created_by if is_admin else None,
-            created_timestamp=item.created_timestamp if is_admin else None,
-            uploaded_by=item.uploaded_by if is_admin else None,
+            annotations_created_timestamp=item.annotations_created_timestamp if is_admin_ else None,
+            annotations_created_by=item.created_by if is_admin_ else None,
+            created_timestamp=item.created_timestamp if is_admin_ else None,
+            uploaded_by=item.uploaded_by if is_admin_ else None,
         ))
     return items
 
@@ -223,10 +222,9 @@ async def list_documents_with_limit(category: DocumentCategory, limit_date: date
     date_string = str(limit_date)
     items = defaultdict(list)
     with DBHelper() as session:
-        is_admin = False
+        is_admin_ = False
         if current_user:
-            user = session.get(User, current_user.username)
-            is_admin = user.admin if user else False
+            is_admin_ = is_admin(current_user.username, session)
         statement = select(
             Document.fs,
             Document.category,
@@ -271,10 +269,10 @@ async def list_documents_with_limit(category: DocumentCategory, limit_date: date
             tags=json.loads(item.tags) if item.tags else None,
             references=json.loads(item.references) if item.references else None,
             url=item.url if item.url else None,
-            annotations_created_timestamp=item.annotations_created_timestamp if is_admin else None,
-            annotations_created_by=item.created_by if is_admin else None,
-            created_timestamp=item.created_timestamp if is_admin else None,
-            uploaded_by=item.uploaded_by if is_admin else None,
+            annotations_created_timestamp=item.annotations_created_timestamp if is_admin_ else None,
+            annotations_created_by=item.created_by if is_admin_ else None,
+            created_timestamp=item.created_timestamp if is_admin_ else None,
+            uploaded_by=item.uploaded_by if is_admin_ else None,
         ))
     return items
 
@@ -283,10 +281,9 @@ async def list_documents_with_limit(category: DocumentCategory, limit_date: date
 async def document_history(fs: str, reference: DocumentReference,
                            current_user: User = Depends(get_current_user(auto_error=False))):
     with DBHelper() as session:
-        is_admin = False
+        is_admin_ = False
         if current_user:
-            user = session.get(User, current_user.username)
-            is_admin = user.admin if user else False
+            is_admin_ = is_admin(current_user.username, session)
         statement = select(
             Document.fs,
             Document.category,
@@ -337,14 +334,14 @@ async def document_history(fs: str, reference: DocumentReference,
             tags=json.loads(item.tags) if item.tags else None,
             references=json.loads(item.references) if item.references else None,
             url=item.url if item.url else None,
-            annotations_created_timestamp=item.annotations_created_timestamp if is_admin else None,
-            annotations_created_by=item.created_by if is_admin else None,
-            created_timestamp=item.created_timestamp if is_admin else None,
-            uploaded_by=item.uploaded_by if is_admin else None,
-            deleted_by=item.deleted_by if is_admin else None,
-            deleted_timestamp=item.deleted_timestamp if is_admin else None,
-            obsoleted_by=item.obsoleted_by if is_admin else None,
-            obsoleted_timestamp=item.obsoleted_timestamp if is_admin else None,
+            annotations_created_timestamp=item.annotations_created_timestamp if is_admin_ else None,
+            annotations_created_by=item.created_by if is_admin_ else None,
+            created_timestamp=item.created_timestamp if is_admin_ else None,
+            uploaded_by=item.uploaded_by if is_admin_ else None,
+            deleted_by=item.deleted_by if is_admin_ else None,
+            deleted_timestamp=item.deleted_timestamp if is_admin_ else None,
+            obsoleted_by=item.obsoleted_by if is_admin_ else None,
+            obsoleted_timestamp=item.obsoleted_timestamp if is_admin_ else None,
         ))
     return items
 
@@ -520,7 +517,7 @@ def check_user_may_upload_document(current_user: User, fs: str, category: Docume
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="User not found",
         )
-    if creator.admin:
+    if is_admin(current_user.username, session):
         return
     if category == DocumentCategory.AFSG:
         raise HTTPException(
