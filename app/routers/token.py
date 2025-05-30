@@ -16,7 +16,7 @@ class Token(BaseModel):
 
 
 class TokenData(BaseModel):
-    username: str | None = None
+    username: str
 
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token", auto_error=False)
@@ -24,9 +24,7 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token", auto_error=False)
 router = APIRouter()
 
 
-def get_user(username: str | None) -> tuple[User | None, str|None]:
-    if not username:
-        return None, None
+def get_user(username: str) -> tuple[User | None, str|None]:
     with DBHelper() as session:
         user = session.get(User, username)
         password_hash = None

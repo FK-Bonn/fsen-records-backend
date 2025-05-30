@@ -4,6 +4,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.main import app
+from app.routers.token import create_access_token
 from app.test.conftest import get_auth_header, USER_NO_PERMS, USER_INFO_READ, USER_INFO_GEO_ALL, USER_INFO_GEO_READ, \
     USER_INFO_ALL, ADMIN
 
@@ -640,3 +641,23 @@ def test_change_other_password_without_admin():
     assert response.status_code == 401
     response = client.post('/api/v1/token', data={'username': USER_NO_PERMS, 'password': 'password'})
     assert 'access_token' in response.json()
+
+
+def test_broken_token():
+    response = client.get('/api/v1/user/me', headers={'Authorization': 'Bearer broken-token'})
+    assert response.status_code == 401
+    assert response.json() == {'detail': 'Could not validate credentials'}
+
+
+def test_invalid_token_no_username():
+    token = create_access_token(data={})
+    response = client.get('/api/v1/user/me', headers={'Authorization': f'Bearer {token}'})
+    assert response.status_code == 401
+    assert response.json() == {'detail': 'Could not validate credentials'}
+
+
+def test_invalid_token_missing_user():
+    token = create_access_token(data={'sub': 'does-not-exist'})
+    response = client.get('/api/v1/user/me', headers={'Authorization': f'Bearer {token}'})
+    assert response.status_code == 401
+    assert response.json() == {'detail': 'Could not validate credentials'}

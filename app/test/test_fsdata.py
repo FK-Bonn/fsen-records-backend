@@ -219,6 +219,47 @@ def test_get_all_fsdata_only_protected_data_present():
     }
 
 
+def test_get_all_fsdata_only_public_data_present():
+    set_sample_public_data()
+    response = client.get('/api/v1/data', headers=get_auth_header(client, USER_INFO_ALL))
+    assert response.status_code == 200
+    assert response.json() == {
+        'Informatik': {
+            'base': None,
+            'public': {'data': SAMPLE_PUBLIC_DATA, 'is_latest': True},
+            'protected': None,
+        }
+    }
+
+
+def test_get_all_fsdata_only_public_data_present_with_limit():
+    with freeze_time("2023-04-04T10:00:00Z"):
+        set_sample_public_data(fs='Informatik')
+    response = client.get('/api/v1/data/2024-01-01', headers=get_auth_header(client, USER_INFO_ALL))
+    assert response.status_code == 200
+    assert response.json() == {
+        'Informatik': {
+            'base': None,
+            'public': {'data': SAMPLE_PUBLIC_DATA, 'is_latest': True},
+            'protected': None,
+        }
+    }
+
+
+def test_get_all_fsdata_only_protected_data_present_with_limit():
+    with freeze_time("2023-04-04T10:00:00Z"):
+        set_sample_protected_data(fs='Informatik')
+    response = client.get('/api/v1/data/2024-01-01', headers=get_auth_header(client, USER_INFO_ALL))
+    assert response.status_code == 200
+    assert response.json() == {
+        'Informatik': {
+            'base': None,
+            'public': None,
+            'protected': {'data': SAMPLE_PROTECTED_DATA, 'is_latest': True},
+        }
+    }
+
+
 @pytest.mark.parametrize('user', [
     None,
     USER_INFO_READ,
@@ -430,6 +471,11 @@ def test_approve_public_fsdata_does_not_exist():
 
 def test_approve_protected_fsdata_does_not_exist():
     response = client.post('/api/v1/data/approve/protected/69', headers=get_auth_header(client, ADMIN))
+    assert response.status_code == 404
+
+
+def test_approve_base_fsdata_does_not_exist():
+    response = client.post('/api/v1/data/approve/base/69', headers=get_auth_header(client, ADMIN))
     assert response.status_code == 404
 
 

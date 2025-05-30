@@ -99,6 +99,14 @@ def test_get_history_unauthenticated():
     assert result.json() == {'detail': 'Not authenticated'}
 
 
+def test_get_empty_history():
+    election_id = 'deadbeef'
+    result = client.get(f'/api/v1/elections/{election_id}/history',
+                        headers=get_auth_header(client, ADMIN))
+    assert result.status_code == 404
+    assert result.json() == {'detail': 'Election not found'}
+
+
 @pytest.mark.parametrize('user', [
     USER_NO_PERMS,
     USER_INFO_READ,

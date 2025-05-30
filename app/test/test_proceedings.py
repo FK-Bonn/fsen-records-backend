@@ -12,14 +12,17 @@ from app.test.conftest import get_auth_header, USER_INFO_ALL, USER_INFO_READ, AD
 
 client = TestClient(app)
 
-
+@pytest.mark.parametrize('username', [
+    USER_INFO_ALL,
+    ADMIN,
+])
 @mock.patch('app.routers.proceedings.get_base_dir', return_value=Path(TemporaryDirectory().name))
-def test_proceedings_upload(mocked_base_dir):
+def test_proceedings_upload(mocked_base_dir, username):
     handle = BytesIO(EMPTY_PDF_PAGE)
     result = client.post('/api/v1/proceedings/Informatik',
                          data={'committee': 'FSV', 'date': '2024-05-30', 'tags': 'HHP,Wahl KP'},
                          files={'file': ('prot.pdf', handle, 'application/pdf')},
-                         headers=get_auth_header(client, USER_INFO_ALL))
+                         headers=get_auth_header(client, username))
     assert result.status_code == 200
     assert (mocked_base_dir.return_value / 'Informatik' / 'Prot-FSV-2024-05-30.pdf').exists()
 
@@ -109,6 +112,18 @@ def test_proceedings_upload_overwrite_existing_file(mocked_base_dir):
                          headers=get_auth_header(client, USER_INFO_ALL))
     assert result.status_code == 200
     assert target_file.read_bytes() == EMPTY_PDF_PAGE
+
+@mock.patch('app.routers.proceedings.get_base_dir', return_value=Path(TemporaryDirectory().name))
+def test_proceedings_upload_invalid_file(mocked_base_dir):
+    target_file = (mocked_base_dir.return_value / 'Informatik' / 'Prot-FSV-2024-05-30.pdf')
+
+    handle = BytesIO(b'invalid oh no')
+    result = client.post('/api/v1/proceedings/Informatik',
+                         data={'committee': 'FSV', 'date': '2024-05-30', 'tags': 'HHP,Wahl KP'},
+                         files={'file': ('prot.pdf', handle, 'application/pdf')},
+                         headers=get_auth_header(client, USER_INFO_ALL))
+    assert result.status_code == 422
+    assert not target_file.is_file()
 
 
 def create_sample_proceedings(target_file):
@@ -234,3 +249,8 @@ def test_proceedings_download_outside_of_allowed_network_while_authenticated(sou
         response = client.get('/api/v1/proceedings/Informatik/Prot-FSV-2024-05-30.pdf',
                               headers=get_auth_header(client, ADMIN))
     assert response.status_code == 200
+
+def test_proceedings_download_file_does_not_exist():
+    with mock.patch('app.routers.proceedings.get_source_ip', return_value='127.0.0.1'):
+        response = client.get('/api/v1/proceedings/Informatik/does-not-exist.pdf')
+    assert response.status_code == 404
