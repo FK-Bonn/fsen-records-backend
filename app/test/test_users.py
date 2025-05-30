@@ -1,11 +1,13 @@
+import re
 from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
 
 from app.database import get_session
-from app.main import app, subapp
-from app.routers.token import create_access_token
+from app.main import app
+from app.main import subapp
+from app.routers.token import create_access_token, new_token
 from app.test.conftest import get_auth_header, USER_NO_PERMS, USER_INFO_READ, USER_INFO_GEO_ALL, USER_INFO_GEO_READ, \
     USER_INFO_ALL, ADMIN, fake_session
 
@@ -77,6 +79,62 @@ def test_invalid_login_wrong_username():
     assert response.json() == {
         'detail': 'Incorrect username or password',
     }
+
+
+def test_fake_sso_login_auth():
+    response = client.get('/api/v1/fake-sso/realms/fake-realm/protocol/openid-connect/auth', follow_redirects=False,
+                          params={'response_type': 'code', 'client_id': 'client-id', 'redirect_uri': 'http://my-url'})
+    assert response.status_code == 307
+    assert re.match(r'http://my-url\?session_state=fake-session-state&state=None&iss=fake-iss&code=[A-Z]{6}',
+                    response.headers['Location'])
+
+
+def get_code():
+    response = client.get('/api/v1/fake-sso/realms/fake-realm/protocol/openid-connect/auth', follow_redirects=False,
+                          params={'response_type': 'code', 'client_id': 'client-id', 'redirect_uri': 'http://my-url'})
+    code = response.headers['Location'][-6:]
+    return code
+
+
+def get_tokens(code):
+    response = client.post('/api/v1/fake-sso/realms/fake-realm/protocol/openid-connect/token',
+                           follow_redirects=False,
+                           data={'grant_type': 'authorization_code', 'client_id': 'client-id', 'code': code,
+                                 'redirect_uri': 'http://my-url'})
+    assert response.status_code == 200
+    response_json = response.json()
+    return response_json['access_token'], response_json['refresh_token']
+
+
+def test_fake_sso_login_token():
+    code = get_code()
+
+    access_token, refresh_token = get_tokens(code)
+
+    assert access_token
+    assert refresh_token
+
+
+def test_fake_sso_login_refresh():
+    code = get_code()
+    _, refresh_token = get_tokens(code)
+
+    response = client.post('/api/v1/fake-sso/realms/fake-realm/protocol/openid-connect/token',
+                           follow_redirects=False,
+                           data={'grant_type': 'refresh_token', 'client_id': 'client-id',
+                                 'refresh_token': refresh_token})
+    assert response.status_code == 200
+    response_json = response.json()
+    assert response_json['access_token']
+    assert response_json['refresh_token']
+
+
+def test_fake_sso_login_logout():
+    response = client.get('/api/v1/fake-sso/realms/fake-realm/protocol/openid-connect/logout',
+                          follow_redirects=False,
+                          params={'client_id': 'client-id', 'post_logout_redirect_uri': 'http://my-url'})
+    assert response.status_code == 307
+    assert response.headers['Location'] == 'http://my-url'
 
 
 def test_create_user():
@@ -435,35 +493,41 @@ def test_get_users_as_admin():
         ADMIN: {'admin': True,
                 'created_by': 'root',
                 'permissions': [],
-                'username': ADMIN},
+                'username': ADMIN,
+                'full_name': ADMIN},
         USER_NO_PERMS: {'admin': False,
                         'created_by': 'root',
                         'permissions': [],
-                        'username': USER_NO_PERMS},
+                        'username': USER_NO_PERMS,
+                        'full_name': USER_NO_PERMS},
         USER_INFO_READ: {'admin': False,
                          'created_by': 'root',
                          'permissions': [{'fs': 'Informatik',
                                           **PERMISSIONS_LEVEL_1}],
-                         'username': USER_INFO_READ},
+                         'username': USER_INFO_READ,
+                         'full_name': USER_INFO_READ},
         USER_INFO_ALL: {'admin': False,
                         'created_by': 'root',
                         'permissions': [{'fs': 'Informatik',
                                          **PERMISSIONS_LEVEL_2}],
-                        'username': USER_INFO_ALL},
+                        'username': USER_INFO_ALL,
+                        'full_name': USER_INFO_ALL},
         USER_INFO_GEO_READ: {'admin': False,
                              'created_by': 'root',
                              'permissions': [{'fs': 'Geographie',
                                               **PERMISSIONS_LEVEL_1},
                                              {'fs': 'Informatik',
                                               **PERMISSIONS_LEVEL_1}],
-                             'username': USER_INFO_GEO_READ},
+                             'username': USER_INFO_GEO_READ,
+                             'full_name': USER_INFO_GEO_READ},
         USER_INFO_GEO_ALL: {'admin': False,
                             'created_by': 'root',
                             'permissions': [{'fs': 'Geographie',
                                              **PERMISSIONS_LEVEL_2},
                                             {'fs': 'Informatik',
                                              **PERMISSIONS_LEVEL_2}],
-                            'username': USER_INFO_GEO_ALL},
+                            'username': USER_INFO_GEO_ALL,
+                            'full_name': USER_INFO_GEO_ALL},
     }
 
 
@@ -475,22 +539,26 @@ def test_get_users_as_user_with_write_permission():
                          'created_by': 'root',
                          'permissions': [{'fs': 'Informatik',
                                           **PERMISSIONS_LEVEL_1}],
-                         'username': USER_INFO_READ},
+                         'username': USER_INFO_READ,
+                         'full_name': USER_INFO_READ},
         USER_INFO_ALL: {'admin': False,
                         'created_by': 'root',
                         'permissions': [{'fs': 'Informatik',
                                          **PERMISSIONS_LEVEL_2}],
-                        'username': USER_INFO_ALL},
+                        'username': USER_INFO_ALL,
+                        'full_name': USER_INFO_ALL},
         USER_INFO_GEO_READ: {'admin': False,
                              'created_by': 'root',
                              'permissions': [{'fs': 'Informatik',
                                               **PERMISSIONS_LEVEL_1}],
-                             'username': USER_INFO_GEO_READ},
+                             'username': USER_INFO_GEO_READ,
+                             'full_name': USER_INFO_GEO_READ},
         USER_INFO_GEO_ALL: {'admin': False,
                             'created_by': 'root',
                             'permissions': [{'fs': 'Informatik',
                                              **PERMISSIONS_LEVEL_2}],
-                            'username': USER_INFO_GEO_ALL},
+                            'username': USER_INFO_GEO_ALL,
+                            'full_name': USER_INFO_GEO_ALL},
     }
 
 
@@ -502,22 +570,26 @@ def test_get_users_as_user_with_read_permission():
                          'created_by': 'root',
                          'permissions': [{'fs': 'Informatik',
                                           **PERMISSIONS_LEVEL_1}],
-                         'username': USER_INFO_READ},
+                         'username': USER_INFO_READ,
+                         'full_name': USER_INFO_READ},
         USER_INFO_ALL: {'admin': False,
                         'created_by': 'root',
                         'permissions': [{'fs': 'Informatik',
                                          **PERMISSIONS_LEVEL_2}],
-                        'username': USER_INFO_ALL},
+                        'username': USER_INFO_ALL,
+                        'full_name': USER_INFO_ALL},
         USER_INFO_GEO_READ: {'admin': False,
                              'created_by': 'root',
                              'permissions': [{'fs': 'Informatik',
                                               **PERMISSIONS_LEVEL_1}],
-                             'username': USER_INFO_GEO_READ},
+                             'username': USER_INFO_GEO_READ,
+                             'full_name': USER_INFO_GEO_READ},
         USER_INFO_GEO_ALL: {'admin': False,
                             'created_by': 'root',
                             'permissions': [{'fs': 'Informatik',
                                              **PERMISSIONS_LEVEL_2}],
-                            'username': USER_INFO_GEO_ALL},
+                            'username': USER_INFO_GEO_ALL,
+                            'full_name': USER_INFO_GEO_ALL},
     }
 
 
@@ -529,65 +601,81 @@ def test_get_users_as_user_with_multiple_write_permissions():
                          'created_by': 'root',
                          'permissions': [{'fs': 'Informatik',
                                           **PERMISSIONS_LEVEL_1}],
-                         'username': USER_INFO_READ},
+                         'username': USER_INFO_READ,
+                         'full_name': USER_INFO_READ},
         USER_INFO_ALL: {'admin': False,
                         'created_by': 'root',
                         'permissions': [{'fs': 'Informatik',
                                          **PERMISSIONS_LEVEL_2}],
-                        'username': USER_INFO_ALL},
+                        'username': USER_INFO_ALL,
+                        'full_name': USER_INFO_ALL},
         USER_INFO_GEO_READ: {'admin': False,
                              'created_by': 'root',
                              'permissions': [{'fs': 'Geographie',
                                               **PERMISSIONS_LEVEL_1},
                                              {'fs': 'Informatik',
                                               **PERMISSIONS_LEVEL_1}],
-                             'username': USER_INFO_GEO_READ},
+                             'username': USER_INFO_GEO_READ,
+                             'full_name': USER_INFO_GEO_READ},
         USER_INFO_GEO_ALL: {'admin': False,
                             'created_by': 'root',
                             'permissions': [{'fs': 'Geographie',
                                              **PERMISSIONS_LEVEL_2},
                                             {'fs': 'Informatik',
                                              **PERMISSIONS_LEVEL_2}],
-                            'username': USER_INFO_GEO_ALL},
+                            'username': USER_INFO_GEO_ALL,
+                            'full_name': USER_INFO_GEO_ALL},
     }
 
 
 @pytest.mark.parametrize('username,response_data', [
-    [ADMIN, {'username': ADMIN, 'admin': True, 'created_by': 'root', 'permissions': []}],
-    [USER_NO_PERMS, {'username': USER_NO_PERMS, 'admin': False, 'created_by': 'root', 'permissions': []}],
+    [ADMIN,
+     {'username': ADMIN, 'full_name': ADMIN, 'admin': True, 'created_by': 'root', 'permissions': []}],
+    [USER_NO_PERMS,
+     {'username': USER_NO_PERMS, 'full_name': USER_NO_PERMS, 'admin': False, 'created_by': 'root', 'permissions': []}],
     [USER_INFO_READ,
-     {'username': USER_INFO_READ, 'admin': False, 'created_by': 'root', 'permissions': [{'fs': 'Informatik',
-                                                                                         'locked': False,
-                                                                                         'read_files': True,
-                                                                                         'read_permissions': True,
-                                                                                         'write_permissions': False,
-                                                                                         'read_public_data': True,
-                                                                                         'write_public_data': False,
-                                                                                         'read_protected_data': False,
-                                                                                         'write_protected_data': False,
-                                                                                         'submit_payout_request': False,
-                                                                                         'upload_proceedings': False,
-                                                                                         'delete_proceedings': False,
-                                                                                         }]}],
+     {'username': USER_INFO_READ, 'full_name': USER_INFO_READ, 'admin': False, 'created_by': 'root',
+      'permissions': [{'fs': 'Informatik',
+                       'locked': False,
+                       'read_files': True,
+                       'read_permissions': True,
+                       'write_permissions': False,
+                       'read_public_data': True,
+                       'write_public_data': False,
+                       'read_protected_data': False,
+                       'write_protected_data': False,
+                       'submit_payout_request': False,
+                       'upload_proceedings': False,
+                       'delete_proceedings': False,
+                       }]}],
     [USER_INFO_ALL,
-     {'username': USER_INFO_ALL, 'admin': False, 'created_by': 'root', 'permissions': [{'fs': 'Informatik',
-                                                                                        'locked': False,
-                                                                                        'read_files': True,
-                                                                                        'read_permissions': True,
-                                                                                        'write_permissions': True,
-                                                                                        'read_public_data': True,
-                                                                                        'write_public_data': True,
-                                                                                        'read_protected_data': True,
-                                                                                        'write_protected_data': True,
-                                                                                        'submit_payout_request': True,
-                                                                                        'upload_proceedings': True,
-                                                                                        'delete_proceedings': True,
-                                                                                        }]}],
+     {'username': USER_INFO_ALL, 'full_name': USER_INFO_ALL, 'admin': False, 'created_by': 'root',
+      'permissions': [{'fs': 'Informatik',
+                       'locked': False,
+                       'read_files': True,
+                       'read_permissions': True,
+                       'write_permissions': True,
+                       'read_public_data': True,
+                       'write_public_data': True,
+                       'read_protected_data': True,
+                       'write_protected_data': True,
+                       'submit_payout_request': True,
+                       'upload_proceedings': True,
+                       'delete_proceedings': True,
+                       }]}],
 ])
 def test_who_am_i(username: str, response_data: dict[str, Any]):
     response = client.get('/api/v1/user/me', headers=get_auth_header(client, username))
     assert response.status_code == 200
     assert response.json() == response_data
+
+
+def test_who_am_i_oidc():
+    token = new_token(None)['access_token']
+    response = client.get('/api/v1/user/me', headers={'Authorization': f'Bearer {token}'})
+    assert response.status_code == 200
+    assert response.json() == {'username': 'user', 'full_name': 'Test User', 'admin': False, 'created_by': 'oidc',
+                               'permissions': []}
 
 
 def test_change_own_password():

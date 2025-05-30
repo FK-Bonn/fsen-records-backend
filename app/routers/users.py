@@ -47,6 +47,7 @@ class PermissionsForUser(PermissionList):
 
 
 class UserWithPermissions(PermissionsForUser):
+    full_name: str
     created_by: str
 
 
@@ -170,6 +171,7 @@ async def create_user(userdata: UserForCreation, session: SessionDep, current_us
         session.add_all(items)
         session.commit()
         return {'username': user.username,
+                'full_name': user.full_name,
                 'admin': bool(user.admin),
                 'created_by': user.created_by,
                 'permissions': [p for p in user.permissions]}
@@ -210,6 +212,7 @@ async def set_user_permissions(userdata: PermissionsForUser, session: SessionDep
             session.add(permission)
     session.commit()
     return {'username': user.username,
+            'full_name': user.full_name,
             'admin': bool(user.admin),
             'created_by': user.created_by,
             'permissions': [p for p in user.permissions]}
@@ -241,6 +244,7 @@ async def patch_user_permissions(userdata: PermissionList, session: SessionDep,
     session.commit()
     managed_fs = {p.fs for p in current_user.permissions if p.write_permissions}
     return {'username': user.username,
+            'full_name': user.full_name,
             'admin': bool(user.admin),
             'created_by': user.created_by,
             'permissions': [p for p in user.permissions if p.fs in managed_fs]}
@@ -272,6 +276,7 @@ async def get_user_list(session: SessionDep, current_user: User = Depends(get_cu
         for user in users:
             allusers[user.username] = {
                 'username': user.username,
+                'full_name': user.full_name,
                 'admin': bool(user.admin),
                 'created_by': user.created_by,
                 'permissions': [p for p in user.permissions],
@@ -282,6 +287,7 @@ async def get_user_list(session: SessionDep, current_user: User = Depends(get_cu
             if {p.fs for p in user.permissions}.intersection(readable_fs):
                 allusers[user.username] = {
                     'username': user.username,
+                    'full_name': user.full_name,
                     'admin': bool(user.admin),
                     'created_by': user.created_by,
                     'permissions': [p for p in user.permissions if p.fs in readable_fs],
@@ -293,6 +299,7 @@ async def get_user_list(session: SessionDep, current_user: User = Depends(get_cu
 async def who_am_i(current_user: User = Depends(get_current_user())):
     return {
         'username': current_user.username,
+        'full_name': current_user.full_name,
         'admin': bool(current_user.admin),
         'created_by': current_user.created_by,
         'permissions': [p for p in current_user.permissions],
