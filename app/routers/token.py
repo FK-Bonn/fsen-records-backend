@@ -1,14 +1,21 @@
+import os
+import random
+import string
 from datetime import datetime, timedelta, UTC
+from typing import Annotated
 
-from fastapi import HTTPException, Depends, APIRouter
-from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
-from jose import JWTError, jwt
+from fastapi import HTTPException, Depends, APIRouter, Form
+from fastapi.responses import RedirectResponse
+from fastapi.security import OAuth2PasswordRequestForm
+from jose import JWTError, jwt, ExpiredSignatureError, constants
+from jose.backends.rsa_backend import RSAKey
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from starlette import status
 
-from app.config import Config
-from app.database import User, verify_password, UserPassword, SessionDep
+from app.config import Config, DUMMY_PRIVATE_KEY
+from app.database import SessionDep
+from app.database import User, verify_password, UserPassword
 
 
 class Token(BaseModel):
@@ -20,8 +27,6 @@ class TokenData(BaseModel):
     username: str
 
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token", auto_error=False)
-
 router = APIRouter()
 
 
@@ -32,6 +37,15 @@ def get_user(username: str, session: Session) -> tuple[User | None, str | None]:
     if user_hash:
         password_hash = user_hash.hashed_password
     return user, password_hash
+
+
+def get_or_create_user(username: str, full_name: str, session: Session) -> User:
+    user = session.get(User, username)
+    if not user:
+        user = User(username=username, full_name=full_name, created_by='oidc')
+        session.add(user)
+        session.commit()
+    return user
 
 
 def authenticate_user(username: str, password: str, session: Session) -> User | None:
@@ -61,17 +75,29 @@ def get_user_for_token(token: str, session: Session) -> User:
         headers={"WWW-Authenticate": "Bearer"},
     )
     try:
+        payload = jwt.decode(token, Config.JWKS)
+        name = payload.get('name')
+        username: str | None = payload.get('preferred_username')
+        if not name or not username:
+            raise credentials_exception
+        user = get_or_create_user(username=username, full_name=name, session=session)
+        return user
+    except ExpiredSignatureError:
+        raise credentials_exception
+    except JWTError:
+        pass  # try native auth before erroring
+    try:
         payload = jwt.decode(token, Config.SECRET_KEY, algorithms=[Config.ALGORITHM])
-        username: str | None = payload.get("sub")
+        username = payload.get("sub")
         if username is None:
             raise credentials_exception
         token_data = TokenData(username=username)
     except JWTError:
         raise credentials_exception
-    user, _ = get_user(username=token_data.username, session=session)
-    if user is None:
+    user_, _ = get_user(username=token_data.username, session=session)
+    if user_ is None:
         raise credentials_exception
-    return user
+    return user_
 
 
 @router.post("/token", response_model=Token)
@@ -88,3 +114,92 @@ async def login_for_access_token(session: SessionDep, form_data: OAuth2PasswordR
         data={"sub": user.username}, expires_delta=access_token_expires
     )
     return {"access_token": access_token, "token_type": "bearer"}
+
+
+if os.getenv('TEST_FAKE_SSO_ACTIVE') or True:  # TODO remove or True
+    nonces = {}
+
+    class FormData(BaseModel):
+        client_id: str
+        grant_type: str
+        redirect_uri: str | None = None
+        code: str | None = None
+        refresh_token: str | None = None
+
+
+    def create_oidc_token(content: dict, expiry: timedelta) -> str:
+        private_key = RSAKey(algorithm=constants.Algorithms.RS256, key=DUMMY_PRIVATE_KEY)
+        expire = datetime.now(UTC) + expiry
+        content = {**content, 'exp': expire}
+        return jwt.encode(content, private_key)
+
+
+    def new_token(nonce: str | None) -> dict:
+        access_token = create_oidc_token({
+            "scope": "profile email",
+            "email_verified": True,
+            "name": "Test User",
+            "preferred_username": "user",
+            "given_name": "Test",
+            "family_name": "User",
+            "email": "user@example.org",
+            "nonce": nonce,
+        }, expiry=timedelta(seconds=60))
+        refresh_token = create_oidc_token({
+            "typ": "Refresh",
+            "azp": "fake-iss",
+            "nonce": nonce,
+        }, expiry=timedelta(minutes=15))
+        return {
+            "access_token": access_token,
+            "expires_in": 60,
+            "refresh_expires_in": 36000,
+            "refresh_token": refresh_token,
+            "token_type": "Bearer",
+            "not-before-policy": 0,
+            "session_state": "fake-session-state",
+            "scope": "profile email"
+        }
+
+
+    @router.get('/fake-sso/realms/fake-realm/protocol/openid-connect/auth')
+    async def fake_sso_auth(response_type: str, client_id: str, redirect_uri: str,
+                            state: str | None = None, nonce: str | None = None):
+        if response_type != 'code':
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="response_type must be 'code'",
+            )
+        if not client_id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="client_id must be provided",
+            )
+        code = ''.join(random.choice(string.ascii_uppercase) for _ in range(6))
+        nonces[code] = nonce
+        return RedirectResponse(f'{redirect_uri}?session_state=fake-session-state&state={state}&iss=fake-iss&code={code}')
+
+    @router.get('/fake-sso/realms/fake-realm/protocol/openid-connect/logout')
+    async def fake_sso_logout(client_id: str, post_logout_redirect_uri: str):
+        if not client_id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="client_id must be provided",
+            )
+        return RedirectResponse(post_logout_redirect_uri)
+
+
+    @router.post('/fake-sso/realms/fake-realm/protocol/openid-connect/token')
+    async def fake_sso_token(form_data: Annotated[FormData, Form()]):
+        if form_data.code and form_data.redirect_uri:
+            nonce = nonces[form_data.code]
+            return new_token(nonce)
+        elif form_data.refresh_token:
+            payload = jwt.decode(form_data.refresh_token, Config.JWKS)
+            nonce = payload.get('nonce')
+            return new_token(nonce)
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="You need to provide either (code and redirect_uri) or refresh_token",
+            )
