@@ -4,10 +4,11 @@ from fastapi import HTTPException, Depends, APIRouter
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from jose import JWTError, jwt
 from pydantic import BaseModel
+from sqlalchemy.orm import Session
 from starlette import status
 
 from app.config import Config
-from app.database import DBHelper, User, verify_password, UserPassword
+from app.database import User, verify_password, UserPassword, SessionDep
 
 
 class Token(BaseModel):
@@ -24,18 +25,17 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token", auto_error=False)
 router = APIRouter()
 
 
-def get_user(username: str) -> tuple[User | None, str|None]:
-    with DBHelper() as session:
-        user = session.get(User, username)
-        password_hash = None
-        user_hash = session.get(UserPassword, username)
-        if user_hash:
-            password_hash = user_hash.hashed_password
-        return user, password_hash
+def get_user(username: str, session: Session) -> tuple[User | None, str | None]:
+    user = session.get(User, username)
+    password_hash = None
+    user_hash = session.get(UserPassword, username)
+    if user_hash:
+        password_hash = user_hash.hashed_password
+    return user, password_hash
 
 
-def authenticate_user(username: str, password: str) -> User | None:
-    user, hashed_password = get_user(username)
+def authenticate_user(username: str, password: str, session: Session) -> User | None:
+    user, hashed_password = get_user(username, session)
     if not user:
         return None
     if not verify_password(password, hashed_password):
@@ -54,7 +54,7 @@ def create_access_token(data: dict, expires_delta: timedelta | None = None):
     return encoded_jwt
 
 
-def get_user_for_token(token: str) -> User:
+def get_user_for_token(token: str, session: Session) -> User:
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",
@@ -68,15 +68,15 @@ def get_user_for_token(token: str) -> User:
         token_data = TokenData(username=username)
     except JWTError:
         raise credentials_exception
-    user, _ = get_user(username=token_data.username)
+    user, _ = get_user(username=token_data.username, session=session)
     if user is None:
         raise credentials_exception
     return user
 
 
 @router.post("/token", response_model=Token)
-async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends()):
-    user = authenticate_user(form_data.username, form_data.password)
+async def login_for_access_token(session: SessionDep, form_data: OAuth2PasswordRequestForm = Depends()):
+    user = authenticate_user(form_data.username, form_data.password, session)
     if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

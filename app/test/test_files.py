@@ -7,9 +7,11 @@ import pytest
 from fastapi.testclient import TestClient
 from freezegun import freeze_time
 
-from app.main import app
+from app.database import get_session
+from app.main import app, subapp
 from app.test.conftest import get_auth_header, USER_NO_PERMS, ADMIN, EMPTY_PDF_PAGE, USER_INFO_ALL, PDF_HASH, \
-    USER_INFO_GEO_READ, USER_INFO_GEO_ALL, USER_INFO_READ, EMPTY_PDF_PAGE_2, PDF_HASH_2, PDF_HASH_3, EMPTY_PDF_PAGE_3
+    USER_INFO_GEO_READ, USER_INFO_GEO_ALL, USER_INFO_READ, EMPTY_PDF_PAGE_2, PDF_HASH_2, PDF_HASH_3, EMPTY_PDF_PAGE_3, \
+    fake_session
 
 DEFAULT_AFSG_DATA = {
     'category': 'AFSG',
@@ -27,6 +29,7 @@ DEFAULT_BFSG_DATA = {
 }
 
 client = TestClient(app)
+subapp.dependency_overrides[get_session] = fake_session
 
 
 @mock.patch('app.routers.files.get_base_dir', return_value=Path(TemporaryDirectory().name))

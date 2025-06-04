@@ -2,10 +2,12 @@ import pytest
 from fastapi.testclient import TestClient
 from freezegun import freeze_time
 
-from app.main import app
-from app.test.conftest import get_auth_header, USER_INFO_ALL, USER_INFO_READ, ADMIN, USER_NO_PERMS
+from app.database import get_session
+from app.main import app, subapp
+from app.test.conftest import get_auth_header, USER_INFO_ALL, USER_INFO_READ, ADMIN, USER_NO_PERMS, fake_session
 
 client = TestClient(app)
+subapp.dependency_overrides[get_session] = fake_session
 
 DEFAULT_ELECTION = {
     'election_id': 'deadbeef',

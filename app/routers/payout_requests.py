@@ -10,7 +10,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session, make_transient
 from starlette import status
 
-from app.database import User, DBHelper, PayoutRequest
+from app.database import User, PayoutRequest, SessionDep
 from app.routers.users import get_current_user, admin_only, is_admin
 from app.util import ts, get_europe_berlin_date
 
@@ -88,12 +88,6 @@ class PayoutRequestData(PublicPayoutRequest):
 
 def check_user_may_submit_payout_request(current_user: User, fs: str, session: Session,
                                          _type: PayoutRequestType = PayoutRequestType.AFSG):
-    creator = session.get(User, current_user.username)
-    if not creator:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="User not found",
-        )
     if is_admin(current_user.username, session):
         return
 
@@ -104,7 +98,7 @@ def check_user_may_submit_payout_request(current_user: User, fs: str, session: S
             detail="User is not authorized to submit bfsg payout request for this fs",
         )
 
-    creatorpermissions = {p.fs: p.submit_payout_request for p in creator.permissions}
+    creatorpermissions = {p.fs: p.submit_payout_request for p in current_user.permissions}
     if not creatorpermissions.get(fs, False):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -224,176 +218,172 @@ def get_payout_request_history(session: Session, request_id: str, _type: PayoutR
 
 
 @router.get("/{_type}", response_model=list[PayoutRequestData])
-async def list_requests(_type: PayoutRequestType, current_user: User = Depends(get_current_user(auto_error=False))):
-    with DBHelper() as session:
-        subquery = session.query(PayoutRequest.request_id, func.max(PayoutRequest.id).label('id')). \
-            filter(PayoutRequest.type == _type.value). \
-            group_by(PayoutRequest.request_id).subquery()
-        data = session.query(PayoutRequest).join(subquery, PayoutRequest.id == subquery.c.id).all()
-        if current_user and is_admin(current_user.username, session):
-            return data
-        else:
-            return [PublicPayoutRequest(**item.__dict__) for item in data]
+async def list_requests(_type: PayoutRequestType, session: SessionDep,
+                        current_user: User = Depends(get_current_user(auto_error=False))):
+    subquery = session.query(PayoutRequest.request_id, func.max(PayoutRequest.id).label('id')). \
+        filter(PayoutRequest.type == _type.value). \
+        group_by(PayoutRequest.request_id).subquery()
+    data = session.query(PayoutRequest).join(subquery, PayoutRequest.id == subquery.c.id).all()
+    if current_user and is_admin(current_user.username, session):
+        return data
+    else:
+        return [PublicPayoutRequest(**item.__dict__) for item in data]
 
 
 @router.get("/{_type}/{limit_date}", response_model=list[PayoutRequestData])
-async def list_requests_before_date(_type: PayoutRequestType, limit_date: date,
+async def list_requests_before_date(_type: PayoutRequestType, limit_date: date, session: SessionDep,
                                     current_user: User = Depends(get_current_user(auto_error=False))):
     limit_date += timedelta(days=1)
     date_string = str(limit_date)
-    with DBHelper() as session:
-        subquery = session.query(PayoutRequest.request_id, func.max(PayoutRequest.id).label('id')). \
-            filter(PayoutRequest.last_modified_timestamp < date_string). \
-            filter(PayoutRequest.type == _type.value). \
-            group_by(PayoutRequest.request_id).subquery()
-        data = session.query(PayoutRequest).join(subquery, PayoutRequest.id == subquery.c.id).all()
-        if current_user and is_admin(current_user.username, session):
-            return data
-        else:
-            return [PublicPayoutRequest(**item.__dict__) for item in data]
+    subquery = session.query(PayoutRequest.request_id, func.max(PayoutRequest.id).label('id')). \
+        filter(PayoutRequest.last_modified_timestamp < date_string). \
+        filter(PayoutRequest.type == _type.value). \
+        group_by(PayoutRequest.request_id).subquery()
+    data = session.query(PayoutRequest).join(subquery, PayoutRequest.id == subquery.c.id).all()
+    if current_user and is_admin(current_user.username, session):
+        return data
+    else:
+        return [PublicPayoutRequest(**item.__dict__) for item in data]
 
 
 @router.post("/afsg/create", response_model=PayoutRequestData)
-async def create_afsg_request(data: PayoutRequestForCreation, current_user: User = Depends(get_current_user())):
+async def create_afsg_request(data: PayoutRequestForCreation, session: SessionDep,
+                              current_user: User = Depends(get_current_user())):
     logging.info(f'create_afsg_request({data=}, {current_user.username=})')
     check_semester_is_valid_format(data.semester)
     check_semester_is_open_for_afsg_submissions(data.semester)
-    with DBHelper() as session:
-        check_user_may_submit_payout_request(current_user, data.fs, session)
-        check_no_existing_afsg_payout_request(data.semester, data.fs, session)
-        request_id = get_request_id(data.semester, 'A', session)
-        today = get_europe_berlin_date()
-        now = ts()
+    check_user_may_submit_payout_request(current_user, data.fs, session)
+    check_no_existing_afsg_payout_request(data.semester, data.fs, session)
+    request_id = get_request_id(data.semester, 'A', session)
+    today = get_europe_berlin_date()
+    now = ts()
 
-        payout_request = PayoutRequest()
-        payout_request.request_id = request_id
-        payout_request.type = PayoutRequestType.AFSG.value
-        payout_request.category = PayoutRequestType.AFSG.value.upper()
-        payout_request.fs = data.fs
-        payout_request.semester = data.semester
-        payout_request.status = PayoutRequestStatus.EINGEREICHT.value
-        payout_request.status_date = today
-        payout_request.amount_cents = 0
-        payout_request.comment = ''
-        payout_request.request_date = today
-        payout_request.requester = current_user.username
-        payout_request.last_modified_timestamp = now
-        payout_request.last_modified_by = current_user.username
-        payout_request.completion_deadline = get_default_afsg_completion_deadline(data.semester)
-        payout_request.reference = None  # type: ignore
-        session.add(payout_request)
-        session.commit()
-        return get_payout_request(session, request_id, PayoutRequestType.AFSG)
+    payout_request = PayoutRequest()
+    payout_request.request_id = request_id
+    payout_request.type = PayoutRequestType.AFSG.value
+    payout_request.category = PayoutRequestType.AFSG.value.upper()
+    payout_request.fs = data.fs
+    payout_request.semester = data.semester
+    payout_request.status = PayoutRequestStatus.EINGEREICHT.value
+    payout_request.status_date = today
+    payout_request.amount_cents = 0
+    payout_request.comment = ''
+    payout_request.request_date = today
+    payout_request.requester = current_user.username
+    payout_request.last_modified_timestamp = now
+    payout_request.last_modified_by = current_user.username
+    payout_request.completion_deadline = get_default_afsg_completion_deadline(data.semester)
+    payout_request.reference = None  # type: ignore
+    session.add(payout_request)
+    session.commit()
+    return get_payout_request(session, request_id, PayoutRequestType.AFSG)
 
 
 @router.post("/bfsg/create", response_model=PayoutRequestData)
-async def create_bfsg_request(data: BfsgPayoutRequestForCreation, current_user: User = Depends(get_current_user())):
+async def create_bfsg_request(data: BfsgPayoutRequestForCreation, session: SessionDep,
+                              current_user: User = Depends(get_current_user())):
     logging.info(f'create_bfsg_request({data=}, {current_user.username=})')
     check_semester_is_valid_format(data.semester)
     # check_semester_is_open_for_bfsg_submissions(data.semester)
-    with DBHelper() as session:
-        check_user_may_submit_payout_request(current_user, data.fs, session, _type=PayoutRequestType.BFSG)
-        request_id = get_request_id(data.semester, 'B', session)
-        today = get_europe_berlin_date()
-        now = ts()
+    check_user_may_submit_payout_request(current_user, data.fs, session, _type=PayoutRequestType.BFSG)
+    request_id = get_request_id(data.semester, 'B', session)
+    today = get_europe_berlin_date()
+    now = ts()
 
-        payout_request = PayoutRequest()
-        payout_request.request_id = request_id
-        payout_request.type = PayoutRequestType.BFSG.value
-        payout_request.category = data.category
-        payout_request.fs = data.fs
-        payout_request.semester = data.semester
-        payout_request.status = data.status.value if data.status else PayoutRequestStatus.GESTELLT.value
-        payout_request.status_date = data.status_date or today
-        payout_request.amount_cents = data.amount_cents
-        payout_request.comment = data.comment or ''
-        payout_request.request_date = data.request_date or today
-        payout_request.requester = current_user.username
-        payout_request.last_modified_timestamp = now
-        payout_request.last_modified_by = current_user.username
-        payout_request.completion_deadline = data.completion_deadline or get_default_bfsg_completion_deadline(today)
-        payout_request.reference = data.reference  # type: ignore
-        session.add(payout_request)
-        session.commit()
-        return get_payout_request(session, request_id, PayoutRequestType.BFSG)
+    payout_request = PayoutRequest()
+    payout_request.request_id = request_id
+    payout_request.type = PayoutRequestType.BFSG.value
+    payout_request.category = data.category
+    payout_request.fs = data.fs
+    payout_request.semester = data.semester
+    payout_request.status = data.status.value if data.status else PayoutRequestStatus.GESTELLT.value
+    payout_request.status_date = data.status_date or today
+    payout_request.amount_cents = data.amount_cents
+    payout_request.comment = data.comment or ''
+    payout_request.request_date = data.request_date or today
+    payout_request.requester = current_user.username
+    payout_request.last_modified_timestamp = now
+    payout_request.last_modified_by = current_user.username
+    payout_request.completion_deadline = data.completion_deadline or get_default_bfsg_completion_deadline(today)
+    payout_request.reference = data.reference  # type: ignore
+    session.add(payout_request)
+    session.commit()
+    return get_payout_request(session, request_id, PayoutRequestType.BFSG)
 
 
 @router.post("/vorankuendigung/create", response_model=PayoutRequestData)
-async def create_vorankuendigung_request(data: VorankuendigungPayoutRequestForCreation,
+async def create_vorankuendigung_request(data: VorankuendigungPayoutRequestForCreation, session: SessionDep,
                                          current_user: User = Depends(get_current_user())):
     logging.info(f'create_vorankuendigung_request({data=}, {current_user.username=})')
     check_semester_is_valid_format(data.semester)
-    with DBHelper() as session:
-        check_user_may_submit_payout_request(current_user, data.fs, session, _type=PayoutRequestType.VORANKUENDIGUNG)
-        request_id = get_request_id(data.semester, 'V', session)
-        today = get_europe_berlin_date()
-        now = ts()
+    check_user_may_submit_payout_request(current_user, data.fs, session, _type=PayoutRequestType.VORANKUENDIGUNG)
+    request_id = get_request_id(data.semester, 'V', session)
+    today = get_europe_berlin_date()
+    now = ts()
 
-        payout_request = PayoutRequest()
-        payout_request.request_id = request_id
-        payout_request.type = PayoutRequestType.VORANKUENDIGUNG.value
-        payout_request.category = data.category
-        payout_request.fs = data.fs
-        payout_request.semester = data.semester
-        payout_request.status = data.status.value if data.status else PayoutRequestStatus.GESTELLT.value
-        payout_request.status_date = data.status_date or today
-        payout_request.amount_cents = data.amount_cents
-        payout_request.comment = data.comment or ''
-        payout_request.request_date = data.request_date or today
-        payout_request.requester = current_user.username
-        payout_request.last_modified_timestamp = now
-        payout_request.last_modified_by = current_user.username
-        payout_request.completion_deadline = data.completion_deadline or ''
-        payout_request.reference = data.reference  # type: ignore
-        session.add(payout_request)
-        session.commit()
-        return get_payout_request(session, request_id, PayoutRequestType.VORANKUENDIGUNG)
+    payout_request = PayoutRequest()
+    payout_request.request_id = request_id
+    payout_request.type = PayoutRequestType.VORANKUENDIGUNG.value
+    payout_request.category = data.category
+    payout_request.fs = data.fs
+    payout_request.semester = data.semester
+    payout_request.status = data.status.value if data.status else PayoutRequestStatus.GESTELLT.value
+    payout_request.status_date = data.status_date or today
+    payout_request.amount_cents = data.amount_cents
+    payout_request.comment = data.comment or ''
+    payout_request.request_date = data.request_date or today
+    payout_request.requester = current_user.username
+    payout_request.last_modified_timestamp = now
+    payout_request.last_modified_by = current_user.username
+    payout_request.completion_deadline = data.completion_deadline or ''
+    payout_request.reference = data.reference  # type: ignore
+    session.add(payout_request)
+    session.commit()
+    return get_payout_request(session, request_id, PayoutRequestType.VORANKUENDIGUNG)
 
 
 @router.patch("/{_type}/{request_id}", dependencies=[Depends(admin_only)],
               response_model=PayoutRequestData)
 async def modify_request(_type: PayoutRequestType, request_id: str, data: ModifiablePayoutRequestProperties,
-                         current_user: User = Depends(get_current_user())):
+                         session: SessionDep, current_user: User = Depends(get_current_user())):
     logging.info(f'modify_request({_type=}, {request_id=}, {data=}, {current_user.username=})')
-    with DBHelper() as session:
-        payout_request = get_payout_request(session, request_id, _type)
-        if not payout_request:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="PayoutRequest not found",
-            )
-        session.expunge(payout_request)
-        make_transient(payout_request)
-        payout_request.id = None  # type: ignore
-        if data.status_date is not None:
-            payout_request.status_date = data.status_date
-        if data.status is not None:
-            payout_request.status = data.status.value
-        if data.amount_cents is not None:
-            payout_request.amount_cents = data.amount_cents
-        if data.completion_deadline is not None:
-            payout_request.completion_deadline = data.completion_deadline
-        if data.comment is not None:
-            payout_request.comment = data.comment
-        if data.reference is not None:
-            payout_request.reference = data.reference
-        payout_request.last_modified_by = current_user.username
-        payout_request.last_modified_timestamp = ts()
-        session.add(payout_request)
-        session.commit()
-        return get_payout_request(session, request_id, _type)
+    payout_request = get_payout_request(session, request_id, _type)
+    if not payout_request:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="PayoutRequest not found",
+        )
+    session.expunge(payout_request)
+    make_transient(payout_request)
+    payout_request.id = None  # type: ignore
+    if data.status_date is not None:
+        payout_request.status_date = data.status_date
+    if data.status is not None:
+        payout_request.status = data.status.value
+    if data.amount_cents is not None:
+        payout_request.amount_cents = data.amount_cents
+    if data.completion_deadline is not None:
+        payout_request.completion_deadline = data.completion_deadline
+    if data.comment is not None:
+        payout_request.comment = data.comment
+    if data.reference is not None:
+        payout_request.reference = data.reference
+    payout_request.last_modified_by = current_user.username
+    payout_request.last_modified_timestamp = ts()
+    session.add(payout_request)
+    session.commit()
+    return get_payout_request(session, request_id, _type)
 
 
 @router.get("/{_type}/{request_id}/history", response_model=list[PayoutRequestData])
-async def get_request_history(_type: PayoutRequestType, request_id: str,
+async def get_request_history(_type: PayoutRequestType, request_id: str, session: SessionDep,
                               current_user: User = Depends(get_current_user(auto_error=False))):
-    with DBHelper() as session:
-        payout_request_history = get_payout_request_history(session, request_id, _type)
-        if not len(payout_request_history):
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="PayoutRequest not found",
-            )
-        if current_user and is_admin(current_user.username, session):
-            return payout_request_history
-        return [PublicPayoutRequest(**item.__dict__) for item in payout_request_history]
+    payout_request_history = get_payout_request_history(session, request_id, _type)
+    if not len(payout_request_history):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="PayoutRequest not found",
+        )
+    if current_user and is_admin(current_user.username, session):
+        return payout_request_history
+    return [PublicPayoutRequest(**item.__dict__) for item in payout_request_history]

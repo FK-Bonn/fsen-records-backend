@@ -3,12 +3,14 @@ from typing import Any
 import pytest
 from fastapi.testclient import TestClient
 
-from app.main import app
+from app.database import get_session
+from app.main import app, subapp
 from app.routers.token import create_access_token
 from app.test.conftest import get_auth_header, USER_NO_PERMS, USER_INFO_READ, USER_INFO_GEO_ALL, USER_INFO_GEO_READ, \
-    USER_INFO_ALL, ADMIN
+    USER_INFO_ALL, ADMIN, fake_session
 
 client = TestClient(app)
+subapp.dependency_overrides[get_session] = fake_session
 
 PERMISSIONS_LEVEL_0 = {
     'read_files': False,

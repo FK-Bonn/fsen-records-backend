@@ -6,11 +6,13 @@ from unittest import mock
 import pytest
 from fastapi.testclient import TestClient
 
-from app.main import app
+from app.database import get_session
+from app.main import app, subapp
 from app.test.conftest import get_auth_header, USER_INFO_ALL, USER_INFO_READ, ADMIN, USER_INFO_GEO_ALL, USER_NO_PERMS, \
-    EMPTY_PDF_PAGE, PDF_HASH
+    EMPTY_PDF_PAGE, PDF_HASH, fake_session
 
 client = TestClient(app)
+subapp.dependency_overrides[get_session] = fake_session
 
 @pytest.mark.parametrize('username', [
     USER_INFO_ALL,

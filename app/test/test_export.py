@@ -1,10 +1,12 @@
 from fastapi.testclient import TestClient
 
-from app.main import app
-from app.test.conftest import get_auth_header, ADMIN
+from app.database import get_session
+from app.main import app, subapp
+from app.test.conftest import get_auth_header, ADMIN, fake_session
 from app.test.test_fsdata import set_sample_public_data, SAMPLE_PUBLIC_DATA, set_sample_base_data, SAMPLE_BASE_DATA
 
 client = TestClient(app)
+subapp.dependency_overrides[get_session] = fake_session
 
 FILTERED_DATA = {key: value for key, value in SAMPLE_PUBLIC_DATA.items() if key not in ('other', 'email')}
 

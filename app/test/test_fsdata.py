@@ -2,10 +2,14 @@ import pytest
 from fastapi.testclient import TestClient
 from freezegun import freeze_time
 
+from app.database import get_session
 from app.main import app
+from app.main import subapp
+from app.test.conftest import fake_session
 from app.test.conftest import get_auth_header, USER_INFO_READ, USER_INFO_ALL, ADMIN, USER_NO_PERMS
 
 client = TestClient(app)
+subapp.dependency_overrides[get_session] = fake_session
 
 SAMPLE_PUBLIC_DATA = {
     'email': 'informatik@example.org',

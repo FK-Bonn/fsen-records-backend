@@ -4,10 +4,11 @@ import pytest
 from fastapi.testclient import TestClient
 from freezegun import freeze_time
 
-from app.main import app
+from app.database import get_session
+from app.main import app, subapp
 from app.routers.payout_requests import get_default_afsg_completion_deadline, get_default_bfsg_completion_deadline
 from app.test.conftest import get_auth_header, ADMIN, USER_NO_PERMS, USER_INFO_READ, USER_INFO_GEO_READ, USER_INFO_ALL, \
-    USER_INFO_GEO_ALL
+    USER_INFO_GEO_ALL, fake_session
 
 DEFAULT_PARAMETERS: dict[str, str | int] = {
     'status': 'VOLLSTÄNDIG',
@@ -19,6 +20,7 @@ DEFAULT_PARAMETERS: dict[str, str | int] = {
 }
 
 client = TestClient(app)
+subapp.dependency_overrides[get_session] = fake_session
 
 SAMPLE_PAYOUT_REQUEST: dict[str, dict[str, str | int | None]] = {
     'afsg': {

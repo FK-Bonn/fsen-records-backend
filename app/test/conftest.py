@@ -2,7 +2,7 @@ import base64
 from pathlib import Path
 
 import pytest
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, Engine
 from sqlalchemy.orm import Session
 from sqlalchemy_utils import database_exists, create_database
 from starlette.testclient import TestClient
@@ -48,50 +48,35 @@ HASH_CACHE = {}
 
 
 class DBTestHelper:
-    def __init__(self, tmppath: Path):
-        self.connection_str = f'sqlite:///{tmppath.absolute()}/test.db'
-        self._session = None
-
-    def __enter__(self):
-        if self._session:
-            return self._session
-        do_init = False
-        if not database_exists(self.connection_str):
-            do_init = True
-            create_database(self.connection_str)
-        engine = create_engine(self.connection_str)
-
-        Base.metadata.create_all(engine)
-
+    def __init__(self, engine: Engine):
         self._session = Session(engine)
 
-        if do_init:
-            self.add_user(USER_NO_PERMS, 'root')
-            self.add_user(USER_INFO_READ, 'root')
-            self.add_user(USER_INFO_ALL, 'root')
-            self.add_user(USER_INFO_GEO_READ, 'root')
-            self.add_user(USER_INFO_GEO_ALL, 'root')
-            self.add_user(ADMIN, 'root', admin=True)
-            self.add_permission(USER_INFO_READ, 'Informatik', read_files=True, read_permissions=True, read_public_data=True)
-            self.add_permission(USER_INFO_ALL, 'Informatik', read_files=True, read_permissions=True, write_permissions=True,
-                                read_public_data=True, write_public_data=True, read_protected_data=True,
-                                write_protected_data=True, submit_payout_request=True, upload_proceedings=True,
-                                delete_proceedings=True, upload_documents=True)
-            self.add_permission(USER_INFO_GEO_READ, 'Informatik', read_files=True, read_permissions=True, read_public_data=True)
-            self.add_permission(USER_INFO_GEO_READ, 'Geographie', read_files=True, read_permissions=True, read_public_data=True)
-            self.add_permission(USER_INFO_GEO_ALL, 'Informatik', read_files=True, read_permissions=True, write_permissions=True,
-                                read_public_data=True, write_public_data=True, read_protected_data=True,
-                                write_protected_data=True, submit_payout_request=True, upload_proceedings=True,
-                                delete_proceedings=True, upload_documents=True)
-            self.add_permission(USER_INFO_GEO_ALL, 'Geographie', read_files=True, read_permissions=True, write_permissions=True,
-                                read_public_data=True, write_public_data=True, read_protected_data=True,
-                                write_protected_data=True, submit_payout_request=True, upload_proceedings=True,
-                                delete_proceedings=True, upload_documents=True)
-            self.add_afsg_payout_request()
-            self.add_bfsg_payout_request()
-            self.add_vorankuendigung_payout_request()
-            self._session.commit()
-        return self._session
+    def prefill(self):
+        self.add_user(USER_NO_PERMS, 'root')
+        self.add_user(USER_INFO_READ, 'root')
+        self.add_user(USER_INFO_ALL, 'root')
+        self.add_user(USER_INFO_GEO_READ, 'root')
+        self.add_user(USER_INFO_GEO_ALL, 'root')
+        self.add_user(ADMIN, 'root', admin=True)
+        self.add_permission(USER_INFO_READ, 'Informatik', read_files=True, read_permissions=True, read_public_data=True)
+        self.add_permission(USER_INFO_ALL, 'Informatik', read_files=True, read_permissions=True, write_permissions=True,
+                            read_public_data=True, write_public_data=True, read_protected_data=True,
+                            write_protected_data=True, submit_payout_request=True, upload_proceedings=True,
+                            delete_proceedings=True, upload_documents=True)
+        self.add_permission(USER_INFO_GEO_READ, 'Informatik', read_files=True, read_permissions=True, read_public_data=True)
+        self.add_permission(USER_INFO_GEO_READ, 'Geographie', read_files=True, read_permissions=True, read_public_data=True)
+        self.add_permission(USER_INFO_GEO_ALL, 'Informatik', read_files=True, read_permissions=True, write_permissions=True,
+                            read_public_data=True, write_public_data=True, read_protected_data=True,
+                            write_protected_data=True, submit_payout_request=True, upload_proceedings=True,
+                            delete_proceedings=True, upload_documents=True)
+        self.add_permission(USER_INFO_GEO_ALL, 'Geographie', read_files=True, read_permissions=True, write_permissions=True,
+                            read_public_data=True, write_public_data=True, read_protected_data=True,
+                            write_protected_data=True, submit_payout_request=True, upload_proceedings=True,
+                            delete_proceedings=True, upload_documents=True)
+        self.add_afsg_payout_request()
+        self.add_bfsg_payout_request()
+        self.add_vorankuendigung_payout_request()
+        self._session.commit()
 
     def add_user(self, username: str, created_by: str, admin=False):
         assert self._session
@@ -196,22 +181,31 @@ class DBTestHelper:
         payout_request.completion_deadline = ''
         self._session.add(payout_request)
 
-    def __exit__(self, type, value, traceback):
-        self._session.close()
-        self._session = None
+
+
+root_dir = Path('/tmp/fsen-records-backend')
+root_dir.mkdir(parents=True, exist_ok=True)
+connection_str = f'sqlite:///{root_dir}/test.db'
+if not database_exists(connection_str):
+    create_database(connection_str)
+engine = create_engine(connection_str)
+
+
+def fake_session():
+    with Session(engine) as session:
+        yield session
+
+
+@pytest.fixture(autouse=True, scope='function')
+def reset_db():
+    Base.metadata.drop_all(bind=engine)
+    Base.metadata.create_all(bind=engine)
+    helper = DBTestHelper(engine)
+    helper.prefill()
 
 
 @pytest.fixture(autouse=True)
 def fake_db(monkeypatch, tmp_path):
-    monkeypatch.setattr('app.routers.elections.DBHelper', lambda: DBTestHelper(tmp_path))
-    monkeypatch.setattr('app.routers.electoral_registers.DBHelper', lambda: DBTestHelper(tmp_path))
-    monkeypatch.setattr('app.routers.export.DBHelper', lambda: DBTestHelper(tmp_path))
-    monkeypatch.setattr('app.routers.files.DBHelper', lambda: DBTestHelper(tmp_path))
-    monkeypatch.setattr('app.routers.fsen.DBHelper', lambda: DBTestHelper(tmp_path))
-    monkeypatch.setattr('app.routers.payout_requests.DBHelper', lambda: DBTestHelper(tmp_path))
-    monkeypatch.setattr('app.routers.proceedings.DBHelper', lambda: DBTestHelper(tmp_path))
-    monkeypatch.setattr('app.routers.token.DBHelper', lambda: DBTestHelper(tmp_path))
-    monkeypatch.setattr('app.routers.users.DBHelper', lambda: DBTestHelper(tmp_path))
     monkeypatch.setattr('app.database.get_password_hash', _cached_password_hash)
     monkeypatch.setattr('app.routers.users.get_password_hash', _cached_password_hash)
 

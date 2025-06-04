@@ -1,10 +1,12 @@
 #! /usr/bin/env python3
 import logging
+from contextlib import asynccontextmanager
 
 import uvicorn
 from fastapi import FastAPI
 from starlette.middleware.cors import CORSMiddleware
 
+from app.database import create_db_and_tables
 from app.routers import elections
 from app.routers import electoral_registers
 from app.routers import fsen, proceedings, export, token, files
@@ -24,7 +26,12 @@ origins = [
     "https://fsen.datendrehschei.be",
 ]
 
-app = FastAPI()
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    create_db_and_tables()
+    yield
+
+app = FastAPI(lifespan=lifespan)
 subapp = FastAPI()
 app.mount('/api/v1', subapp)
 

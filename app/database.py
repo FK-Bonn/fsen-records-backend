@@ -1,3 +1,6 @@
+from typing import Annotated
+
+from fastapi import Depends
 from passlib.context import CryptContext
 from sqlalchemy import String, ForeignKey, Text
 from sqlalchemy import create_engine
@@ -190,23 +193,18 @@ class Election(Base):
     last_modified_by: Mapped[str] = mapped_column(String(200), nullable=False)
 
 
-class DBHelper:
-    def __init__(self):
-        self.connection_str = Config.DB_CONNECTION_STRING
-        self._session = None
+if not database_exists(Config.DB_CONNECTION_STRING):
+    create_database(Config.DB_CONNECTION_STRING)
+engine = create_engine(Config.DB_CONNECTION_STRING, connect_args={"check_same_thread": False})
 
-    def __enter__(self):
-        if self._session:
-            return self._session
-        if not database_exists(self.connection_str):
-            create_database(self.connection_str)
-        engine = create_engine(self.connection_str)
 
-        Base.metadata.create_all(engine)
+def create_db_and_tables():
+    Base.metadata.create_all(engine)
 
-        self._session = Session(engine)
-        return self._session
 
-    def __exit__(self, type, value, traceback):
-        self._session.close()
-        self._session = None
+def get_session():
+    with Session(engine) as session:
+        yield session
+
+
+SessionDep = Annotated[Session, Depends(get_session)]

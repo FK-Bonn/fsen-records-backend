@@ -10,8 +10,8 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from starlette import status
 
-from app.database import DBHelper, User, verify_password, Permission as DbPermission, get_password_hash, \
-    Base, AdminPermission, UserPassword
+from app.database import User, verify_password, Permission as DbPermission, get_password_hash, \
+    Base, AdminPermission, UserPassword, SessionDep
 from app.routers.token import get_user_for_token
 
 
@@ -72,41 +72,37 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token", auto_error=False)
 router = APIRouter()
 
 
-async def get_current_user_or_raise(token: str = Depends(oauth2_scheme)) -> User:
+async def get_current_user_or_raise(session: SessionDep, token: str = Depends(oauth2_scheme)) -> User:
     if not token:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Not authenticated",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    return get_user_for_token(token)
+    return get_user_for_token(token, session)
 
 
-async def get_current_user_or_none(token: str = Depends(oauth2_scheme)) -> User | None:
+async def get_current_user_or_none(session: SessionDep, token: str = Depends(oauth2_scheme)) -> User | None:
     if not token:
         return None
-    return get_user_for_token(token)
+    return get_user_for_token(token, session)
 
 
-def get_current_user(auto_error: bool = True) -> Callable[[str], Coroutine[Any, Any, User]] | Callable[
-    [str], Coroutine[Any, Any, User | None]]:
+def get_current_user(auto_error: bool = True) -> Callable[[Session, str], Coroutine[Any, Any, User]] | Callable[
+    [Session, str], Coroutine[Any, Any, User | None]]:
     if auto_error:
         return get_current_user_or_raise
     else:
         return get_current_user_or_none
 
 
-def is_admin(username: str, session: Session | None = None) -> bool:
-    if session:
-        user = session.get(AdminPermission, username)
-        return user is not None
-    with DBHelper() as session:
-        user = session.get(AdminPermission, username)
-        return user is not None
+def is_admin(username: str, session: Session) -> bool:
+    permission = session.get(AdminPermission, username)
+    return permission is not None
 
 
-async def admin_only(current_user: User = Depends(get_current_user())):
-    if not is_admin(current_user.username):
+async def admin_only(session: SessionDep, current_user: User = Depends(get_current_user())):
+    if not is_admin(current_user.username, session):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="This requires admin rights",
@@ -116,11 +112,10 @@ async def admin_only(current_user: User = Depends(get_current_user())):
 
 
 def check_if_user_may_grant_permissions(current_user: User, userdata: PermissionsForUser, session: Session):
-    creator = get_user_or_throw(current_user, session)
-    if creator.admin:
+    if current_user.admin:
         return
 
-    creatorpermissions = {p.fs: p.write_permissions for p in creator.permissions}
+    creatorpermissions = {p.fs: p.write_permissions for p in current_user.permissions}
     is_subset = True
     for permission in userdata.permissions:
         if permission.locked:
@@ -138,16 +133,6 @@ def check_if_user_may_grant_permissions(current_user: User, userdata: Permission
         )
 
 
-def get_user_or_throw(current_user, session):
-    creator = session.get(User, current_user.username)
-    if not creator:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="User does not exist",
-        )
-    return creator
-
-
 def check_permission_list(userdata: PermissionList):
     seen_permissions = set()
     for permission in userdata.permissions:
@@ -161,34 +146,33 @@ def check_permission_list(userdata: PermissionList):
 
 
 @router.post("/create", response_model=UserWithPermissions)
-async def create_user(userdata: UserForCreation, current_user: User = Depends(get_current_user())):
+async def create_user(userdata: UserForCreation, session: SessionDep, current_user: User = Depends(get_current_user())):
     logging.info(f'create_user({userdata=}, {current_user.username=})')
     try:
-        with DBHelper() as session:
-            check_if_user_may_grant_permissions(current_user, userdata, session)
-            check_permission_list(userdata)
+        check_if_user_may_grant_permissions(current_user, userdata, session)
+        check_permission_list(userdata)
 
-            items: list[Base] = []
-            user = User()
-            user.username = userdata.username
-            user.full_name = userdata.username
-            user.created_by = current_user.username
-            items.append(user)
-            user_password = UserPassword(user=userdata.username, hashed_password=get_password_hash(userdata.password))
-            items.append(user_password)
-            if userdata.admin:
-                admin_permission = AdminPermission(user=userdata.username, created_by=current_user.username)
-                items.append(admin_permission)
-            for p in userdata.permissions:
-                permission = to_db_permission(p, userdata.username)
-                items.append(permission)
+        items: list[Base] = []
+        user = User()
+        user.username = userdata.username
+        user.full_name = userdata.username
+        user.created_by = current_user.username
+        items.append(user)
+        user_password = UserPassword(user=userdata.username, hashed_password=get_password_hash(userdata.password))
+        items.append(user_password)
+        if userdata.admin:
+            admin_permission = AdminPermission(user=userdata.username, created_by=current_user.username)
+            items.append(admin_permission)
+        for p in userdata.permissions:
+            permission = to_db_permission(p, userdata.username)
+            items.append(permission)
 
-            session.add_all(items)
-            session.commit()
-            return {'username': user.username,
-                    'admin': bool(user.admin),
-                    'created_by': user.created_by,
-                    'permissions': [p for p in user.permissions]}
+        session.add_all(items)
+        session.commit()
+        return {'username': user.username,
+                'admin': bool(user.admin),
+                'created_by': user.created_by,
+                'permissions': [p for p in user.permissions]}
     except IntegrityError:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -202,65 +186,64 @@ def is_empty(p: DbPermission):
 
 
 @router.post("/permissions", dependencies=[Depends(admin_only)], response_model=UserWithPermissions)
-async def set_user_permissions(userdata: PermissionsForUser, current_user: User = Depends(get_current_user())):
+async def set_user_permissions(userdata: PermissionsForUser, session: SessionDep,
+                               current_user: User = Depends(get_current_user())):
     logging.info(f'set_user_permissions({userdata=}, {current_user.username=})')
     check_permission_list(userdata)
-    with DBHelper() as session:
-        user: User = session.get(User, userdata.username)
-        if not user:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="User not found",
-            )
-        stmt = delete(AdminPermission).where(AdminPermission.user == user.username).execution_options(
-            synchronize_session="fetch")
-        session.execute(stmt)
-        if userdata.admin:
-            session.add(AdminPermission(user=userdata.username, created_by=current_user.username))
-        stmt = delete(DbPermission).where(DbPermission.user == user.username).execution_options(
-            synchronize_session="fetch")
-        session.execute(stmt)
-        for p in userdata.permissions:
-            permission = to_db_permission(p, userdata.username)
-            if not is_empty(permission):
-                session.add(permission)
-        session.commit()
-        return {'username': user.username,
-                'admin': bool(user.admin),
-                'created_by': user.created_by,
-                'permissions': [p for p in user.permissions]}
+    user: User | None = session.get(User, userdata.username)
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found",
+        )
+    stmt = delete(AdminPermission).where(AdminPermission.user == user.username).execution_options(
+        synchronize_session="fetch")
+    session.execute(stmt)
+    if userdata.admin:
+        session.add(AdminPermission(user=userdata.username, created_by=current_user.username))
+    stmt = delete(DbPermission).where(DbPermission.user == user.username).execution_options(
+        synchronize_session="fetch")
+    session.execute(stmt)
+    for p in userdata.permissions:
+        permission = to_db_permission(p, userdata.username)
+        if not is_empty(permission):
+            session.add(permission)
+    session.commit()
+    return {'username': user.username,
+            'admin': bool(user.admin),
+            'created_by': user.created_by,
+            'permissions': [p for p in user.permissions]}
 
 
 @router.patch("/permissions", response_model=UserWithPermissions)
-async def patch_user_permissions(userdata: PermissionList, current_user: User = Depends(get_current_user())):
+async def patch_user_permissions(userdata: PermissionList, session: SessionDep,
+                                 current_user: User = Depends(get_current_user())):
     logging.info(f'patch_user_permissions({userdata=}, {current_user.username=})')
     check_permission_list(userdata)
-    with DBHelper() as session:
-        user: User = session.get(User, userdata.username)
-        if not user:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="User not found",
-            )
-        userdata_for_check = PermissionsForUser(username=userdata.username, permissions=userdata.permissions,
-                                                admin=False)
-        check_if_user_may_grant_permissions(current_user=current_user, userdata=userdata_for_check, session=session)
+    user: User | None = session.get(User, userdata.username)
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found",
+        )
+    userdata_for_check = PermissionsForUser(username=userdata.username, permissions=userdata.permissions,
+                                            admin=False)
+    check_if_user_may_grant_permissions(current_user=current_user, userdata=userdata_for_check, session=session)
 
-        for permission in userdata.permissions:
-            stmt = delete(DbPermission). \
-                where(DbPermission.user == user.username, DbPermission.fs == permission.fs). \
-                execution_options(synchronize_session="fetch")
-            session.execute(stmt)
-        for p in userdata.permissions:
-            db_permission = to_db_permission(p, userdata.username)
-            session.add(db_permission)
-        session.commit()
-        actor: User = session.get(User, current_user.username)
-        managed_fs = {p.fs for p in actor.permissions if p.write_permissions}
-        return {'username': user.username,
-                'admin': bool(user.admin),
-                'created_by': user.created_by,
-                'permissions': [p for p in user.permissions if p.fs in managed_fs]}
+    for permission in userdata.permissions:
+        stmt = delete(DbPermission). \
+            where(DbPermission.user == user.username, DbPermission.fs == permission.fs). \
+            execution_options(synchronize_session="fetch")
+        session.execute(stmt)
+    for p in userdata.permissions:
+        db_permission = to_db_permission(p, userdata.username)
+        session.add(db_permission)
+    session.commit()
+    managed_fs = {p.fs for p in current_user.permissions if p.write_permissions}
+    return {'username': user.username,
+            'admin': bool(user.admin),
+            'created_by': user.created_by,
+            'permissions': [p for p in user.permissions if p.fs in managed_fs]}
 
 
 def to_db_permission(p: Permission, username: str):
@@ -282,74 +265,68 @@ def to_db_permission(p: Permission, username: str):
 
 
 @router.get("", response_model=dict[str, UserWithPermissions])
-async def get_user_list(current_user: User = Depends(get_current_user())):
-    with DBHelper() as session:
-        users: list[User] = session.query(User).all()
-        allusers = {}
-        if is_admin(current_user.username, session):
-            for user in users:
+async def get_user_list(session: SessionDep, current_user: User = Depends(get_current_user())):
+    users: list[User] = session.query(User).all()
+    allusers = {}
+    if is_admin(current_user.username, session):
+        for user in users:
+            allusers[user.username] = {
+                'username': user.username,
+                'admin': bool(user.admin),
+                'created_by': user.created_by,
+                'permissions': [p for p in user.permissions],
+            }
+    else:
+        readable_fs = {p.fs for p in current_user.permissions if p.read_permissions}
+        for user in users:
+            if {p.fs for p in user.permissions}.intersection(readable_fs):
                 allusers[user.username] = {
                     'username': user.username,
                     'admin': bool(user.admin),
                     'created_by': user.created_by,
-                    'permissions': [p for p in user.permissions],
+                    'permissions': [p for p in user.permissions if p.fs in readable_fs],
                 }
-        else:
-            actor: User = session.get(User, current_user.username)
-            readable_fs = {p.fs for p in actor.permissions if p.read_permissions}
-            for user in users:
-                if {p.fs for p in user.permissions}.intersection(readable_fs):
-                    allusers[user.username] = {
-                        'username': user.username,
-                        'admin': bool(user.admin),
-                        'created_by': user.created_by,
-                        'permissions': [p for p in user.permissions if p.fs in readable_fs],
-                    }
-        return allusers
+    return allusers
 
 
 @router.get("/me", response_model=UserWithPermissions)
 async def who_am_i(current_user: User = Depends(get_current_user())):
-    with DBHelper() as session:
-        user: User = session.get(User, current_user.username)
-        return {
-            'username': user.username,
-            'admin': bool(user.admin),
-            'created_by': user.created_by,
-            'permissions': [p for p in user.permissions],
-        }
+    return {
+        'username': current_user.username,
+        'admin': bool(current_user.admin),
+        'created_by': current_user.created_by,
+        'permissions': [p for p in current_user.permissions],
+    }
 
 
 @router.post("/password", status_code=200)
-async def change_password(password_change_data: PasswordChangeData, current_user: User = Depends(get_current_user())):
+async def change_password(password_change_data: PasswordChangeData, session: SessionDep,
+                          current_user: User = Depends(get_current_user())):
     logging.info(f'{current_user.username} is changing their password')
-    with DBHelper() as session:
-        user: User = session.get(User, current_user.username)
-        hashed_password = user.password.hashed_password if user.password else None
-        if not verify_password(password_change_data.current_password, hashed_password):
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Wrong current password",
-            )
-        user.password.hashed_password = get_password_hash(password_change_data.new_password)
-        session.commit()
+    hashed_password = current_user.password.hashed_password if current_user.password else None
+    if not verify_password(password_change_data.current_password, hashed_password):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Wrong current password",
+        )
+    current_user.password.hashed_password = get_password_hash(password_change_data.new_password)
+    session.commit()
 
 
 @router.post("/password/{username}", dependencies=[Depends(admin_only)], status_code=200)
-async def change_password_for_user(username: str, new_password_data: NewPasswordData,
+async def change_password_for_user(username: str, new_password_data: NewPasswordData, session: SessionDep,
                                    current_user: User = Depends(get_current_user())):
     logging.info(f'{current_user.username} is changing the password for {username}')
-    with DBHelper() as session:
-        user: User = session.get(User, username)
-        if not user:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="That user does not exist",
-            )
-        if not user.password:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="That user does not have a password",
-            )
-        user.password.hashed_password = get_password_hash(new_password_data.new_password)
-        session.commit()
+    user: User | None = session.get(User, username)
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="That user does not exist",
+        )
+    if not user.password:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="That user does not have a password",
+        )
+    user.password.hashed_password = get_password_hash(new_password_data.new_password)
+    session.commit()
