@@ -5,13 +5,14 @@ from typing import Any, Annotated
 from fastapi import HTTPException, Depends, APIRouter
 from fastapi.security import OAuth2PasswordBearer
 from pydantic import BaseModel, ConfigDict, Field
-from sqlalchemy import delete
+from sqlalchemy import delete, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from starlette import status
 
 from app.database import User, verify_password, Permission as DbPermission, get_password_hash, \
-    Base, AdminPermission, UserPassword, SessionDep
+    Base, AdminPermission, UserPassword, SessionDep, BaseFsData, PublicFsData, ProtectedFsData, PayoutRequest, \
+    Proceedings, Document, Annotation, ElectoralRegisterDownload, Election
 from app.routers.token import get_user_for_token
 
 
@@ -66,6 +67,11 @@ class PasswordChangeData(BaseModel):
 
 class NewPasswordData(BaseModel):
     new_password: str
+
+
+class TransferData(BaseModel):
+    token: str
+    oidc_token: str
 
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token", auto_error=False)
@@ -336,4 +342,52 @@ async def change_password_for_user(username: str, new_password_data: NewPassword
             detail="That user does not have a password",
         )
     user.password.hashed_password = get_password_hash(new_password_data.new_password)
+    session.commit()
+
+
+@router.post('/transfer')
+async def transfer(data: TransferData, session: SessionDep):
+    token_user = get_user_for_token(data.token, session)
+    oidc_token_user = get_user_for_token(data.oidc_token, session)
+    if not token_user.password:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail='token must be for a native user',
+        )
+    if oidc_token_user.password:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail='oidc_token must be for an oidc user',
+        )
+    old_user = token_user.username
+    new_user = oidc_token_user.username
+    statements = [
+        update(User).where(User.created_by == old_user).values(created_by=new_user),
+        update(AdminPermission).where(AdminPermission.user == old_user).values(user=new_user),
+        update(AdminPermission).where(AdminPermission.created_by == old_user).values(created_by=new_user),
+        update(DbPermission).where(DbPermission.user == old_user).values(user=new_user),
+        update(BaseFsData).where(BaseFsData.user == old_user).values(user=new_user),
+        update(PublicFsData).where(PublicFsData.user == old_user).values(user=new_user),
+        update(ProtectedFsData).where(ProtectedFsData.user == old_user).values(user=new_user),
+        update(ProtectedFsData).where(ProtectedFsData.approved_by == old_user).values(approved_by=new_user),
+        update(PayoutRequest).where(PayoutRequest.requester == old_user).values(requester=new_user),
+        update(PayoutRequest).where(PayoutRequest.last_modified_by == old_user).values(last_modified_by=new_user),
+        update(Proceedings).where(Proceedings.uploaded_by == old_user).values(uploaded_by=new_user),
+        update(Proceedings).where(Proceedings.deleted_by == old_user).values(deleted_by=new_user),
+        update(Document).where(Document.uploaded_by == old_user).values(uploaded_by=new_user),
+        update(Document).where(Document.deleted_by == old_user).values(deleted_by=new_user),
+        update(Annotation).where(Annotation.created_by == old_user).values(created_by=new_user),
+        update(Annotation).where(Annotation.obsoleted_by == old_user).values(obsoleted_by=new_user),
+        update(ElectoralRegisterDownload).where(ElectoralRegisterDownload.username == old_user).values(
+            username=new_user),
+        update(Election).where(Election.last_modified_by == old_user).values(last_modified_by=new_user),
+    ]
+    for statement in statements:
+        session.execute(statement)
+    delete_statements = [
+        delete(User).where(User.username == old_user),
+        delete(UserPassword).where(UserPassword.user == old_user),
+    ]
+    for delete_statement in delete_statements:
+        session.execute(delete_statement)
     session.commit()

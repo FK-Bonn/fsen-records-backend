@@ -136,13 +136,13 @@ if os.getenv('TEST_FAKE_SSO_ACTIVE'):
         return jwt.encode(content, private_key)
 
 
-    def new_token(nonce: str | None) -> dict:
+    def new_token(nonce: str | None, username: str = 'user') -> dict:
         access_token = create_oidc_token({
             "scope": "profile email",
             "aud": "account",
             "email_verified": True,
             "name": "Test User",
-            "preferred_username": "user",
+            "preferred_username": username,
             "given_name": "Test",
             "family_name": "User",
             "email": "user@example.org",

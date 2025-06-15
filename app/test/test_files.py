@@ -1147,7 +1147,7 @@ def test_delete_file(mocked_base_dir, user):
         client.post('/api/v1/file/Informatik',
                     data=DEFAULT_AFSG_DATA,
                     files={'file': ('hhp.pdf', handle, 'application/pdf')},
-                    headers=get_auth_header(client, ADMIN)).json()
+                    headers=get_auth_header(client, ADMIN))
         client.post('/api/v1/file/Informatik/annotate', json={
             'target': DEFAULT_AFSG_DATA,
             'references': None,
@@ -1159,7 +1159,7 @@ def test_delete_file(mocked_base_dir, user):
         client.post('/api/v1/file/Informatik',
                     data=DEFAULT_AFSG_DATA,
                     files={'file': ('hhp.pdf', handle2, 'application/pdf')},
-                    headers=get_auth_header(client, ADMIN)).json()
+                    headers=get_auth_header(client, ADMIN))
         client.post('/api/v1/file/Informatik/annotate', json={
             'target': DEFAULT_AFSG_DATA,
             'references': None,
@@ -1171,7 +1171,7 @@ def test_delete_file(mocked_base_dir, user):
         client.post('/api/v1/file/Informatik',
                     data=DEFAULT_AFSG_DATA,
                     files={'file': ('hhp.pdf', handle3, 'application/pdf')},
-                    headers=get_auth_header(client, ADMIN)).json()
+                    headers=get_auth_header(client, ADMIN))
         client.post('/api/v1/file/Informatik/annotate', json={
             'target': DEFAULT_AFSG_DATA,
             'references': None,

@@ -128,12 +128,12 @@ def test_proceedings_upload_invalid_file(mocked_base_dir):
     assert not target_file.is_file()
 
 
-def create_sample_proceedings(target_file):
+def create_sample_proceedings(target_file, user=USER_INFO_ALL):
     handle = BytesIO(EMPTY_PDF_PAGE)
     result = client.post('/api/v1/proceedings/Informatik',
                          data={'committee': 'FSV', 'date': '2024-05-30', 'tags': ''},
                          files={'file': ('prot.pdf', handle, 'application/pdf')},
-                         headers=get_auth_header(client, USER_INFO_ALL))
+                         headers=get_auth_header(client, user))
     assert result.status_code == 200
     assert target_file.exists()
 
