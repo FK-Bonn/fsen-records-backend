@@ -13,6 +13,7 @@ from jose.exceptions import JWKError
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from starlette import status
+from fastapi.responses import HTMLResponse
 
 from app.config import Config, DUMMY_PRIVATE_KEY
 from app.database import SessionDep
@@ -119,6 +120,7 @@ async def login_for_access_token(session: SessionDep, form_data: OAuth2PasswordR
 
 if os.getenv('TEST_FAKE_SSO_ACTIVE'):
     nonces = {}
+    user_data = {}
 
     class FormData(BaseModel):
         client_id: str
@@ -127,6 +129,10 @@ if os.getenv('TEST_FAKE_SSO_ACTIVE'):
         code: str | None = None
         refresh_token: str | None = None
 
+    class UserData(BaseModel):
+        given_name: str
+        family_name: str
+        username: str
 
     def create_oidc_token(content: dict, expiry: timedelta) -> str:
         private_key = RSAKey(algorithm=constants.Algorithms.RS256, key=DUMMY_PRIVATE_KEY)
@@ -136,15 +142,16 @@ if os.getenv('TEST_FAKE_SSO_ACTIVE'):
         return jwt.encode(content, private_key)
 
 
-    def new_token(nonce: str | None, username: str = 'user') -> dict:
+    def new_token(nonce: str | None, username: str = 'user',
+                  given_name: str = 'Test', family_name: str = 'User') -> dict:
         access_token = create_oidc_token({
             "scope": "profile email",
             "aud": "account",
             "email_verified": True,
-            "name": "Test User",
+            "name": f'{given_name} {family_name}',
             "preferred_username": username,
-            "given_name": "Test",
-            "family_name": "User",
+            "given_name": given_name,
+            "family_name": family_name,
             "email": "user@example.org",
             "nonce": nonce,
         }, expiry=timedelta(seconds=60))
@@ -165,8 +172,32 @@ if os.getenv('TEST_FAKE_SSO_ACTIVE'):
         }
 
 
-    @router.get('/fake-sso/realms/fake-realm/protocol/openid-connect/auth')
-    async def fake_sso_auth(response_type: str, client_id: str, redirect_uri: str,
+    @router.get('/fake-sso/realms/fake-realm/protocol/openid-connect/auth', response_class=HTMLResponse)
+    async def fake_sso_auth_site():
+        return '''<!DOCTYPE html>
+        <html>
+        <head>
+        <meta charset="utf-8">
+        <title>Fake SSO</title>
+        </head>
+        <body>
+        <h1>Fake SSO</h1>
+        <form method="POST">
+        <label for='username'>Username</label>
+        <input type='text' id='username' name='username' value='user'/>
+        <label for='given_name'>Given Name</label>
+        <input type='text' id='given_name' name='given_name' value='Test'/>
+        <label for='family_name'>Family Name</label>
+        <input type='text' id='family_name' name='family_name' value='User'/>
+        <button>Submit</button>
+        </form>
+        </body>
+        </html>
+        '''
+
+
+    @router.post('/fake-sso/realms/fake-realm/protocol/openid-connect/auth')
+    async def fake_sso_auth(data: Annotated[UserData, Form()], response_type: str, client_id: str, redirect_uri: str,
                             state: str | None = None, nonce: str | None = None):
         if response_type != 'code':
             raise HTTPException(
@@ -180,6 +211,7 @@ if os.getenv('TEST_FAKE_SSO_ACTIVE'):
             )
         code = ''.join(random.choice(string.ascii_uppercase) for _ in range(6))
         nonces[code] = nonce
+        user_data[code] = (data.username, data.given_name, data.family_name)
         return RedirectResponse(f'{redirect_uri}?session_state=fake-session-state&state={state}&iss=fake-iss&code={code}')
 
     @router.get('/fake-sso/realms/fake-realm/protocol/openid-connect/logout')
@@ -196,7 +228,8 @@ if os.getenv('TEST_FAKE_SSO_ACTIVE'):
     async def fake_sso_token(form_data: Annotated[FormData, Form()]):
         if form_data.code and form_data.redirect_uri:
             nonce = nonces[form_data.code]
-            return new_token(nonce)
+            username, given_name, family_name = user_data[form_data.code]
+            return new_token(nonce, username=username, given_name=given_name, family_name=family_name)
         elif form_data.refresh_token:
             payload = jwt.decode(form_data.refresh_token, Config.JWKS)
             nonce = payload.get('nonce')

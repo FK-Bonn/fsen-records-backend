@@ -81,17 +81,25 @@ def test_invalid_login_wrong_username():
     }
 
 
-def test_fake_sso_login_auth():
+def test_fake_sso_login_auth_page():
     response = client.get('/api/v1/fake-sso/realms/fake-realm/protocol/openid-connect/auth', follow_redirects=False,
                           params={'response_type': 'code', 'client_id': 'client-id', 'redirect_uri': 'http://my-url'})
+    assert response.status_code == 200
+
+
+def test_fake_sso_login_auth():
+    response = client.post('/api/v1/fake-sso/realms/fake-realm/protocol/openid-connect/auth', follow_redirects=False,
+                           params={'response_type': 'code', 'client_id': 'client-id', 'redirect_uri': 'http://my-url'},
+                           data={'username': 'user', 'given_name': 'Test', 'family_name': 'User'})
     assert response.status_code == 307
     assert re.match(r'http://my-url\?session_state=fake-session-state&state=None&iss=fake-iss&code=[A-Z]{6}',
                     response.headers['Location'])
 
 
 def get_code():
-    response = client.get('/api/v1/fake-sso/realms/fake-realm/protocol/openid-connect/auth', follow_redirects=False,
-                          params={'response_type': 'code', 'client_id': 'client-id', 'redirect_uri': 'http://my-url'})
+    response = client.post('/api/v1/fake-sso/realms/fake-realm/protocol/openid-connect/auth', follow_redirects=False,
+                           params={'response_type': 'code', 'client_id': 'client-id', 'redirect_uri': 'http://my-url'},
+                           data={'username': 'user', 'given_name': 'Test', 'family_name': 'User'})
     code = response.headers['Location'][-6:]
     return code
 
