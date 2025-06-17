@@ -231,9 +231,15 @@ if os.getenv('TEST_FAKE_SSO_ACTIVE'):
             username, given_name, family_name = user_data[form_data.code]
             return new_token(nonce, username=username, given_name=given_name, family_name=family_name)
         elif form_data.refresh_token:
-            payload = jwt.decode(form_data.refresh_token, Config.JWKS)
-            nonce = payload.get('nonce')
-            return new_token(nonce)
+            try:
+                payload = jwt.decode(form_data.refresh_token, Config.JWKS)
+                nonce = payload.get('nonce')
+                return new_token(nonce)
+            except ExpiredSignatureError:
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail='Refresh Token Expired',
+                )
         else:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
