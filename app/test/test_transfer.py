@@ -175,14 +175,14 @@ def test_transfer_user_created_by():
                              'admin': False,
                              'permissions': [],
                              },
-                       headers=get_auth_header(client, USER_INFO_ALL)
+                       headers=get_auth_header(client, ADMIN)
                        ).status_code == 200
 
-    transfer(USER_INFO_ALL, 'oidc_user')
+    oidc_token = transfer(ADMIN, 'oidc_user')
 
-    response = client.get('/api/v1/user', headers=get_auth_header(client, ADMIN))
+    response = client.get('/api/v1/user', headers={'Authorization': f'Bearer {oidc_token}'})
     assert response.json()['user-to-create']['created_by'] == 'oidc_user'
-    assert response.json()[ADMIN]['created_by'] == 'root'
+    assert response.json()['oidc_user']['created_by'] == 'oidc'
 
 
 def test_transfer_admin_permission():

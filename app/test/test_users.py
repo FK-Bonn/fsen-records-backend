@@ -310,7 +310,7 @@ def test_create_user_no_admin():
                                                   **PERMISSIONS_LEVEL_2}],
                                  },
                            headers=get_auth_header(client, USER_INFO_ALL))
-    assert response.status_code == 200
+    assert response.status_code == 401
 
 
 def test_create_user_no_admin_locked_fails():

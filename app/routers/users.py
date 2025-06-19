@@ -152,7 +152,7 @@ def check_permission_list(userdata: PermissionList):
         seen_permissions.add(t)
 
 
-@router.post("/create", response_model=UserWithPermissions)
+@router.post("/create", dependencies=[Depends(admin_only)], response_model=UserWithPermissions)
 async def create_user(userdata: UserForCreation, session: SessionDep, current_user: User = Depends(get_current_user())):
     logging.info(f'create_user({userdata=}, {current_user.username=})')
     try:
