@@ -2,8 +2,6 @@
 
 set -ex
 
-export TEST_FAKE_SSO_ACTIVE='yes'
-
 python -m pytest --cov=app --cov-report=html --cov-config=pyproject.toml ./app
 ruff check app
 python -m mypy ./app

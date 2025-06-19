@@ -118,7 +118,7 @@ async def login_for_access_token(session: SessionDep, form_data: OAuth2PasswordR
     return {"access_token": access_token, "token_type": "bearer"}
 
 
-if os.getenv('TEST_FAKE_SSO_ACTIVE'):
+if os.getenv('TEST_FAKE_SSO_ACTIVE') or os.getenv('PYTEST_VERSION'):
     nonces = {}
     user_data = {}
 
