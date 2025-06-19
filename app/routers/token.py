@@ -120,7 +120,7 @@ async def login_for_access_token(session: SessionDep, form_data: OAuth2PasswordR
 
 if os.getenv('TEST_FAKE_SSO_ACTIVE') or os.getenv('PYTEST_VERSION'):
     nonces = {}
-    user_data = {}
+    user_data = {'oops': ('', '', '')}
 
     class FormData(BaseModel):
         client_id: str
@@ -142,7 +142,7 @@ if os.getenv('TEST_FAKE_SSO_ACTIVE') or os.getenv('PYTEST_VERSION'):
         return jwt.encode(content, private_key)
 
 
-    def new_token(nonce: str | None, username: str = 'user',
+    def new_token(nonce: str | None, code: str | None = None, username: str = 'user',
                   given_name: str = 'Test', family_name: str = 'User') -> dict:
         access_token = create_oidc_token({
             "scope": "profile email",
@@ -158,6 +158,7 @@ if os.getenv('TEST_FAKE_SSO_ACTIVE') or os.getenv('PYTEST_VERSION'):
         refresh_token = create_oidc_token({
             "typ": "Refresh",
             "azp": "fake-iss",
+            "code": code or '',
             "nonce": nonce,
         }, expiry=timedelta(minutes=15))
         return {
@@ -229,12 +230,16 @@ if os.getenv('TEST_FAKE_SSO_ACTIVE') or os.getenv('PYTEST_VERSION'):
         if form_data.code and form_data.redirect_uri:
             nonce = nonces[form_data.code]
             username, given_name, family_name = user_data[form_data.code]
-            return new_token(nonce, username=username, given_name=given_name, family_name=family_name)
+            return new_token(nonce, code=form_data.code,
+                             username=username, given_name=given_name, family_name=family_name)
         elif form_data.refresh_token:
             try:
                 payload = jwt.decode(form_data.refresh_token, Config.JWKS)
                 nonce = payload.get('nonce')
-                return new_token(nonce)
+                code = payload.get('code', 'oops')
+                username, given_name, family_name = user_data[code]
+                return new_token(nonce, code=code,
+                                 username=username, given_name=given_name, family_name=family_name)
             except ExpiredSignatureError:
                 raise HTTPException(
                     status_code=status.HTTP_401_UNAUTHORIZED,
