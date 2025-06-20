@@ -5,7 +5,7 @@ from unittest import mock
 
 import pytest
 from fastapi.testclient import TestClient
-from freezegun import freeze_time
+from time_machine import travel
 from sqlalchemy import select
 
 from app.database import get_session, AdminPermission, Proceedings, Document
@@ -248,7 +248,7 @@ def test_transfer_permissions():
 
 
 def test_transfer_base_fs_data_user():
-    with freeze_time("2023-07-07T17:00:00Z"):
+    with travel("2023-07-07T17:00:00Z", tick=False):
         set_sample_base_data()
 
     oidc_token = transfer(ADMIN, 'oidc_user')
@@ -269,7 +269,7 @@ def test_transfer_base_fs_data_user():
 
 
 def test_transfer_public_fs_data_user():
-    with freeze_time("2023-07-07T17:00:00Z"):
+    with travel("2023-07-07T17:00:00Z", tick=False):
         set_sample_public_data()
 
     oidc_token = transfer(ADMIN, 'oidc_user')
@@ -290,7 +290,7 @@ def test_transfer_public_fs_data_user():
 
 
 def test_transfer_protected_fs_data_user():
-    with freeze_time("2023-07-07T17:00:00Z"):
+    with travel("2023-07-07T17:00:00Z", tick=False):
         set_sample_protected_data()
 
     oidc_token = transfer(ADMIN, 'oidc_user')
@@ -312,7 +312,7 @@ def test_transfer_protected_fs_data_user():
 
 
 def test_transfer_protected_fs_data_approved_by():
-    with freeze_time("2023-07-07T17:00:00Z"):
+    with travel("2023-07-07T17:00:00Z", tick=False):
         assert client.put('/api/v1/data/Informatik/protected', json=SAMPLE_PROTECTED_DATA,
                           headers=get_auth_header(client, USER_INFO_ALL)).status_code == 200
         data_id = client.get('/api/v1/data/Informatik/protected/history',
@@ -343,7 +343,7 @@ def test_transfer_protected_fs_data_approved_by():
     'bfsg',
     'vorankuendigung',
 ])
-@freeze_time("2023-04-04T10:00:00Z")
+@travel("2023-04-04T10:00:00Z", tick=False)
 def test_transfer_payout_requests(_type):
     response = client.post(f'/api/v1/payout-request/{_type}/create', json=CREATE_PARAMS[_type],
                            headers=get_auth_header(client, ADMIN))
@@ -482,7 +482,7 @@ def test_transfer_annotation(mocked_base_dir):
 
 
 @mock.patch('app.routers.electoral_registers.get_base_dir', return_value=Path(TemporaryDirectory().name))
-@freeze_time("2024-11-11T11:11:00Z")
+@travel("2024-11-11T11:11:00Z", tick=False)
 def test_transfer_electoral_register_download(mocked_base_dir, ):
     create_register(mocked_base_dir.return_value / '2024-11-11' / 'Informatik.zip')
     result = client.get('/api/v1/electoral-registers/2024-11-11/Informatik.zip',

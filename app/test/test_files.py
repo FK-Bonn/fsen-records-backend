@@ -5,7 +5,7 @@ from unittest import mock
 
 import pytest
 from fastapi.testclient import TestClient
-from freezegun import freeze_time
+from time_machine import travel
 
 from app.database import get_session
 from app.main import app, subapp
@@ -949,17 +949,17 @@ def test_fixed_date_annotations(mocked_base_dir):
     handle = BytesIO(EMPTY_PDF_PAGE)
     handle2 = BytesIO(EMPTY_PDF_PAGE_2)
     handle3 = BytesIO(EMPTY_PDF_PAGE_3)
-    with freeze_time("2023-04-03T10:00:00Z"):
+    with travel("2023-04-03T10:00:00Z", tick=False):
         client.post('/api/v1/file/Informatik',
                     data=DEFAULT_AFSG_DATA,
                     files={'file': ('hhp.pdf', handle2, 'application/pdf')},
                     headers=get_auth_header(client, ADMIN)).json()
-    with freeze_time("2023-04-04T10:00:00Z"):
+    with travel("2023-04-04T10:00:00Z", tick=False):
         client.post('/api/v1/file/Informatik',
                     data=DEFAULT_AFSG_DATA,
                     files={'file': ('hhp.pdf', handle, 'application/pdf')},
                     headers=get_auth_header(client, ADMIN)).json()
-    with freeze_time("2023-04-05T10:00:00Z"):
+    with travel("2023-04-05T10:00:00Z", tick=False):
         client.post('/api/v1/file/Informatik/annotate', json={
             'target': DEFAULT_AFSG_DATA,
             'references': None,
@@ -980,7 +980,7 @@ def test_fixed_date_annotations(mocked_base_dir):
             'annotations': [
                 {'level': 'Error', 'text': 'das ist auch nix'},
             ]}, headers=get_auth_header(client, ADMIN))
-    with freeze_time("2023-04-06T10:00:00Z"):
+    with travel("2023-04-06T10:00:00Z", tick=False):
         client.post('/api/v1/file/Informatik/annotate', json={
             'target': DEFAULT_AFSG_DATA,
             'references': None,
@@ -1143,7 +1143,7 @@ def test_delete_file(mocked_base_dir, user):
     handle = BytesIO(EMPTY_PDF_PAGE)
     handle2 = BytesIO(EMPTY_PDF_PAGE_2)
     handle3 = BytesIO(EMPTY_PDF_PAGE_3)
-    with freeze_time("2023-04-03T10:00:00Z"):
+    with travel("2023-04-03T10:00:00Z", tick=False):
         client.post('/api/v1/file/Informatik',
                     data=DEFAULT_AFSG_DATA,
                     files={'file': ('hhp.pdf', handle, 'application/pdf')},
@@ -1155,7 +1155,7 @@ def test_delete_file(mocked_base_dir, user):
             'annotations': None,
             'url': None,
         }, headers=get_auth_header(client, ADMIN))
-    with freeze_time("2023-04-04T10:00:00Z"):
+    with travel("2023-04-04T10:00:00Z", tick=False):
         client.post('/api/v1/file/Informatik',
                     data=DEFAULT_AFSG_DATA,
                     files={'file': ('hhp.pdf', handle2, 'application/pdf')},
@@ -1167,7 +1167,7 @@ def test_delete_file(mocked_base_dir, user):
             'annotations': None,
             'url': None,
         }, headers=get_auth_header(client, ADMIN))
-    with freeze_time("2023-04-05T10:00:00Z"):
+    with travel("2023-04-05T10:00:00Z", tick=False):
         client.post('/api/v1/file/Informatik',
                     data=DEFAULT_AFSG_DATA,
                     files={'file': ('hhp.pdf', handle3, 'application/pdf')},
@@ -1283,7 +1283,7 @@ def test_delete_file(mocked_base_dir, user):
 ])
 def test_delete_file_not_allowed(mocked_base_dir, user):
     handle = BytesIO(EMPTY_PDF_PAGE)
-    with freeze_time("2023-04-03T10:00:00Z"):
+    with travel("2023-04-03T10:00:00Z", tick=False):
         client.post('/api/v1/file/Informatik',
                     data=DEFAULT_AFSG_DATA,
                     files={'file': ('hhp.pdf', handle, 'application/pdf')},
@@ -1326,7 +1326,7 @@ def test_delete_file_history(mocked_base_dir):
     handle = BytesIO(EMPTY_PDF_PAGE)
     handle2 = BytesIO(EMPTY_PDF_PAGE_2)
     handle3 = BytesIO(EMPTY_PDF_PAGE_3)
-    with freeze_time("2023-04-03T10:00:00Z"):
+    with travel("2023-04-03T10:00:00Z", tick=False):
         client.post('/api/v1/file/Informatik',
                     data=DEFAULT_AFSG_DATA,
                     files={'file': ('hhp.pdf', handle, 'application/pdf')},
@@ -1338,7 +1338,7 @@ def test_delete_file_history(mocked_base_dir):
             'annotations': None,
             'url': None,
         }, headers=get_auth_header(client, ADMIN))
-    with freeze_time("2023-04-04T10:00:00Z"):
+    with travel("2023-04-04T10:00:00Z", tick=False):
         client.post('/api/v1/file/Informatik',
                     data=DEFAULT_AFSG_DATA,
                     files={'file': ('hhp.pdf', handle2, 'application/pdf')},
@@ -1350,7 +1350,7 @@ def test_delete_file_history(mocked_base_dir):
             'annotations': None,
             'url': None,
         }, headers=get_auth_header(client, ADMIN))
-    with freeze_time("2023-04-05T10:00:00Z"):
+    with travel("2023-04-05T10:00:00Z", tick=False):
         client.post('/api/v1/file/Informatik',
                     data=DEFAULT_AFSG_DATA,
                     files={'file': ('hhp.pdf', handle3, 'application/pdf')},

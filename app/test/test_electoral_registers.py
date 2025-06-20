@@ -6,7 +6,7 @@ from unittest import mock
 
 import pytest
 from fastapi.testclient import TestClient
-from freezegun import freeze_time
+from time_machine import travel
 
 from app.database import get_session
 from app.main import app, subapp
@@ -94,7 +94,7 @@ def test_electoral_registers_only_five_downloads_per_day(mocked_base_dir):
     USER_INFO_ALL,
 ])
 @mock.patch('app.routers.electoral_registers.get_base_dir', return_value=Path(TemporaryDirectory().name))
-@freeze_time("2024-11-11T11:11:00Z")
+@travel("2024-11-11T11:11:00Z", tick=False)
 def test_electoral_registers_successful_download_gets_logged(mocked_base_dir, user):
     create_register(mocked_base_dir.return_value / '2024-11-11' / 'Informatik.zip')
     result = client.get('/api/v1/electoral-registers/2024-11-11/Informatik.zip',

@@ -1,6 +1,6 @@
 import pytest
 from fastapi.testclient import TestClient
-from freezegun import freeze_time
+from time_machine import travel
 
 from app.database import get_session
 from app.main import app
@@ -139,7 +139,7 @@ def test_get_all_fsdata_multiple_fs():
 
 
 def test_get_all_fsdata_limit_date():
-    with freeze_time("2023-04-04T10:00:00Z"):
+    with travel("2023-04-04T10:00:00Z", tick=False):
         set_sample_base_data(fs='Informatik')
         set_sample_public_data(fs='Informatik')
         set_sample_protected_data(fs='Informatik')
@@ -150,7 +150,7 @@ def test_get_all_fsdata_limit_date():
     modified_base_data = {**SAMPLE_BASE_DATA, 'annotation': 'Warning! Do not use!', 'financial_year_override': None}
     modified_public_data = {**SAMPLE_PUBLIC_DATA, 'email': 'foo@bar.xyz'}
     modified_protected_data = {**SAMPLE_PROTECTED_DATA, 'iban': 'DE0123456789'}
-    with freeze_time("2023-05-05T10:00:00Z"):
+    with travel("2023-05-05T10:00:00Z", tick=False):
         response = client.put('/api/v1/data/Informatik/base', json=modified_base_data, headers=get_auth_header(client, ADMIN))
         assert response.status_code == 200
         response = client.put('/api/v1/data/Informatik/public', json=modified_public_data, headers=get_auth_header(client, ADMIN))
@@ -158,7 +158,7 @@ def test_get_all_fsdata_limit_date():
         response = client.put('/api/v1/data/Informatik/protected', json=modified_protected_data, headers=get_auth_header(client, ADMIN))
         assert response.status_code == 200
 
-    with freeze_time("2023-06-06T10:00:00Z"):
+    with travel("2023-06-06T10:00:00Z", tick=False):
         response = client.get('/api/v1/data/2023-05-01', headers=get_auth_header(client, ADMIN))
         assert response.status_code == 200
         assert response.json() == {
@@ -237,7 +237,7 @@ def test_get_all_fsdata_only_public_data_present():
 
 
 def test_get_all_fsdata_only_public_data_present_with_limit():
-    with freeze_time("2023-04-04T10:00:00Z"):
+    with travel("2023-04-04T10:00:00Z", tick=False):
         set_sample_public_data(fs='Informatik')
     response = client.get('/api/v1/data/2024-01-01', headers=get_auth_header(client, USER_INFO_ALL))
     assert response.status_code == 200
@@ -251,7 +251,7 @@ def test_get_all_fsdata_only_public_data_present_with_limit():
 
 
 def test_get_all_fsdata_only_protected_data_present_with_limit():
-    with freeze_time("2023-04-04T10:00:00Z"):
+    with travel("2023-04-04T10:00:00Z", tick=False):
         set_sample_protected_data(fs='Informatik')
     response = client.get('/api/v1/data/2024-01-01', headers=get_auth_header(client, USER_INFO_ALL))
     assert response.status_code == 200
@@ -285,7 +285,7 @@ def test_set_and_get_base_fsdata():
     assert response.json() == {'data': SAMPLE_BASE_DATA, 'is_latest': True}
 
 
-@freeze_time("2023-04-04T10:00:00Z")
+@travel("2023-04-04T10:00:00Z", tick=False)
 def test_set_and_approve_base_fsdata():
     response = client.put('/api/v1/data/Informatik/base', json=SAMPLE_BASE_DATA,
                           headers=get_auth_header(client, ADMIN))
@@ -311,10 +311,10 @@ def test_set_and_approve_base_fsdata():
 def test_base_fsdata_history_as_admin():
     data1 = SAMPLE_BASE_DATA
     data2 = {**SAMPLE_BASE_DATA, 'annotation': 'Warning! Do not use!', 'financial_year_override': None}
-    with freeze_time("2023-04-04T10:00:00Z"):
+    with travel("2023-04-04T10:00:00Z", tick=False):
         response = client.put('/api/v1/data/Informatik/base', json=data1, headers=get_auth_header(client, ADMIN))
         assert response.status_code == 200
-    with freeze_time("2023-07-07T17:00:00Z"):
+    with travel("2023-07-07T17:00:00Z", tick=False):
         response = client.put('/api/v1/data/Informatik/base', json=data2, headers=get_auth_header(client, ADMIN))
         assert response.status_code == 200
 
@@ -395,7 +395,7 @@ def test_set_and_get_public_fsdata(user):
     assert response.json() == {'data': SAMPLE_PUBLIC_DATA, 'is_latest': True}
 
 
-@freeze_time("2023-04-04T10:00:00Z")
+@travel("2023-04-04T10:00:00Z", tick=False)
 def test_set_and_approve_public_fsdata():
     response = client.put('/api/v1/data/Informatik/public', json=SAMPLE_PUBLIC_DATA,
                           headers=get_auth_header(client, USER_INFO_ALL))
@@ -421,10 +421,10 @@ def test_set_and_approve_public_fsdata():
 def test_public_fsdata_history_as_admin():
     data1 = SAMPLE_PUBLIC_DATA
     data2 = {**SAMPLE_PUBLIC_DATA, 'website': 'https://changed.xyz', }
-    with freeze_time("2023-04-04T10:00:00Z"):
+    with travel("2023-04-04T10:00:00Z", tick=False):
         response = client.put('/api/v1/data/Informatik/public', json=data1, headers=get_auth_header(client, ADMIN))
         assert response.status_code == 200
-    with freeze_time("2023-07-07T17:00:00Z"):
+    with travel("2023-07-07T17:00:00Z", tick=False):
         response = client.put('/api/v1/data/Informatik/public', json=data2, headers=get_auth_header(client, ADMIN))
         assert response.status_code == 200
 
@@ -486,10 +486,10 @@ def test_approve_base_fsdata_does_not_exist():
 def test_protected_fsdata_history_as_admin():
     data1 = SAMPLE_PROTECTED_DATA
     data2 = {**SAMPLE_PROTECTED_DATA, 'iban': 'AT1234567890', }
-    with freeze_time("2023-04-04T10:00:00Z"):
+    with travel("2023-04-04T10:00:00Z", tick=False):
         response = client.put('/api/v1/data/Informatik/protected', json=data1, headers=get_auth_header(client, ADMIN))
         assert response.status_code == 200
-    with freeze_time("2023-07-07T17:00:00Z"):
+    with travel("2023-07-07T17:00:00Z", tick=False):
         response = client.put('/api/v1/data/Informatik/protected', json=data2, headers=get_auth_header(client, USER_INFO_ALL))
         assert response.status_code == 200
 

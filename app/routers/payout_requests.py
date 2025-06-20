@@ -45,10 +45,10 @@ class BfsgPayoutRequestForCreation(PayoutRequestForCreation):
     category: str
     amount_cents: int
     status: PayoutRequestStatus | None = None
-    status_date: str | None = None
-    request_date: str | None = None
+    status_date: date | None = None
+    request_date: date | None = None
     comment: str | None = None
-    completion_deadline: str | None = None
+    completion_deadline: date | None = None
     reference: str | None = None
 
 
@@ -58,10 +58,10 @@ class VorankuendigungPayoutRequestForCreation(BfsgPayoutRequestForCreation):
 
 class ModifiablePayoutRequestProperties(BaseModel):
     status: PayoutRequestStatus | None = None
-    status_date: str | None = None
+    status_date: date | None = None
     amount_cents: int | None = None
     comment: str | None = None
-    completion_deadline: str | None = None
+    completion_deadline: date | None = None
     reference: str | None = None
 
 
@@ -289,6 +289,8 @@ async def create_bfsg_request(data: BfsgPayoutRequestForCreation, session: Sessi
     request_id = get_request_id(data.semester, 'B', session)
     today = get_europe_berlin_date()
     now = ts()
+    completion_deadline = data.completion_deadline.isoformat() if data.completion_deadline else \
+        get_default_bfsg_completion_deadline(today)
 
     payout_request = PayoutRequest()
     payout_request.request_id = request_id
@@ -297,14 +299,14 @@ async def create_bfsg_request(data: BfsgPayoutRequestForCreation, session: Sessi
     payout_request.fs = data.fs
     payout_request.semester = data.semester
     payout_request.status = data.status.value if data.status else PayoutRequestStatus.GESTELLT.value
-    payout_request.status_date = data.status_date or today
+    payout_request.status_date = data.status_date.isoformat() if data.status_date else today
     payout_request.amount_cents = data.amount_cents
     payout_request.comment = data.comment or ''
-    payout_request.request_date = data.request_date or today
+    payout_request.request_date = data.request_date.isoformat() if data.request_date else today
     payout_request.requester = current_user.username
     payout_request.last_modified_timestamp = now
     payout_request.last_modified_by = current_user.username
-    payout_request.completion_deadline = data.completion_deadline or get_default_bfsg_completion_deadline(today)
+    payout_request.completion_deadline = completion_deadline
     payout_request.reference = data.reference  # type: ignore
     session.add(payout_request)
     session.commit()
@@ -328,14 +330,14 @@ async def create_vorankuendigung_request(data: VorankuendigungPayoutRequestForCr
     payout_request.fs = data.fs
     payout_request.semester = data.semester
     payout_request.status = data.status.value if data.status else PayoutRequestStatus.GESTELLT.value
-    payout_request.status_date = data.status_date or today
+    payout_request.status_date = data.status_date.isoformat() if data.status_date else today
     payout_request.amount_cents = data.amount_cents
     payout_request.comment = data.comment or ''
-    payout_request.request_date = data.request_date or today
+    payout_request.request_date = data.request_date.isoformat() if data.request_date else today
     payout_request.requester = current_user.username
     payout_request.last_modified_timestamp = now
     payout_request.last_modified_by = current_user.username
-    payout_request.completion_deadline = data.completion_deadline or ''
+    payout_request.completion_deadline = data.completion_deadline.isoformat() if data.completion_deadline else ''
     payout_request.reference = data.reference  # type: ignore
     session.add(payout_request)
     session.commit()
@@ -357,13 +359,13 @@ async def modify_request(_type: PayoutRequestType, request_id: str, data: Modifi
     make_transient(payout_request)
     payout_request.id = None  # type: ignore
     if data.status_date is not None:
-        payout_request.status_date = data.status_date
+        payout_request.status_date = data.status_date.isoformat()
     if data.status is not None:
         payout_request.status = data.status.value
     if data.amount_cents is not None:
         payout_request.amount_cents = data.amount_cents
     if data.completion_deadline is not None:
-        payout_request.completion_deadline = data.completion_deadline
+        payout_request.completion_deadline = data.completion_deadline.isoformat()
     if data.comment is not None:
         payout_request.comment = data.comment
     if data.reference is not None:

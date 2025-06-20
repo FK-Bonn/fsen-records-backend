@@ -2,7 +2,7 @@ requests
 httpx
 pytest
 pytest-cov
-freezegun
+time-machine
 ruff
 mypy
 types-python-jose

@@ -1,6 +1,6 @@
 import pytest
 from fastapi.testclient import TestClient
-from freezegun import freeze_time
+from time_machine import travel
 
 from app.database import get_session
 from app.main import app, subapp
@@ -72,13 +72,13 @@ def test_elections_index(user):
 def test_get_history_as_admin():
     election_id = 'deadbeef'
 
-    with freeze_time("2025-10-03T10:00:00Z"):
+    with travel("2025-10-03T10:00:00Z", tick=False):
         create_election(id_=election_id, fs='Geographie', first_election_day='2025-11-12')
-    with freeze_time("2025-10-03T11:00:00Z"):
+    with travel("2025-10-03T11:00:00Z", tick=False):
         create_election(id_=election_id, fs='Geographie')
-    with freeze_time("2025-10-03T12:00:00Z"):
+    with travel("2025-10-03T12:00:00Z", tick=False):
         create_election(id_='a0a0a0a0', fs='Geographie')
-    with freeze_time("2025-10-03T13:00:00Z"):
+    with travel("2025-10-03T13:00:00Z", tick=False):
         create_election(id_=election_id, fs='Geographie', result_url='https://example.org/res')
     result = client.get(f'/api/v1/elections/{election_id}/history',
                         headers=get_auth_header(client, ADMIN))
