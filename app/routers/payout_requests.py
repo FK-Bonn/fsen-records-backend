@@ -377,6 +377,20 @@ async def modify_request(_type: PayoutRequestType, request_id: str, data: Modifi
     return get_payout_request(session, request_id, _type)
 
 
+@router.delete("/{_type}/{request_id}", dependencies=[Depends(admin_only)])
+async def delete_request(_type: PayoutRequestType, request_id: str,
+                         session: SessionDep, current_user: User = Depends(get_current_user())):
+    logging.info(f'delete_request({_type=}, {request_id=}, {current_user.username=})')
+    payout_request = get_payout_request(session, request_id, _type)
+    if not payout_request:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="PayoutRequest not found",
+        )
+    session.delete(payout_request)
+    session.commit()
+
+
 @router.get("/{_type}/{request_id}/history", response_model=list[PayoutRequestData])
 async def get_request_history(_type: PayoutRequestType, request_id: str, session: SessionDep,
                               current_user: User = Depends(get_current_user(auto_error=False))):

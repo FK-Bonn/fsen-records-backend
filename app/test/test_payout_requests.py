@@ -447,6 +447,60 @@ def test_modify_payout_requests_as_admin(_type, request_id):
     ['bfsg', 'B22W-0023'],
     ['vorankuendigung', 'V22W-0023'],
 ])
+@pytest.mark.parametrize("username", [
+    None,
+    USER_NO_PERMS,
+    USER_INFO_READ,
+    USER_INFO_GEO_READ,
+])
+def test_delete_payout_requests_as_non_admin_fails(username, _type, request_id):
+    response = client.delete(f'/api/v1/payout-request/{_type}/{request_id}',
+                             headers=get_auth_header(client, username))
+    assert response.status_code == 401
+    assert len(client.get(f'/api/v1/payout-request/{_type}/{request_id}/history',
+                          headers=get_auth_header(client, ADMIN)).json()) == 1
+
+
+@pytest.mark.parametrize('_type,request_id', [
+    ['afsg', 'A22W-0023'],
+    ['bfsg', 'B22W-0023'],
+    ['vorankuendigung', 'V22W-0023'],
+])
+def test_delete_payout_request_as_admin(_type, request_id):
+    response = client.delete(f'/api/v1/payout-request/{_type}/{request_id}',
+                             headers=get_auth_header(client, ADMIN))
+
+    assert response.status_code == 200
+    assert client.get(f'/api/v1/payout-request/{_type}/{request_id}/history',
+                      headers=get_auth_header(client, ADMIN)).status_code == 404
+
+
+@pytest.mark.parametrize('_type,request_id', [
+    ['afsg', 'A22W-0023'],
+    ['bfsg', 'B22W-0023'],
+    ['vorankuendigung', 'V22W-0023'],
+])
+def test_delete_payout_request_reveals_previous_state(_type, request_id):
+    assert client.patch(f'/api/v1/payout-request/{_type}/{request_id}', json=DEFAULT_PARAMETERS,
+                        headers=get_auth_header(client, ADMIN)).status_code == 200
+    assert len(client.get(f'/api/v1/payout-request/{_type}/{request_id}/history',
+                          headers=get_auth_header(client, ADMIN)).json()) == 2
+
+    response = client.delete(f'/api/v1/payout-request/{_type}/{request_id}',
+                             headers=get_auth_header(client, ADMIN))
+
+    assert response.status_code == 200
+    history = client.get(f'/api/v1/payout-request/{_type}/{request_id}/history',
+                         headers=get_auth_header(client, ADMIN)).json()
+    assert len(history) == 1
+    assert history[0]['status'] == 'GESTELLT'
+
+
+@pytest.mark.parametrize('_type,request_id', [
+    ['afsg', 'A22W-0023'],
+    ['bfsg', 'B22W-0023'],
+    ['vorankuendigung', 'V22W-0023'],
+])
 @travel("2023-04-04T10:00:00Z", tick=False)
 def test_modify_payout_requests_with_silly_date_formats(_type, request_id):
     response = client.patch(f'/api/v1/payout-request/{_type}/{request_id}',
