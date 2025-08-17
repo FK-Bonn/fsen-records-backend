@@ -371,9 +371,11 @@ async def upload_document(
     filename = build_filename(request_id=request_id, category=category, base_name=base_name,
                               date_start=date_start, date_end=date_end, file_extension=file_extension,
                               sha256hash=sha256hash)
-    target_dir = get_base_dir() / fs
+    target_dir = (get_base_dir() / fs).resolve()
     target_dir.mkdir(parents=True, exist_ok=True)
-    target_file = target_dir / filename
+    target_file = (target_dir / filename).resolve()
+    if not target_file.is_relative_to(target_dir):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail='Invalid data')
     with target_file.open('wb+') as f:
         shutil.copyfileobj(file.file, f)
     now = ts()

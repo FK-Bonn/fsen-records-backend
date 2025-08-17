@@ -97,6 +97,24 @@ def test_upload_file_afsg(mocked_base_dir):
 
 
 @mock.patch('app.routers.files.get_base_dir', return_value=Path(TemporaryDirectory().name))
+def test_upload_file_afsg_no_path_traversal(mocked_base_dir):
+    handle = BytesIO(EMPTY_PDF_PAGE)
+    response = client.post('/api/v1/file/Informatik',
+                           data={
+                               'category': 'AFSG',
+                               'base_name': 'HHP/../../xD',
+                               'date_start': '2023-10-01',
+                               'date_end': '2024-09-30',
+                               'request_id': '',
+                           },
+                           files={'file': ('hhp.pdf', handle, 'application/pdf')},
+                           headers=get_auth_header(client, ADMIN))
+    assert response.status_code == 403
+    assert response.json() == {'detail': 'Invalid data'}
+    assert not (mocked_base_dir() / f'xD-2023-10-01--2024-09-30-{PDF_HASH}.pdf').is_file()
+
+
+@mock.patch('app.routers.files.get_base_dir', return_value=Path(TemporaryDirectory().name))
 def test_update_file_afsg(mocked_base_dir):
     handle = BytesIO(EMPTY_PDF_PAGE)
     handle2 = BytesIO(EMPTY_PDF_PAGE_2)
