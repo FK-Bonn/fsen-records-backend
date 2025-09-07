@@ -130,7 +130,7 @@ CREATED_PAYOUT_REQUEST: dict[str, dict[str, str | int | None]] = {
         'requester': ADMIN,
         'last_modified_timestamp': '2023-04-04T10:00:00+00:00',
         'last_modified_by': ADMIN,
-        'completion_deadline': '2023-10-04',
+        'completion_deadline': '2023-10-31',
     },
     'vorankuendigung': {
         'request_id': 'V23S-0001',
@@ -716,16 +716,18 @@ def test_get_default_afsg_completion_deadline(semester: str, expiration_date: st
 
 
 @pytest.mark.parametrize("today,expiration_date", [
-    ['2023-01-01', '2023-07-01'],
-    ['2023-02-28', '2023-08-28'],
-    ['2024-02-29', '2024-08-29'],
-    ['2024-08-29', '2025-03-01'],
-    ['2024-08-30', '2025-03-01'],
-    ['2024-08-31', '2025-03-01'],
+    ['2023-01-01', '2023-07-31'],
+    ['2023-02-28', '2023-08-31'],
+    ['2024-02-29', '2024-08-31'],
+    ['2023-08-31', '2024-02-29'],
+    ['2024-08-29', '2025-02-28'],
+    ['2024-08-30', '2025-02-28'],
+    ['2024-08-31', '2025-02-28'],
     ['2023-01-31', '2023-07-31'],
-    ['2023-03-31', '2023-10-01'],
-    ['2023-09-30', '2024-03-30'],
-    ['2023-10-31', '2024-05-01'],
+    ['2023-03-31', '2023-09-30'],
+    ['2023-09-30', '2024-03-31'],
+    ['2023-10-31', '2024-04-30'],
+    ['2023-06-15', '2023-12-31'],
 ])
 def test_get_default_bfsg_completion_deadline(today: str, expiration_date: str):
     assert get_default_bfsg_completion_deadline(today) == expiration_date

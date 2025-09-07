@@ -168,15 +168,13 @@ def get_default_afsg_completion_deadline(semester: str) -> str:
 def get_default_bfsg_completion_deadline(today: str) -> str:
     parsedDate = datetime.strptime(today, '%Y-%m-%d').date()
     year = parsedDate.year
-    month = parsedDate.month + 6
-    day = parsedDate.day
+    month = parsedDate.month + 7
+    day = 1
     while month > 12:
         month -= 12
         year += 1
-    try:
-        return date(year=year, month=month, day=day).strftime('%Y-%m-%d')
-    except ValueError:
-        return date(year=year, month=month + 1, day=1).strftime('%Y-%m-%d')
+    value = date(year=year, month=month, day=day) - timedelta(days=1)
+    return value.strftime('%Y-%m-%d')
 
 
 def get_request_id(semester: str, type_prefix: str, session: Session) -> str:
