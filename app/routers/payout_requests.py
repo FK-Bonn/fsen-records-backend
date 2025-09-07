@@ -177,6 +177,16 @@ def get_default_bfsg_completion_deadline(today: str) -> str:
     return value.strftime('%Y-%m-%d')
 
 
+def get_default_vorankuendigung_completion_deadline(semester: str) -> str:
+    semester_year = int(semester[:4])
+    semester_type = semester[5:]
+    expiration_month = 4 if semester_type == 'SoSe' else 10
+    expiration_year = semester_year + 1
+    expiration_date = date(expiration_year, expiration_month, 1)
+    deadline_date = expiration_date - timedelta(days=1)
+    return str(deadline_date)
+
+
 def get_request_id(semester: str, type_prefix: str, session: Session) -> str:
     year_short = semester[2:4]
     semester_type = semester[5]
@@ -320,6 +330,8 @@ async def create_vorankuendigung_request(data: VorankuendigungPayoutRequestForCr
     request_id = get_request_id(data.semester, 'V', session)
     today = get_europe_berlin_date()
     now = ts()
+    completion_deadline = data.completion_deadline.isoformat() if data.completion_deadline else \
+        get_default_vorankuendigung_completion_deadline(data.semester)
 
     payout_request = PayoutRequest()
     payout_request.request_id = request_id
@@ -335,7 +347,7 @@ async def create_vorankuendigung_request(data: VorankuendigungPayoutRequestForCr
     payout_request.requester = current_user.username
     payout_request.last_modified_timestamp = now
     payout_request.last_modified_by = current_user.username
-    payout_request.completion_deadline = data.completion_deadline.isoformat() if data.completion_deadline else ''
+    payout_request.completion_deadline = completion_deadline
     payout_request.reference = data.reference  # type: ignore
     session.add(payout_request)
     session.commit()

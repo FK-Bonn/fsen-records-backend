@@ -6,7 +6,8 @@ from time_machine import travel
 
 from app.database import get_session
 from app.main import app, subapp
-from app.routers.payout_requests import get_default_afsg_completion_deadline, get_default_bfsg_completion_deadline
+from app.routers.payout_requests import get_default_afsg_completion_deadline, get_default_bfsg_completion_deadline, \
+    get_default_vorankuendigung_completion_deadline
 from app.test.conftest import get_auth_header, ADMIN, USER_NO_PERMS, USER_INFO_READ, USER_INFO_GEO_READ, USER_INFO_ALL, \
     USER_INFO_GEO_ALL, fake_session
 
@@ -147,7 +148,7 @@ CREATED_PAYOUT_REQUEST: dict[str, dict[str, str | int | None]] = {
         'requester': ADMIN,
         'last_modified_timestamp': '2023-04-04T10:00:00+00:00',
         'last_modified_by': ADMIN,
-        'completion_deadline': '',
+        'completion_deadline': '2024-03-31',
     }
 }
 
@@ -731,3 +732,14 @@ def test_get_default_afsg_completion_deadline(semester: str, expiration_date: st
 ])
 def test_get_default_bfsg_completion_deadline(today: str, expiration_date: str):
     assert get_default_bfsg_completion_deadline(today) == expiration_date
+
+@pytest.mark.parametrize("semester,expiration_date", [
+    ['2023-SoSe', '2024-03-31'],
+    ['2023-WiSe', '2024-09-30'],
+    ['2024-SoSe', '2025-03-31'],
+    ['2024-WiSe', '2025-09-30'],
+    ['2025-SoSe', '2026-03-31'],
+    ['2025-WiSe', '2026-09-30'],
+])
+def test_get_default_vorankuendigung_completion_deadline(semester: str, expiration_date: str):
+    assert get_default_vorankuendigung_completion_deadline(semester) == expiration_date
