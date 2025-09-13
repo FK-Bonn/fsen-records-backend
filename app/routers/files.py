@@ -188,7 +188,7 @@ async def list_documents(category: DocumentCategory, session: SessionDep,
         where(Document.category == category.value,
               Document.deleted_by.is_(None),
               Annotation.obsoleted_by.is_(None)). \
-        order_by(Document.fs, Document.created_timestamp)
+        order_by(Document.fs, Document.date_start, Document.date_end, Document.created_timestamp)
     result = session.execute(statement)
     for item in result:
         filename = build_filename_str(request_id=item.request_id, category=item.category, base_name=item.base_name,
@@ -250,7 +250,7 @@ async def list_documents_with_limit(category: DocumentCategory, limit_date: date
                   ). \
         where(Document.category == category.value, Document.created_timestamp < date_string,
               or_(Document.deleted_by.is_(None), Document.deleted_timestamp >= date_string)). \
-        order_by(Document.fs, Document.created_timestamp)
+        order_by(Document.fs, Document.date_start, Document.date_end, Document.created_timestamp)
     result = session.execute(statement)
     for item in result:
         filename = build_filename_str(request_id=item.request_id, category=item.category, base_name=item.base_name,
