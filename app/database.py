@@ -1,7 +1,7 @@
 from typing import Annotated
 
+import bcrypt
 from fastapi import Depends
-from passlib.context import CryptContext
 from sqlalchemy import String, ForeignKey, Text
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, relationship, Mapped, mapped_column, DeclarativeBase
@@ -10,14 +10,17 @@ from sqlalchemy_utils import create_database, database_exists
 from app.config import Config
 
 
-def verify_password(plain_password: str, hashed_password: str | None):
-    pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-    return pwd_context.verify(plain_password, hashed_password)
+def verify_password(plain_password: str, hashed_password: str | None) -> bool:
+    if hashed_password is None:
+        return False
+    return bcrypt.checkpw(
+        plain_password.encode("utf-8"),
+        hashed_password.encode("utf-8"),
+    )
 
 
-def get_password_hash(password):
-    pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-    return pwd_context.hash(password)
+def get_password_hash(password: str):
+    return bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
 
 
 class Base(DeclarativeBase):
