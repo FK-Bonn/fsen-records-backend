@@ -169,14 +169,6 @@ class Annotation(Base):
     obsoleted_timestamp: Mapped[str | None] = mapped_column(String(200), nullable=True, default=None)
 
 
-class ElectoralRegisterDownload(Base):
-    __tablename__ = "electoral_register_download"
-    id: Mapped[int] = mapped_column(primary_key=True)
-    timestamp: Mapped[str] = mapped_column(String(200), nullable=False)
-    username: Mapped[str] = mapped_column(String(200), nullable=False)
-    filepath: Mapped[str | None] = mapped_column(Text, nullable=False)
-
-
 class Election(Base):
     __tablename__ = "elections"
     id: Mapped[int] = mapped_column(primary_key=True)

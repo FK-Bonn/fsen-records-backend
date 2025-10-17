@@ -12,7 +12,7 @@ from starlette import status
 
 from app.database import User, verify_password, Permission as DbPermission, get_password_hash, \
     Base, AdminPermission, UserPassword, SessionDep, BaseFsData, PublicFsData, ProtectedFsData, PayoutRequest, \
-    Proceedings, Document, Annotation, ElectoralRegisterDownload, Election
+    Proceedings, Document, Annotation, Election
 from app.routers.token import get_user_for_token
 
 
@@ -378,8 +378,6 @@ async def transfer(data: TransferData, session: SessionDep):
         update(Document).where(Document.deleted_by == old_user).values(deleted_by=new_user),
         update(Annotation).where(Annotation.created_by == old_user).values(created_by=new_user),
         update(Annotation).where(Annotation.obsoleted_by == old_user).values(obsoleted_by=new_user),
-        update(ElectoralRegisterDownload).where(ElectoralRegisterDownload.username == old_user).values(
-            username=new_user),
         update(Election).where(Election.last_modified_by == old_user).values(last_modified_by=new_user),
     ]
     for statement in statements:

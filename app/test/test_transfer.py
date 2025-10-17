@@ -5,8 +5,8 @@ from unittest import mock
 
 import pytest
 from fastapi.testclient import TestClient
-from time_machine import travel
 from sqlalchemy import select
+from time_machine import travel
 
 from app.database import get_session, AdminPermission, Proceedings, Document
 from app.main import app
@@ -15,7 +15,6 @@ from app.routers.token import new_token
 from app.test.conftest import get_auth_header, USER_NO_PERMS, USER_INFO_READ, USER_INFO_GEO_ALL, USER_INFO_ALL, ADMIN, \
     fake_session, get_token, EMPTY_PDF_PAGE, PDF_HASH
 from app.test.test_elections import create_election
-from app.test.test_electoral_registers import create_register
 from app.test.test_files import DEFAULT_AFSG_DATA, mask_list
 from app.test.test_fsdata import set_sample_base_data, SAMPLE_BASE_DATA, set_sample_public_data, SAMPLE_PUBLIC_DATA, \
     set_sample_protected_data, SAMPLE_PROTECTED_DATA
@@ -478,28 +477,6 @@ def test_transfer_annotation(mocked_base_dir):
             'url': None,
             'uploaded_by': 'oidc_user',
         },
-    ]
-
-
-@mock.patch('app.routers.electoral_registers.get_base_dir', return_value=Path(TemporaryDirectory().name))
-@travel("2024-11-11T11:11:00Z", tick=False)
-def test_transfer_electoral_register_download(mocked_base_dir, ):
-    create_register(mocked_base_dir.return_value / '2024-11-11' / 'Informatik.zip')
-    result = client.get('/api/v1/electoral-registers/2024-11-11/Informatik.zip',
-                        headers=get_auth_header(client, ADMIN))
-    assert result.status_code == 200
-
-    transfer(ADMIN, 'oidc_user')
-
-    result = client.get('/api/v1/electoral-registers/log',
-                        headers=get_auth_header(client, None))
-    assert result.status_code == 200
-    assert result.json() == [
-        {
-            'timestamp': '2024-11-11T11:11:00+00:00',
-            'username': 'oidc_user',
-            'filepath': '2024-11-11/Informatik.zip',
-        }
     ]
 
 
