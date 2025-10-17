@@ -63,9 +63,9 @@ class Config:
     BASE_DOCUMENTS_DIR = Path(os.environ["BASE_DOCUMENTS_DIR"]) \
         if "BASE_DOCUMENTS_DIR" in os.environ \
         else Path(__file__).parent.resolve().parent / 'data' / 'documents'
-    BASE_ELECTORAL_REGISTERS_DIR = Path(os.environ["BASE_ELECTORAL_REGISTERS_DIR"]) \
-        if "BASE_ELECTORAL_REGISTERS_DIR" in os.environ \
-        else Path(__file__).parent.resolve().parent / 'data' / 'electoral-registers'
+    BASE_SGLIEDS_DIR = Path(os.environ["BASE_SGLIEDS_DIR"]) \
+        if "BASE_SGLIEDS_DIR" in os.environ \
+        else Path(__file__).parent.resolve().parent / 'data' / 'sglieds'
     JWKS = json.loads(Path(os.environ["JWKS_PATH"]).read_text()) \
         if "JWKS_PATH" in os.environ \
         else TEST_JWKS

@@ -8,6 +8,7 @@ from starlette.middleware.cors import CORSMiddleware
 
 from app.database import create_db_and_tables
 from app.routers import elections
+from app.routers import sglieds
 from app.routers import fsen, proceedings, export, token, files
 from app.routers import payout_requests
 from app.routers import users
@@ -81,6 +82,11 @@ subapp.include_router(
     elections.router,
     prefix="/elections",
     tags=['elections'],
+)
+subapp.include_router(
+    sglieds.router,
+    prefix="/sglieds",
+    tags=['sglieds'],
 )
 
 subapp.include_router(
