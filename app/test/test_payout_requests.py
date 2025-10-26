@@ -208,72 +208,6 @@ def test_create_payout_requests_as_admin(_type):
 
 
 @pytest.mark.parametrize('_type', [
-    'bfsg',
-    'vorankuendigung',
-])
-@travel("2023-04-04T10:00:00Z", tick=False)
-def test_create_payout_requests_with_all_optional_parameters_as_admin(_type):
-    params = {
-        'fs': 'Informatik',
-        'semester': '2023-SoSe',
-        'category': 'Erstiarbeit',
-        'amount_cents': 6969,
-        'status': 'FAILED',
-        'status_date': '2023-06-06',
-        'request_date': '2023-05-05',
-        'comment': 'oh boi',
-        'completion_deadline': '2023-06-06',
-        'reference': 'V23S-0001'
-    }
-    response = client.post(f'/api/v1/payout-request/{_type}/create', json=params,
-                           headers=get_auth_header(client, ADMIN))
-    assert response.status_code == 200
-    assert response.json() == {
-        **CREATED_PAYOUT_REQUEST[_type],
-        **params,
-    }
-
-
-@pytest.mark.parametrize('_type', [
-    'bfsg',
-    'vorankuendigung',
-])
-def test_create_payout_requests_with_silly_date_formats(_type):
-    params = {
-        'fs': 'Informatik',
-        'semester': '2023-SoSe',
-        'category': 'Erstiarbeit',
-        'amount_cents': 6969,
-        'status': 'FAILED',
-        'status_date': '6.6.2023',
-        'request_date': '05/31/2023',
-        'comment': 'oh boi',
-        'completion_deadline': '6. Juni 2024',
-        'reference': 'V23S-0001'
-    }
-    response = client.post(f'/api/v1/payout-request/{_type}/create', json=params,
-                           headers=get_auth_header(client, ADMIN))
-    assert response.status_code == 422
-    assert response.json() == {'detail': [
-        {'ctx': {'error': 'input is too short'},
-         'input': '6.6.2023',
-         'loc': ['body', 'status_date'],
-         'msg': 'Input should be a valid date or datetime, input is too short',
-         'type': 'date_from_datetime_parsing'},
-        {'ctx': {'error': 'invalid character in year'},
-         'input': '05/31/2023',
-         'loc': ['body', 'request_date'],
-         'msg': 'Input should be a valid date or datetime, invalid character in year',
-         'type': 'date_from_datetime_parsing'},
-        {'ctx': {'error': 'invalid character in year'},
-         'input': '6. Juni 2024',
-         'loc': ['body', 'completion_deadline'],
-         'msg': 'Input should be a valid date or datetime, invalid character in year',
-         'type': 'date_from_datetime_parsing'},
-    ]}
-
-
-@pytest.mark.parametrize('_type', [
     'afsg',
     'bfsg',
     'vorankuendigung',
@@ -290,36 +224,13 @@ def test_create_payout_requests_invalid_semester_format(_type):
     }
 
 
-@travel("2023-04-04T10:00:00Z", tick=False)
-def test_create_afsg_payout_requests_as_write_user():
-    response = client.post('/api/v1/payout-request/afsg/create', json=CREATE_PARAMS['afsg'],
-                           headers=get_auth_header(client, USER_INFO_ALL))
-    assert response.status_code == 200
-    assert response.json() == {
-        **CREATED_PAYOUT_REQUEST['afsg'],
-        'requester': USER_INFO_ALL,
-        'last_modified_by': USER_INFO_ALL,
-    }
-
-
 @pytest.mark.parametrize('_type', [
+    'afsg',
     'bfsg',
     'vorankuendigung',
 ])
 @travel("2023-04-04T10:00:00Z", tick=False)
-def test_create_payout_requests_as_write_user_currently_not_allowed(_type):
-    response = client.post(f'/api/v1/payout-request/{_type}/create', json=CREATE_PARAMS[_type]
-                           , headers=get_auth_header(client, USER_INFO_ALL))
-    assert response.status_code == 401
-
-
-@pytest.mark.parametrize('_type', [
-    'bfsg',
-    'vorankuendigung',
-])
-@travel("2023-04-04T10:00:00Z", tick=False)
-@patch('app.routers.payout_requests.check_user_may_submit_payout_request')
-def test_create_payout_requests_as_write_user_mocked(mocked_func, _type):
+def test_create_payout_requests_as_write_user_mocked(_type):
     response = client.post(f'/api/v1/payout-request/{_type}/create', json=CREATE_PARAMS[_type],
                            headers=get_auth_header(client, USER_INFO_ALL))
     assert response.status_code == 200
@@ -401,7 +312,6 @@ def test_create_afsg_payout_requests_checks_semester(timestamp, semester, status
     ['2023-09-30T23:59:59+02:00', '2022-WiSe', 200],
     ['2023-09-30T23:59:59+02:00', '2022-SoSe', 422],
 ])
-@pytest.mark.skip(reason="Currently disabled while only admins may create requests")
 def test_create_bfsg_payout_requests_checks_semester(timestamp, semester, status_code):
     with travel(timestamp, tick=False):
         response = client.post('/api/v1/payout-request/bfsg/create', json={

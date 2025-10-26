@@ -44,11 +44,7 @@ class PayoutRequestForCreation(BaseModel):
 class BfsgPayoutRequestForCreation(PayoutRequestForCreation):
     category: str
     amount_cents: int
-    status: PayoutRequestStatus | None = None
-    status_date: date | None = None
-    request_date: date | None = None
     comment: str | None = None
-    completion_deadline: date | None = None
     reference: str | None = None
 
 
@@ -86,17 +82,9 @@ class PayoutRequestData(PublicPayoutRequest):
     last_modified_by: str | None = None
 
 
-def check_user_may_submit_payout_request(current_user: User, fs: str, session: Session,
-                                         _type: PayoutRequestType = PayoutRequestType.AFSG):
+def check_user_may_submit_payout_request(current_user: User, fs: str, session: Session):
     if is_admin(current_user.username, session):
         return
-
-    # TODO remove this block when regular users may request BFSG/VORANKUENDIGUNG themselves
-    if _type != PayoutRequestType.AFSG:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="User is not authorized to submit bfsg payout request for this fs",
-        )
 
     creatorpermissions = {p.fs: p.submit_payout_request for p in current_user.permissions}
     if not creatorpermissions.get(fs, False):
@@ -292,29 +280,26 @@ async def create_bfsg_request(data: BfsgPayoutRequestForCreation, session: Sessi
                               current_user: User = Depends(get_current_user())):
     logging.info(f'create_bfsg_request({data=}, {current_user.username=})')
     check_semester_is_valid_format(data.semester)
-    # check_semester_is_open_for_bfsg_submissions(data.semester)
-    check_user_may_submit_payout_request(current_user, data.fs, session, _type=PayoutRequestType.BFSG)
+    check_semester_is_open_for_bfsg_submissions(data.semester)
+    check_user_may_submit_payout_request(current_user, data.fs, session)
     request_id = get_request_id(data.semester, 'B', session)
     today = get_europe_berlin_date()
     now = ts()
-    completion_deadline = data.completion_deadline.isoformat() if data.completion_deadline else \
-        get_default_bfsg_completion_deadline(today)
-
     payout_request = PayoutRequest()
     payout_request.request_id = request_id
     payout_request.type = PayoutRequestType.BFSG.value
     payout_request.category = data.category
     payout_request.fs = data.fs
     payout_request.semester = data.semester
-    payout_request.status = data.status.value if data.status else PayoutRequestStatus.GESTELLT.value
-    payout_request.status_date = data.status_date.isoformat() if data.status_date else today
+    payout_request.status = PayoutRequestStatus.GESTELLT.value
+    payout_request.status_date = today
     payout_request.amount_cents = data.amount_cents
     payout_request.comment = data.comment or ''
-    payout_request.request_date = data.request_date.isoformat() if data.request_date else today
+    payout_request.request_date = today
     payout_request.requester = current_user.username
     payout_request.last_modified_timestamp = now
     payout_request.last_modified_by = current_user.username
-    payout_request.completion_deadline = completion_deadline
+    payout_request.completion_deadline = get_default_bfsg_completion_deadline(today)
     payout_request.reference = data.reference  # type: ignore
     session.add(payout_request)
     session.commit()
@@ -326,28 +311,25 @@ async def create_vorankuendigung_request(data: VorankuendigungPayoutRequestForCr
                                          current_user: User = Depends(get_current_user())):
     logging.info(f'create_vorankuendigung_request({data=}, {current_user.username=})')
     check_semester_is_valid_format(data.semester)
-    check_user_may_submit_payout_request(current_user, data.fs, session, _type=PayoutRequestType.VORANKUENDIGUNG)
+    check_user_may_submit_payout_request(current_user, data.fs, session)
     request_id = get_request_id(data.semester, 'V', session)
     today = get_europe_berlin_date()
     now = ts()
-    completion_deadline = data.completion_deadline.isoformat() if data.completion_deadline else \
-        get_default_vorankuendigung_completion_deadline(data.semester)
-
     payout_request = PayoutRequest()
     payout_request.request_id = request_id
     payout_request.type = PayoutRequestType.VORANKUENDIGUNG.value
     payout_request.category = data.category
     payout_request.fs = data.fs
     payout_request.semester = data.semester
-    payout_request.status = data.status.value if data.status else PayoutRequestStatus.GESTELLT.value
-    payout_request.status_date = data.status_date.isoformat() if data.status_date else today
+    payout_request.status = PayoutRequestStatus.GESTELLT.value
+    payout_request.status_date = today
     payout_request.amount_cents = data.amount_cents
     payout_request.comment = data.comment or ''
-    payout_request.request_date = data.request_date.isoformat() if data.request_date else today
+    payout_request.request_date = today
     payout_request.requester = current_user.username
     payout_request.last_modified_timestamp = now
     payout_request.last_modified_by = current_user.username
-    payout_request.completion_deadline = completion_deadline
+    payout_request.completion_deadline = get_default_vorankuendigung_completion_deadline(data.semester)
     payout_request.reference = data.reference  # type: ignore
     session.add(payout_request)
     session.commit()
