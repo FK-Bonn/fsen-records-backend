@@ -15,6 +15,7 @@ USER_INFO_READ = 'user_info_read'
 USER_INFO_ALL = 'user_info_all'
 USER_INFO_GEO_READ = 'user_geo_read'
 USER_INFO_GEO_ALL = 'user_geo_all'
+USER_OIDC = 'user_oidc'
 
 PDF_STRING = """JVBERi0xLjUKJbXtrvsKNCAwIG9iago8PCAvTGVuZ3RoIDUgMCBSCiAgIC9GaWx0ZXIgL0ZsYXRl
 RGVjb2RlCj4+CnN0cmVhbQp4nDNUMABCXUMgYWFiqGdhYWlubqiQnMtVyBXIBQBPJAWjCmVuZHN0
@@ -57,6 +58,7 @@ class DBTestHelper:
         self.add_user(USER_INFO_ALL, 'root')
         self.add_user(USER_INFO_GEO_READ, 'root')
         self.add_user(USER_INFO_GEO_ALL, 'root')
+        self.add_user(USER_OIDC, 'oidc', password=False)
         self.add_user(ADMIN, 'root', admin=True)
         self.add_permission(USER_INFO_READ, 'Informatik', read_files=True, read_permissions=True, read_public_data=True)
         self.add_permission(USER_INFO_ALL, 'Informatik', read_files=True, read_permissions=True, write_permissions=True,
@@ -78,15 +80,16 @@ class DBTestHelper:
         self.add_vorankuendigung_payout_request()
         self._session.commit()
 
-    def add_user(self, username: str, created_by: str, admin=False):
+    def add_user(self, username: str, created_by: str, admin=False, password=True):
         assert self._session
         user = User()
         user.username = username
         user.full_name = username
         user.created_by = created_by
         self._session.add(user)
-        user_password = UserPassword(user=username, hashed_password=_cached_password_hash("password"))
-        self._session.add(user_password)
+        if password:
+            user_password = UserPassword(user=username, hashed_password=_cached_password_hash("password"))
+            self._session.add(user_password)
         if admin:
             admin_permission = AdminPermission(user=username, created_by='test')
             self._session.add(admin_permission)

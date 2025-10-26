@@ -9,7 +9,7 @@ from app.main import app
 from app.main import subapp
 from app.routers.token import create_access_token, new_token
 from app.test.conftest import get_auth_header, USER_NO_PERMS, USER_INFO_READ, USER_INFO_GEO_ALL, USER_INFO_GEO_READ, \
-    USER_INFO_ALL, ADMIN, fake_session
+    USER_INFO_ALL, ADMIN, fake_session, USER_OIDC
 
 client = TestClient(app)
 subapp.dependency_overrides[get_session] = fake_session
@@ -536,6 +536,11 @@ def test_get_users_as_admin():
                                              **PERMISSIONS_LEVEL_2}],
                             'username': USER_INFO_GEO_ALL,
                             'full_name': USER_INFO_GEO_ALL},
+        USER_OIDC: {'admin': False,
+                            'created_by': 'oidc',
+                            'permissions': [],
+                            'username': USER_OIDC,
+                            'full_name': USER_OIDC},
     }
 
 
@@ -729,6 +734,16 @@ def test_admin_change_other_password_user_does_not_exist():
     assert response.status_code == 404
     assert response.json() == {
         'detail': 'That user does not exist',
+    }
+
+
+def test_admin_change_other_password_user_has_no_password():
+    response = client.post(f'/api/v1/user/password/{USER_OIDC}',
+                           json={'new_password': 'motdepasse'},
+                           headers=get_auth_header(client, ADMIN))
+    assert response.status_code == 404
+    assert response.json() == {
+        'detail': 'That user does not have a password',
     }
 
 

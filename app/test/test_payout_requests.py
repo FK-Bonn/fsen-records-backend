@@ -475,6 +475,17 @@ def test_delete_payout_request_as_admin(_type, request_id):
     assert client.get(f'/api/v1/payout-request/{_type}/{request_id}/history',
                       headers=get_auth_header(client, ADMIN)).status_code == 404
 
+@pytest.mark.parametrize('_type,request_id', [
+    ['afsg', 'A22W-0069'],
+    ['bfsg', 'B22W-0069'],
+    ['vorankuendigung', 'V22W-0069'],
+])
+def test_delete_nonexistent_payout_request_as_admin_fails(_type, request_id):
+    response = client.delete(f'/api/v1/payout-request/{_type}/{request_id}',
+                             headers=get_auth_header(client, ADMIN))
+
+    assert response.status_code == 404
+
 
 @pytest.mark.parametrize('_type,request_id', [
     ['afsg', 'A22W-0023'],
