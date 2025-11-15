@@ -78,6 +78,12 @@ def get_user_for_token(token: str, session: Session) -> User:
     )
     try:
         payload = jwt.decode(token, Config.JWKS, audience='account')
+        affiliation: list[str] = payload.get('eduPersonAffiliation', [])
+        if 'student' not in affiliation:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Only students may log in",
+            )
         name = payload.get('name')
         username: str | None = payload.get('preferred_username')
         if not name or not username:
@@ -120,7 +126,7 @@ async def login_for_access_token(session: SessionDep, form_data: OAuth2PasswordR
 
 if os.getenv('TEST_FAKE_SSO_ACTIVE') or os.getenv('PYTEST_VERSION'):
     nonces = {}
-    user_data = {'oops': ('', '', '')}
+    user_data = {'oops': ('', '', '', True)}
 
     class FormData(BaseModel):
         client_id: str
@@ -133,6 +139,7 @@ if os.getenv('TEST_FAKE_SSO_ACTIVE') or os.getenv('PYTEST_VERSION'):
         given_name: str
         family_name: str
         username: str
+        is_student: str = ''
 
     def create_oidc_token(content: dict, expiry: timedelta) -> str:
         private_key = RSAKey(algorithm=constants.Algorithms.RS256, key=DUMMY_PRIVATE_KEY)
@@ -143,7 +150,7 @@ if os.getenv('TEST_FAKE_SSO_ACTIVE') or os.getenv('PYTEST_VERSION'):
 
 
     def new_token(nonce: str | None, code: str | None = None, username: str = 'user',
-                  given_name: str = 'Test', family_name: str = 'User') -> dict:
+                  given_name: str = 'Test', family_name: str = 'User', is_student: bool = True) -> dict:
         access_token = create_oidc_token({
             "scope": "profile email",
             "aud": "account",
@@ -154,6 +161,10 @@ if os.getenv('TEST_FAKE_SSO_ACTIVE') or os.getenv('PYTEST_VERSION'):
             "family_name": family_name,
             "email": "user@example.org",
             "nonce": nonce,
+            "eduPersonAffiliation": [
+                "member",
+                "student" if is_student else "staff",
+            ]
         }, expiry=timedelta(seconds=60))
         refresh_token = create_oidc_token({
             "typ": "Refresh",
@@ -190,6 +201,8 @@ if os.getenv('TEST_FAKE_SSO_ACTIVE') or os.getenv('PYTEST_VERSION'):
         <input type='text' id='given_name' name='given_name' value='Test'/>
         <label for='family_name'>Family Name</label>
         <input type='text' id='family_name' name='family_name' value='User'/>
+        <input type='checkbox' id='is_student' name='is_student' value='true' checked/>
+        <label for='is_student'>Is student</label>
         <button>Submit</button>
         </form>
         </body>
@@ -212,7 +225,7 @@ if os.getenv('TEST_FAKE_SSO_ACTIVE') or os.getenv('PYTEST_VERSION'):
             )
         code = ''.join(random.choice(string.ascii_uppercase) for _ in range(6))
         nonces[code] = nonce
-        user_data[code] = (data.username, data.given_name, data.family_name)
+        user_data[code] = (data.username, data.given_name, data.family_name, bool(data.is_student))
         return RedirectResponse(f'{redirect_uri}?session_state=fake-session-state&state={state}&iss=fake-iss&code={code}')
 
     @router.get('/fake-sso/realms/fake-realm/protocol/openid-connect/logout')
@@ -229,17 +242,17 @@ if os.getenv('TEST_FAKE_SSO_ACTIVE') or os.getenv('PYTEST_VERSION'):
     async def fake_sso_token(form_data: Annotated[FormData, Form()]):
         if form_data.code and form_data.redirect_uri:
             nonce = nonces[form_data.code]
-            username, given_name, family_name = user_data[form_data.code]
-            return new_token(nonce, code=form_data.code,
-                             username=username, given_name=given_name, family_name=family_name)
+            username, given_name, family_name, is_student = user_data[form_data.code]
+            return new_token(nonce, code=form_data.code, username=username, given_name=given_name,
+                             family_name=family_name, is_student=is_student)
         elif form_data.refresh_token:
             try:
                 payload = jwt.decode(form_data.refresh_token, Config.JWKS)
                 nonce = payload.get('nonce')
                 code = payload.get('code', 'oops')
-                username, given_name, family_name = user_data[code]
-                return new_token(nonce, code=code,
-                                 username=username, given_name=given_name, family_name=family_name)
+                username, given_name, family_name, is_student = user_data[code]
+                return new_token(nonce, code=code, username=username, given_name=given_name, family_name=family_name,
+                                 is_student=is_student)
             except ExpiredSignatureError:
                 raise HTTPException(
                     status_code=status.HTTP_401_UNAUTHORIZED,

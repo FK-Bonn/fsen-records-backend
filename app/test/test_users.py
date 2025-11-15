@@ -690,6 +690,12 @@ def test_who_am_i_oidc():
     assert response.json() == {'username': 'user', 'full_name': 'Test User', 'admin': False, 'created_by': 'oidc',
                                'permissions': []}
 
+def test_who_am_i_oidc_no_student_no_access():
+    token = new_token(None, is_student=False)['access_token']
+    response = client.get('/api/v1/user/me', headers={'Authorization': f'Bearer {token}'})
+    assert response.status_code == 403
+    assert response.json() == {'detail': 'Only students may log in'}
+
 
 def test_change_own_password():
     response = client.post('/api/v1/user/password',
