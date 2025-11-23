@@ -27,6 +27,13 @@ DEFAULT_BFSG_DATA = {
     'date_end': None,
     'request_id': 'B24S-0001',
 }
+DEFAULT_VORANKUENDIGUNG_DATA = {
+    'category': 'VORANKUENDIGUNG',
+    'base_name': 'ange~botäöüßÄÖÜẞ?/xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxyzzzzzzzz',
+    'date_start': None,
+    'date_end': None,
+    'request_id': 'V24S-0001',
+}
 
 client = TestClient(app)
 subapp.dependency_overrides[get_session] = fake_session
@@ -109,8 +116,8 @@ def test_upload_file_afsg_no_path_traversal(mocked_base_dir):
                            },
                            files={'file': ('hhp.pdf', handle, 'application/pdf')},
                            headers=get_auth_header(client, ADMIN))
-    assert response.status_code == 403
-    assert response.json() == {'detail': 'Invalid data'}
+    assert response.status_code == 200
+    assert (mocked_base_dir() / 'Informatik' / f'AFSG-HHP_______xD-2023-10-01--2024-09-30-{PDF_HASH}.pdf').is_file()
     assert not (mocked_base_dir() / f'xD-2023-10-01--2024-09-30-{PDF_HASH}.pdf').is_file()
 
 
@@ -174,24 +181,12 @@ def test_upload_file_afsg_forbidden(mocked_base_dir, user):
 
 
 @mock.patch('app.routers.files.get_base_dir', return_value=Path(TemporaryDirectory().name))
-def test_upload_file_bfsg(mocked_base_dir):
-    handle = BytesIO(EMPTY_PDF_PAGE)
-    response = client.post('/api/v1/file/Informatik',
-                           data=DEFAULT_BFSG_DATA,
-                           files={'file': ('kassenbon.pdf', handle, 'application/pdf')},
-                           headers=get_auth_header(client, ADMIN))
-    assert response.status_code == 200
-    assert (mocked_base_dir() / 'Informatik' / f'BFSG-B24S-0001-kassenbon-{PDF_HASH}.pdf').is_file()
-
-
-@mock.patch('app.routers.files.only_admin_bfsg', return_value=False)
-@mock.patch('app.routers.files.get_base_dir', return_value=Path(TemporaryDirectory().name))
 @pytest.mark.parametrize('user', [
     ADMIN,
     USER_INFO_ALL,
     USER_INFO_GEO_ALL,
 ])
-def test_upload_file_bfsg_patched(mocked_base_dir, mocked_only_admin_bfsg, user):
+def test_upload_file_bfsg(mocked_base_dir, user):
     handle = BytesIO(EMPTY_PDF_PAGE)
     response = client.post('/api/v1/file/Informatik',
                            data=DEFAULT_BFSG_DATA,
@@ -205,16 +200,46 @@ def test_upload_file_bfsg_patched(mocked_base_dir, mocked_only_admin_bfsg, user)
 @pytest.mark.parametrize('user', [
     USER_NO_PERMS,
     USER_INFO_READ,
-    USER_INFO_ALL,
     USER_INFO_GEO_READ,
-    USER_INFO_GEO_ALL,
 ])
 def test_upload_file_bfsg_forbidden(mocked_base_dir, user):
     handle = BytesIO(EMPTY_PDF_PAGE)
     response = client.post('/api/v1/file/Informatik',
                            data=DEFAULT_BFSG_DATA,
-                           files={'file': ('hhp.pdf', handle, 'application/pdf')},
-                           headers=get_auth_header(client, USER_INFO_ALL))
+                           files={'file': ('kassenbon.pdf', handle, 'application/pdf')},
+                           headers=get_auth_header(client, user))
+    assert response.status_code == 401
+    assert not (mocked_base_dir() / 'Informatik').exists()
+
+@mock.patch('app.routers.files.get_base_dir', return_value=Path(TemporaryDirectory().name))
+@pytest.mark.parametrize('user', [
+    ADMIN,
+    USER_INFO_ALL,
+    USER_INFO_GEO_ALL,
+])
+def test_upload_file_vorankuendigung(mocked_base_dir, user):
+    handle = BytesIO(EMPTY_PDF_PAGE)
+    response = client.post('/api/v1/file/Informatik',
+                           data=DEFAULT_VORANKUENDIGUNG_DATA,
+                           files={'file': ('angebot.pdf', handle, 'application/pdf')},
+                           headers=get_auth_header(client, user))
+    assert response.status_code == 200
+    assert (mocked_base_dir() / 'Informatik' /
+            f'VORANKUENDIGUNG-V24S-0001-ange_botäöüßÄÖÜẞ__xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxy-{PDF_HASH}.pdf').is_file()
+
+
+@mock.patch('app.routers.files.get_base_dir', return_value=Path(TemporaryDirectory().name))
+@pytest.mark.parametrize('user', [
+    USER_NO_PERMS,
+    USER_INFO_READ,
+    USER_INFO_GEO_READ,
+])
+def test_upload_file_vorankuendigung_forbidden(mocked_base_dir, user):
+    handle = BytesIO(EMPTY_PDF_PAGE)
+    response = client.post('/api/v1/file/Informatik',
+                           data=DEFAULT_VORANKUENDIGUNG_DATA,
+                           files={'file': ('angebot.pdf', handle, 'application/pdf')},
+                           headers=get_auth_header(client, user))
     assert response.status_code == 401
     assert not (mocked_base_dir() / 'Informatik').exists()
 
@@ -568,7 +593,7 @@ def test_retrieve_file_list(mocked_base_dir, user):
                 'date_start': None,
                 'date_end': None,
                 'request_id': 'B23W-0003',
-                'filename': f'BFSG-B23W-0003-Abrechnung Getränkebestellung-{PDF_HASH}.pdf',
+                'filename': f'BFSG-B23W-0003-Abrechnung_Getränkebestellung-{PDF_HASH}.pdf',
                 'references': None,
                 'tags': ['Erstifahrt'],
                 'sha256hash': PDF_HASH,
@@ -1711,6 +1736,90 @@ def test_delete_file_history(mocked_base_dir):
             'deleted_timestamp': '[masked]',
         },
     ]
+
+
+@mock.patch('app.routers.files.get_base_dir', return_value=Path(TemporaryDirectory().name))
+@pytest.mark.parametrize('user', [
+    None,
+    USER_NO_PERMS,
+    USER_INFO_READ,
+    USER_INFO_ALL,
+    ADMIN,
+])
+def test_list_files_for_individual_payout_request(mocked_base_dir, user):
+    handle = BytesIO(EMPTY_PDF_PAGE)
+    response = client.post('/api/v1/file/Informatik',
+                           data=DEFAULT_BFSG_DATA,
+                           files={'file': ('kassenbon.pdf', handle, 'application/pdf')},
+                           headers=get_auth_header(client, USER_INFO_ALL))
+    assert response.status_code == 200
+    response = client.post('/api/v1/file/Informatik/annotate', json={
+        'target': DEFAULT_BFSG_DATA,
+        'references': None,
+        'tags': None,
+        'url': None,
+        'annotations': [
+            {'level': 'Warning', 'text': 'Bisschen teuer das Zeug'},
+        ]}, headers=get_auth_header(client, ADMIN))
+    assert response.status_code == 200
+    response = client.post('/api/v1/file/Informatik',
+                           data={**DEFAULT_BFSG_DATA, 'base_name': 'rechnung'},
+                           files={'file': ('rechnung.pdf', handle, 'application/pdf')},
+                           headers=get_auth_header(client, ADMIN))
+    assert response.status_code == 200
+    response = client.post('/api/v1/file/Informatik/annotate', json={
+        'target': {**DEFAULT_BFSG_DATA, 'base_name': 'rechnung'},
+        'references': None,
+        'tags': None,
+        'url': None,
+        'annotations': [
+            {'level': 'Warning', 'text': 'Bisschen billig das Zeug'},
+        ]}, headers=get_auth_header(client, ADMIN))
+    assert response.status_code == 200
+    response = client.get('/api/v1/file/payout-request/B24S-0001', headers=get_auth_header(client, user))
+    assert mask_list(response.json()) == [
+        {
+            'annotations': [
+                {'level': 'Warning', 'text': 'Bisschen teuer das Zeug'},
+            ],
+            'annotations_created_by': ADMIN if user == ADMIN else None,
+            'annotations_created_timestamp': '[masked]' if user == ADMIN else None,
+            'base_name': 'kassenbon',
+            'category': 'BFSG',
+            'created_timestamp': '[masked]' if user == ADMIN else None,
+            'date_end': None,
+            'date_start': None,
+            'file_extension': 'pdf',
+            'filename': f'BFSG-B24S-0001-kassenbon-{PDF_HASH}.pdf',
+            'references': None,
+            'request_id': 'B24S-0001',
+            'sha256hash': PDF_HASH,
+            'tags': None,
+            'uploaded_by': USER_INFO_ALL if user == ADMIN else None,
+            'url': None,
+        },
+        {
+            'annotations': [
+                {'level': 'Warning', 'text': 'Bisschen billig das Zeug'}
+            ],
+            'annotations_created_by': ADMIN if user == ADMIN else None,
+            'annotations_created_timestamp': '[masked]' if user == ADMIN else None,
+            'base_name': 'rechnung',
+            'category': 'BFSG',
+            'created_timestamp': '[masked]' if user == ADMIN else None,
+            'date_end': None,
+            'date_start': None,
+            'file_extension': 'pdf',
+            'filename': f'BFSG-B24S-0001-rechnung-{PDF_HASH}.pdf',
+            'references': None,
+            'request_id': 'B24S-0001',
+            'sha256hash': PDF_HASH,
+            'tags': None,
+            'uploaded_by': ADMIN if user == ADMIN else None,
+            'url': None,
+        }
+    ]
+
 
 
 def mask(elements: dict[str, list[dict]]):

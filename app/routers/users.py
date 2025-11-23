@@ -35,6 +35,7 @@ class Permission(BaseModel):
     submit_payout_request: bool
     upload_proceedings: bool
     delete_proceedings: bool
+    upload_documents: bool
     locked: bool
 
 
@@ -271,6 +272,7 @@ def to_db_permission(p: Permission, username: str):
     db_permission.submit_payout_request = p.submit_payout_request
     db_permission.upload_proceedings = p.upload_proceedings
     db_permission.delete_proceedings = p.delete_proceedings
+    db_permission.upload_documents = p.upload_documents
     return db_permission
 
 

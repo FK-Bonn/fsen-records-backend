@@ -25,6 +25,7 @@ PERMISSIONS_LEVEL_0 = {
     'submit_payout_request': False,
     'upload_proceedings': False,
     'delete_proceedings': False,
+    'upload_documents': False,
     'locked': False,
 }
 
@@ -39,6 +40,7 @@ PERMISSIONS_LEVEL_1 = {
     'submit_payout_request': False,
     'upload_proceedings': False,
     'delete_proceedings': False,
+    'upload_documents': False,
     'locked': False,
 }
 
@@ -53,6 +55,7 @@ PERMISSIONS_LEVEL_2 = {
     'submit_payout_request': True,
     'upload_proceedings': True,
     'delete_proceedings': True,
+    'upload_documents': True,
     'locked': False,
 }
 
@@ -162,6 +165,7 @@ def test_create_user():
                                                   'submit_payout_request': True,
                                                   'upload_proceedings': True,
                                                   'delete_proceedings': True,
+                                                  'upload_documents': True,
                                                   }],
                                  },
                            headers=get_auth_header(client, ADMIN))
@@ -188,6 +192,7 @@ def test_create_user_locked_permissions_admin():
                                                   'submit_payout_request': True,
                                                   'upload_proceedings': True,
                                                   'delete_proceedings': True,
+                                                  'upload_documents': True,
                                                   'locked': True}],
                                  },
                            headers=get_auth_header(client, ADMIN))
@@ -215,6 +220,7 @@ def test_create_existing_user_fails():
                                                   'submit_payout_request': True,
                                                   'upload_proceedings': True,
                                                   'delete_proceedings': True,
+                                                  'upload_documents': True,
                                                   }],
                                  },
                            headers=get_auth_header(client, ADMIN))
@@ -660,6 +666,7 @@ def test_get_users_as_user_with_multiple_write_permissions():
                        'submit_payout_request': False,
                        'upload_proceedings': False,
                        'delete_proceedings': False,
+                       'upload_documents': False,
                        }]}],
     [USER_INFO_ALL,
      {'username': USER_INFO_ALL, 'full_name': USER_INFO_ALL, 'admin': False, 'created_by': 'root',
@@ -675,6 +682,7 @@ def test_get_users_as_user_with_multiple_write_permissions():
                        'submit_payout_request': True,
                        'upload_proceedings': True,
                        'delete_proceedings': True,
+                       'upload_documents': True,
                        }]}],
 ])
 def test_who_am_i(username: str, response_data: dict[str, Any]):

@@ -3,6 +3,7 @@ import enum
 import hashlib
 import json
 import logging
+import re
 import shutil
 from collections import defaultdict
 from pathlib import Path
@@ -38,6 +39,7 @@ class AnnotationLevel(enum.Enum):
 class DocumentCategory(enum.Enum):
     AFSG = "AFSG"
     BFSG = "BFSG"
+    VORANKUENDIGUNG = "VORANKUENDIGUNG"
 
 
 class DocumentAnnotation(BaseModel):
@@ -157,6 +159,62 @@ async def get_individual_file(fs: str, filename: str, session: SessionDep,
         detail="File not found",
     )
 
+
+@router.get("/payout-request/{request_id}", response_model=list[DocumentData])
+async def list_documents_for_payout_request(request_id: str, session: SessionDep,
+                         current_user: User = Depends(get_current_user(auto_error=False))):
+    items = []
+    is_admin_ = False
+    if current_user:
+        is_admin_ = is_admin(current_user.username, session)
+    statement = select(
+        Document.fs,
+        Document.category,
+        Document.request_id,
+        Document.base_name,
+        Document.date_start,
+        Document.date_end,
+        Document.file_extension,
+        Document.sha256hash,
+        Document.created_timestamp,
+        Document.uploaded_by,
+        Annotation.annotations,
+        Annotation.tags,
+        Annotation.references,
+        Annotation.url,
+        Annotation.created_timestamp.label('annotations_created_timestamp'),
+        Annotation.created_by,
+    ). \
+        select_from(Document). \
+        outerjoin(Annotation). \
+        where(Document.request_id == request_id,
+              Document.deleted_by.is_(None),
+              Annotation.obsoleted_by.is_(None)). \
+        order_by(Document.fs, Document.date_start, Document.date_end, Document.created_timestamp)
+    result = session.execute(statement)
+    for item in result:
+        filename = build_filename_str(request_id=item.request_id, category=item.category, base_name=item.base_name,
+                                      date_start=item.date_start, date_end=item.date_end,
+                                      file_extension=item.file_extension, sha256hash=item.sha256hash)
+        items.append(DocumentData(
+            category=item.category,
+            request_id=item.request_id,
+            base_name=item.base_name,
+            date_start=item.date_start,
+            date_end=item.date_end,
+            file_extension=item.file_extension,
+            sha256hash=item.sha256hash,
+            filename=filename,
+            annotations=json.loads(item.annotations) if item.annotations else None,
+            tags=json.loads(item.tags) if item.tags else None,
+            references=json.loads(item.references) if item.references else None,
+            url=item.url if item.url else None,
+            annotations_created_timestamp=item.annotations_created_timestamp if is_admin_ else None,
+            annotations_created_by=item.created_by if is_admin_ else None,
+            created_timestamp=item.created_timestamp if is_admin_ else None,
+            uploaded_by=item.uploaded_by if is_admin_ else None,
+        ))
+    return items
 
 @router.get("/{category}", response_model=dict[str, list[DocumentData]])
 async def list_documents(category: DocumentCategory, session: SessionDep,
@@ -496,6 +554,7 @@ def build_filename(request_id: str, category: DocumentCategory, base_name: str, 
 
 def build_filename_str(request_id: str, category: str, base_name: str, date_start: str | None,
                        date_end: str | None, file_extension: str, sha256hash: str) -> str:
+    base_name = re.sub(r'[^a-zA-Z0-9äöüÄÖÜßẞ]', '_', base_name)[:50]
     filename = f'{category}-{request_id}-{base_name}'.replace('--', '-')
     if date_start:
         filename += f'-{date_start}'
@@ -503,10 +562,6 @@ def build_filename_str(request_id: str, category: str, base_name: str, date_star
             filename += f'--{date_end}'
     filename += f'-{sha256hash}.{file_extension}'
     return filename
-
-
-def only_admin_bfsg() -> bool:
-    return True
 
 
 def check_user_may_upload_document(current_user: User, fs: str, category: DocumentCategory):
@@ -518,7 +573,7 @@ def check_user_may_upload_document(current_user: User, fs: str, category: Docume
             detail="User is not authorized to upload AFSG documents",
         )
     creatorpermissions = {p.fs: p.upload_documents for p in current_user.permissions}
-    if not creatorpermissions.get(fs, False) or only_admin_bfsg():
+    if not creatorpermissions.get(fs, False):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="User is not authorized to upload documents for this fs",

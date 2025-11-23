@@ -240,6 +240,7 @@ def test_transfer_permissions():
             'submit_payout_request': True,
             'upload_proceedings': True,
             'delete_proceedings': True,
+            'upload_documents': True,
             'locked': False,
         }],
         'username': 'oidc_user'
