@@ -34,6 +34,7 @@ class AnnotationLevel(enum.Enum):
     Info = "Info"
     Unchecked = "Unchecked"
     Ok = "Ok"
+    Obsolete = "Obsolete"
 
 
 class DocumentCategory(enum.Enum):
