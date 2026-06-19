@@ -99,7 +99,23 @@ def check_semester_is_valid_format(semester: str):
     if not m:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="Invalid semester format",
+            detail='Invalid semester format',
+        )
+
+
+def check_semester_is_valid_format_afsg(semester: str):
+    m = re.match(r'(\d\d\d\d)-(SoSe|WiSe|HHJ)', semester)
+    if not m:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail='Invalid semester format',
+        )
+    year = int(m.group(1))
+    type_ = m.group(2)
+    if (year < 2026 and type_ == 'HHJ') or (year > 2026 and type_ == 'SoSe') or (year > 2025 and type_ == 'WiSe'):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail='Invalid semester format',
         )
 
 
@@ -113,6 +129,21 @@ def check_semester_is_open_for_afsg_submissions(semester: str):
 
 def get_currently_valid_afsg_semesters() -> list[str]:
     today = datetime.now(tz=ZoneInfo('Europe/Berlin'))
+    if today < datetime(2026, 7, 1, tzinfo=ZoneInfo('Europe/Berlin')):
+        return legacy_afsg_valid_semesters(today)
+    if today >= datetime(2028, 7, 1, tzinfo=ZoneInfo('Europe/Berlin')):
+        return afsg_valid_hhjs(today)
+    custom = [
+        {'name': '2025-SoSe', 'start': '2025-04-01', 'end': '2026-09-30'},
+        {'name': '2025-WiSe', 'start': '2025-10-01', 'end': '2027-03-31'},
+        {'name': '2026-SoSe', 'start': '2026-04-01', 'end': '2027-09-30'},
+        {'name': '2026-HHJ', 'start': '2026-07-01', 'end': '2028-06-30'},
+        {'name': '2027-HHJ', 'start': '2027-07-01', 'end': '2028-06-30'},
+    ]
+    date_str = today.date().isoformat()
+    return [item["name"] for item in custom if item["start"] <= date_str <= item["end"]]
+
+def legacy_afsg_valid_semesters(today: datetime) -> list[str]:
     semester_type = 'WiSe'
     if 4 <= today.month <= 9:
         semester_type = 'SoSe'
@@ -131,6 +162,12 @@ def get_currently_valid_afsg_semesters() -> list[str]:
     return valid_semesters
 
 
+def afsg_valid_hhjs(today: datetime) -> list[str]:
+    if today.month < 7:
+        return [f'{today.year - 1}-HHJ']
+    return [f'{today.year}-HHJ']
+
+
 def check_semester_is_open_for_bfsg_submissions(semester: str):
     if semester not in get_currently_valid_bfsg_semesters():
         raise HTTPException(
@@ -140,15 +177,18 @@ def check_semester_is_open_for_bfsg_submissions(semester: str):
 
 
 def get_currently_valid_bfsg_semesters() -> list[str]:
-    return get_currently_valid_afsg_semesters()[:2]
+    today = datetime.now(tz=ZoneInfo('Europe/Berlin'))
+    return legacy_afsg_valid_semesters(today)[:2]
 
 
 def get_default_afsg_completion_deadline(semester: str) -> str:
     semester_year = int(semester[:4])
     semester_type = semester[5:]
-    expiration_month = 10 if semester_type == 'SoSe' else 4
-    expiration_year = semester_year + (2 if semester_type == 'SoSe' else 3)
+    expiration_month = 10 if semester_type == 'SoSe' else 4 if semester_type == 'WiSe' else 7
+    expiration_year = semester_year + (2 if semester_type == 'SoSe' else 3 if semester_type == 'WiSe' else 1)
     expiration_date = date(expiration_year, expiration_month, 1)
+    if semester == '2026-HHJ':
+        expiration_date = expiration_date + timedelta(days=366)
     deadline_date = expiration_date - timedelta(days=1)
     return str(deadline_date)
 
@@ -246,7 +286,7 @@ async def list_requests_before_date(_type: PayoutRequestType, limit_date: date, 
 async def create_afsg_request(data: PayoutRequestForCreation, session: SessionDep,
                               current_user: User = Depends(get_current_user())):
     logging.info(f'create_afsg_request({data=}, {current_user.username=})')
-    check_semester_is_valid_format(data.semester)
+    check_semester_is_valid_format_afsg(data.semester)
     check_semester_is_open_for_afsg_submissions(data.semester)
     check_user_may_submit_payout_request(current_user, data.fs, session)
     check_no_existing_afsg_payout_request(data.semester, data.fs, session)

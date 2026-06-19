@@ -214,9 +214,27 @@ def test_create_payout_requests_as_admin(_type):
 ])
 @travel("2023-04-04T10:00:00Z", tick=False)
 def test_create_payout_requests_invalid_semester_format(_type):
-    response = client.post('/api/v1/payout-request/afsg/create', json={
+    response = client.post(f'/api/v1/payout-request/{_type}/create', json={
         **CREATE_PARAMS[_type],
         'semester': 'SoSe-2022',
+    }, headers=get_auth_header(client, ADMIN))
+    assert response.status_code == 422
+    assert response.json() == {
+        'detail': 'Invalid semester format',
+    }
+
+@pytest.mark.parametrize('semester', [
+    '2024-HHJ',
+    '2025-HHJ',
+    '2026-WiSe',
+    '2027-WiSe',
+    '2027-SoSe',
+    '2028-SoSe',
+])
+def test_create_afsg_payout_requests_invalid_semester_format(semester):
+    response = client.post('/api/v1/payout-request/afsg/create', json={
+        **CREATE_PARAMS['afsg'],
+        'semester': semester,
     }, headers=get_auth_header(client, ADMIN))
     assert response.status_code == 422
     assert response.json() == {
@@ -238,6 +256,24 @@ def test_create_payout_requests_as_write_user_mocked(_type):
         **CREATED_PAYOUT_REQUEST[_type],
         'requester': USER_INFO_ALL,
         'last_modified_by': USER_INFO_ALL,
+    }
+
+@travel("2026-08-04T10:00:00Z", tick=False)
+def test_create_payout_requests_as_write_user_mocked_hhj():
+    response = client.post('/api/v1/payout-request/afsg/create',
+                           json={**CREATE_PARAMS['afsg'], 'semester': '2026-HHJ'},
+                           headers=get_auth_header(client, USER_INFO_ALL))
+    assert response.status_code == 200
+    assert response.json() == {
+        **CREATED_PAYOUT_REQUEST["afsg"],
+        "request_id": "A26H-0001",
+        "semester": "2026-HHJ",
+        "completion_deadline": "2028-06-30",
+        "last_modified_timestamp": "2026-08-04T10:00:00+00:00",
+        "request_date": "2026-08-04",
+        "status_date": "2026-08-04",
+        "requester": USER_INFO_ALL,
+        "last_modified_by": USER_INFO_ALL,
     }
 
 
@@ -270,20 +306,31 @@ def test_create_payout_requests_as_write_user_does_not_fail_if_already_exists(mo
         'requester': USER_INFO_ALL,
     }
 
-
 @pytest.mark.parametrize("timestamp,semester,status_code", [
-    ['2023-04-01T00:00:00+02:00', '2023-SoSe', 200],
-    ['2023-04-01T00:00:00+02:00', '2022-WiSe', 200],
-    ['2023-04-01T00:00:00+02:00', '2022-SoSe', 200],
-    ['2023-04-01T00:00:00+02:00', '2021-WiSe', 422],
-    ['2023-03-31T23:59:59+02:00', '2023-SoSe', 422],
-    ['2023-03-31T23:59:59+02:00', '2021-WiSe', 200],
-    ['2023-10-01T00:00:00+02:00', '2023-WiSe', 200],
-    ['2023-10-01T00:00:00+02:00', '2023-SoSe', 200],
-    ['2023-10-01T00:00:00+02:00', '2022-WiSe', 200],
-    ['2023-10-01T00:00:00+02:00', '2022-SoSe', 422],
-    ['2023-09-30T23:59:59+02:00', '2023-WiSe', 422],
-    ['2023-09-30T23:59:59+02:00', '2022-SoSe', 200],
+    ['2025-03-31T23:59:59+02:00', '2025-SoSe', 422],
+    ['2025-04-01T00:00:00+02:00', '2025-SoSe', 200],
+    ['2026-09-30T23:59:59+02:00', '2025-SoSe', 200],
+    ['2026-10-01T00:00:00+02:00', '2025-SoSe', 422],
+    ['2025-09-30T23:59:59+02:00', '2025-WiSe', 422],
+    ['2025-10-01T00:00:00+02:00', '2025-WiSe', 200],
+    ['2027-03-31T23:59:59+02:00', '2025-WiSe', 200],
+    ['2027-04-01T00:00:00+02:00', '2025-WiSe', 422],
+    ['2026-03-31T23:59:59+02:00', '2026-SoSe', 422],
+    ['2026-04-01T00:00:00+02:00', '2026-SoSe', 200],
+    ['2027-09-30T23:59:59+02:00', '2026-SoSe', 200],
+    ['2027-10-01T00:00:00+02:00', '2026-SoSe', 422],
+    ['2026-06-30T23:59:59+02:00', '2026-HHJ', 422],
+    ['2026-07-01T00:00:00+02:00', '2026-HHJ', 200],
+    ['2028-06-30T23:59:59+02:00', '2026-HHJ', 200],
+    ['2028-07-01T00:00:00+02:00', '2026-HHJ', 422],
+    ['2027-06-30T23:59:59+02:00', '2027-HHJ', 422],
+    ['2027-07-01T00:00:00+02:00', '2027-HHJ', 200],
+    ['2028-06-30T23:59:59+02:00', '2027-HHJ', 200],
+    ['2028-07-01T00:00:00+02:00', '2027-HHJ', 422],
+    ['2028-06-30T23:59:59+02:00', '2028-HHJ', 422],
+    ['2028-07-01T00:00:00+02:00', '2028-HHJ', 200],
+    ['2029-06-30T23:59:59+02:00', '2028-HHJ', 200],
+    ['2029-07-01T00:00:00+02:00', '2028-HHJ', 422],
 ])
 def test_create_afsg_payout_requests_checks_semester(timestamp, semester, status_code):
     with travel(timestamp, tick=False):
@@ -632,6 +679,10 @@ def test_get_payout_request_with_date_filter(_type):
     ['2024-WiSe', '2027-03-31'],
     ['2025-SoSe', '2027-09-30'],
     ['2025-WiSe', '2028-03-31'],
+    ['2026-SoSe', '2028-09-30'],
+    ['2026-HHJ', '2028-06-30'],
+    ['2027-HHJ', '2028-06-30'],
+    ['2028-HHJ', '2029-06-30'],
 ])
 def test_get_default_afsg_completion_deadline(semester: str, expiration_date: str):
     assert get_default_afsg_completion_deadline(semester) == expiration_date

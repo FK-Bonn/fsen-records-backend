@@ -125,7 +125,7 @@ async def login_for_access_token(session: SessionDep, form_data: OAuth2PasswordR
 
 
 if os.getenv('TEST_FAKE_SSO_ACTIVE') or os.getenv('PYTEST_VERSION'):
-    nonces = {}
+    nonces: dict[str, str | None] = {}
     user_data = {'oops': ('', '', '', True)}
 
     class FormData(BaseModel):
