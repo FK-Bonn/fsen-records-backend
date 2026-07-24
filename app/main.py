@@ -7,11 +7,7 @@ from fastapi import FastAPI
 from starlette.middleware.cors import CORSMiddleware
 
 from app.database import create_db_and_tables
-from app.routers import elections
-from app.routers import sglieds
-from app.routers import fsen, proceedings, export, token, files
-from app.routers import payout_requests
-from app.routers import users
+from app.routers import elections, emails, export, files, fsen, payout_requests, proceedings, sglieds, token, users
 
 logging.basicConfig(
     level=logging.INFO,
@@ -93,6 +89,11 @@ subapp.include_router(
     export.router,
     prefix="/export",
     tags=['export'],
+)
+subapp.include_router(
+    emails.router,
+    prefix="/emails",
+    tags=['emails'],
 )
 
 if __name__ == "__main__":

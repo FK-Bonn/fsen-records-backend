@@ -188,6 +188,17 @@ class Election(Base):
     last_modified_by: Mapped[str] = mapped_column(String(200), nullable=False)
 
 
+class EmailTemplate(Base):
+    __tablename__ = "email_templates"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    template_id: Mapped[str] = mapped_column(String(200), nullable=False)
+    meta: Mapped[str] = mapped_column(Text, nullable=False)
+    subject: Mapped[str] = mapped_column(Text, nullable=False)
+    body: Mapped[str] = mapped_column(Text, nullable=False)
+    last_modified_timestamp: Mapped[str] = mapped_column(String(200), nullable=False)
+    last_modified_by: Mapped[str] = mapped_column(String(200), nullable=False)
+
+
 if not database_exists(Config.DB_CONNECTION_STRING):
     create_database(Config.DB_CONNECTION_STRING)
 engine = create_engine(Config.DB_CONNECTION_STRING, connect_args={"check_same_thread": False})
