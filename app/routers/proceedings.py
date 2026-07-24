@@ -90,7 +90,7 @@ async def check_uploaded_file_is_pdf(file: UploadFile):
     await file.seek(0)
     if start != b'%PDF-':
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail="Only PDF files are allowed",
         )
 

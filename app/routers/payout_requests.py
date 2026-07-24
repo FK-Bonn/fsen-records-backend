@@ -98,7 +98,7 @@ def check_semester_is_valid_format(semester: str):
     m = re.match(r'\d\d\d\d-(?:SoSe|WiSe)', semester)
     if not m:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail='Invalid semester format',
         )
 
@@ -107,14 +107,14 @@ def check_semester_is_valid_format_afsg(semester: str):
     m = re.match(r'(\d\d\d\d)-(SoSe|WiSe|HHJ)', semester)
     if not m:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail='Invalid semester format',
         )
     year = int(m.group(1))
     type_ = m.group(2)
     if (year < 2026 and type_ == 'HHJ') or (year > 2026 and type_ == 'SoSe') or (year > 2025 and type_ == 'WiSe'):
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail='Invalid semester format',
         )
 
@@ -122,7 +122,7 @@ def check_semester_is_valid_format_afsg(semester: str):
 def check_semester_is_open_for_afsg_submissions(semester: str):
     if semester not in get_currently_valid_afsg_semesters():
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail="Semester is not open for requests",
         )
 
@@ -171,7 +171,7 @@ def afsg_valid_hhjs(today: datetime) -> list[str]:
 def check_semester_is_open_for_bfsg_submissions(semester: str):
     if semester not in get_currently_valid_bfsg_semesters():
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail="Semester is not open for requests",
         )
 
@@ -232,7 +232,7 @@ def check_no_existing_afsg_payout_request(semester: str, fs: str, session: Sessi
                PayoutRequest.type == PayoutRequestType.AFSG.value).scalar()
     if latest is not None:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail="There already is a payout request for this semester",
         )
 

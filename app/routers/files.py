@@ -420,7 +420,7 @@ async def upload_document(
                  f'{request_id=}, {current_user.username=})')
     check_user_may_upload_document(current_user, fs, category)
     if not file.filename:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                             detail='the file needs to have a filename with an extension')
     file_extension = file.filename.split('.')[-1].lower()
     sha256hash = calculate_sha256(file.file)
