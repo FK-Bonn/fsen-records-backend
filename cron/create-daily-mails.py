@@ -13,6 +13,7 @@ from zoneinfo import ZoneInfo
 import requests
 
 IGNORED_FS_IDS = ['Altkatholisches-Seminar', 'Griechische-und-Lateinische-Philologie']
+FINAL_STATUSES = ["ABGELEHNT", "GENUTZT", "FAILED", "ANGEWIESEN"]
 
 DB_PATH = "/data/db/data.db"
 OUTBOX_PATH = Path("/data/mails/outbox")
@@ -220,7 +221,8 @@ def payout_request_expiry_date_handler(fs_id: str, template: dict, all_data: All
     today = get_today()
     warn_date = today + timedelta(days=template["meta"].get("days_before", 0))
     payout_requests_for_fs = [p for p in all_data.payout_requests if p["fs"] == fs_id]
-    for payout_request in payout_requests_for_fs:
+    open_payout_requests = [p for p in payout_requests_for_fs if p["status"] not in FINAL_STATUSES]
+    for payout_request in open_payout_requests:
         if payout_request["completion_deadline"] == warn_date.isoformat():
             fs_name = all_data.fs_data[fs_id]["name"]
             recipients = get_recipients(all_data, fs_id, template)
