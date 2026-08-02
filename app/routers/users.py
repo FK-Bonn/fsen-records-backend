@@ -1,8 +1,8 @@
 import logging
-from collections.abc import Coroutine, Callable
-from typing import Any, Annotated
+from collections.abc import Callable, Coroutine
+from typing import Annotated, Any
 
-from fastapi import HTTPException, Depends, APIRouter
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.security import OAuth2PasswordBearer
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import delete, update
@@ -10,9 +10,24 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from starlette import status
 
-from app.database import User, verify_password, Permission as DbPermission, get_password_hash, \
-    Base, AdminPermission, UserPassword, SessionDep, BaseFsData, PublicFsData, ProtectedFsData, PayoutRequest, \
-    Proceedings, Document, Annotation, Election
+from app.database import (
+    AdminPermission,
+    Annotation,
+    Base,
+    BaseFsData,
+    Document,
+    Election,
+    PayoutRequest,
+    Proceedings,
+    ProtectedFsData,
+    PublicFsData,
+    SessionDep,
+    User,
+    UserPassword,
+    get_password_hash,
+    verify_password,
+)
+from app.database import Permission as DbPermission
 from app.routers.token import get_user_for_token
 
 
@@ -78,6 +93,7 @@ class TransferData(BaseModel):
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token", auto_error=False)
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 async def get_current_user_or_raise(session: SessionDep, token: str = Depends(oauth2_scheme)) -> User:
@@ -155,7 +171,7 @@ def check_permission_list(userdata: PermissionList):
 
 @router.post("/create", dependencies=[Depends(admin_only)], response_model=UserWithPermissions)
 async def create_user(userdata: UserForCreation, session: SessionDep, current_user: User = Depends(get_current_user())):
-    logging.info(f'create_user({userdata=}, {current_user.username=})')
+    logger.info(f'create_user({userdata=}, {current_user.username=})')
     try:
         check_if_user_may_grant_permissions(current_user, userdata, session)
         check_permission_list(userdata)
@@ -197,7 +213,7 @@ def is_empty(p: DbPermission):
 @router.post("/permissions", dependencies=[Depends(admin_only)], response_model=UserWithPermissions)
 async def set_user_permissions(userdata: PermissionsForUser, session: SessionDep,
                                current_user: User = Depends(get_current_user())):
-    logging.info(f'set_user_permissions({userdata=}, {current_user.username=})')
+    logger.info(f'set_user_permissions({userdata=}, {current_user.username=})')
     check_permission_list(userdata)
     user: User | None = session.get(User, userdata.username)
     if not user:
@@ -228,7 +244,7 @@ async def set_user_permissions(userdata: PermissionsForUser, session: SessionDep
 @router.patch("/permissions", response_model=UserWithPermissions)
 async def patch_user_permissions(userdata: PermissionList, session: SessionDep,
                                  current_user: User = Depends(get_current_user())):
-    logging.info(f'patch_user_permissions({userdata=}, {current_user.username=})')
+    logger.info(f'patch_user_permissions({userdata=}, {current_user.username=})')
     check_permission_list(userdata)
     user: User | None = session.get(User, userdata.username)
     if not user:
@@ -317,7 +333,7 @@ async def who_am_i(current_user: User = Depends(get_current_user())):
 @router.post("/password", status_code=200)
 async def change_password(password_change_data: PasswordChangeData, session: SessionDep,
                           current_user: User = Depends(get_current_user())):
-    logging.info(f'{current_user.username} is changing their password')
+    logger.info(f'{current_user.username} is changing their password')
     hashed_password = current_user.password.hashed_password if current_user.password else None
     if not verify_password(password_change_data.current_password, hashed_password):
         raise HTTPException(
@@ -331,7 +347,7 @@ async def change_password(password_change_data: PasswordChangeData, session: Ses
 @router.post("/password/{username}", dependencies=[Depends(admin_only)], status_code=200)
 async def change_password_for_user(username: str, new_password_data: NewPasswordData, session: SessionDep,
                                    current_user: User = Depends(get_current_user())):
-    logging.info(f'{current_user.username} is changing the password for {username}')
+    logger.info(f'{current_user.username} is changing the password for {username}')
     user: User | None = session.get(User, username)
     if not user:
         raise HTTPException(

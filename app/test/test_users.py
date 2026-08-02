@@ -5,11 +5,19 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.database import get_session
-from app.main import app
-from app.main import subapp
+from app.main import app, subapp
 from app.routers.token import create_access_token, new_token
-from app.test.conftest import get_auth_header, USER_NO_PERMS, USER_INFO_READ, USER_INFO_GEO_ALL, USER_INFO_GEO_READ, \
-    USER_INFO_ALL, ADMIN, fake_session, USER_OIDC
+from app.test.conftest import (
+    ADMIN,
+    USER_INFO_ALL,
+    USER_INFO_GEO_ALL,
+    USER_INFO_GEO_READ,
+    USER_INFO_READ,
+    USER_NO_PERMS,
+    USER_OIDC,
+    fake_session,
+    get_auth_header,
+)
 
 client = TestClient(app)
 subapp.dependency_overrides[get_session] = fake_session

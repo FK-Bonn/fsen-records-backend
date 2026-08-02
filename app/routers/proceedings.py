@@ -3,10 +3,10 @@ import logging
 import shutil
 from enum import Enum
 from hashlib import file_digest
-from ipaddress import IPv6Address, IPv4Address, IPv4Network, IPv6Network, ip_address
+from ipaddress import IPv4Address, IPv4Network, IPv6Address, IPv6Network, ip_address
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile, Form
+from fastapi import APIRouter, Depends, Form, HTTPException, Request, UploadFile
 from pydantic import BaseModel
 from sqlalchemy import desc
 from sqlalchemy.orm import Session
@@ -14,11 +14,12 @@ from starlette import status
 from starlette.responses import FileResponse
 
 from app.config import Config
-from app.database import User, Proceedings, SessionDep
+from app.database import Proceedings, SessionDep, User
 from app.routers.users import get_current_user
 from app.util import ts
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 IPV4_LOCALHOST = IPv4Address("127.0.0.1")
 IPV6_LOCALHOST = IPv6Address("::1")
@@ -105,7 +106,7 @@ async def upload_proceedings(
         tags: Annotated[str, Form()] = '',
         current_user: User = Depends(get_current_user()),
 ):
-    logging.info(f'upload_proceedings({fs=}, {file.filename=}, {committee=}, {date=}, {tags=}, {current_user.username=})')
+    logger.info(f'upload_proceedings({fs=}, {file.filename=}, {committee=}, {date=}, {tags=}, {current_user.username=})')
     check_user_may_upload_proceedings(current_user, fs, session)
     await check_uploaded_file_is_pdf(file)
     filename = f'Prot-{committee.value}-{date}.pdf'
@@ -142,7 +143,7 @@ async def delete_proceedings(
         session: SessionDep,
         current_user: User = Depends(get_current_user()),
 ):
-    logging.info(f'delete_proceedings({fs=}, {committee=}, {date=}, {current_user.username=})')
+    logger.info(f'delete_proceedings({fs=}, {committee=}, {date=}, {current_user.username=})')
     check_user_may_delete_proceedings(current_user, fs)
     filename = f'Prot-{committee.value}-{date}.pdf'
     target_file = get_base_dir() / fs / filename

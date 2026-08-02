@@ -2,9 +2,8 @@ from typing import Annotated
 
 import bcrypt
 from fastapi import Depends
-from sqlalchemy import String, ForeignKey, Text
-from sqlalchemy import create_engine
-from sqlalchemy.orm import Session, relationship, Mapped, mapped_column, DeclarativeBase
+from sqlalchemy import ForeignKey, String, Text, create_engine
+from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, relationship
 from sqlalchemy_utils import create_database, database_exists
 
 from app.config import Config

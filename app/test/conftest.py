@@ -2,12 +2,12 @@ import base64
 from pathlib import Path
 
 import pytest
-from sqlalchemy import create_engine, Engine
+from sqlalchemy import Engine, create_engine
 from sqlalchemy.orm import Session
-from sqlalchemy_utils import database_exists, create_database
+from sqlalchemy_utils import create_database, database_exists
 from starlette.testclient import TestClient
 
-from app.database import Base, User, get_password_hash, Permission, PayoutRequest, AdminPermission, UserPassword
+from app.database import AdminPermission, Base, PayoutRequest, Permission, User, UserPassword, get_password_hash
 
 ADMIN = 'admin'
 USER_NO_PERMS = 'user_no_perms'

@@ -4,7 +4,7 @@ from time_machine import travel
 
 from app.database import get_session
 from app.main import app, subapp
-from app.test.conftest import get_auth_header, USER_INFO_ALL, USER_INFO_READ, ADMIN, USER_NO_PERMS, fake_session
+from app.test.conftest import ADMIN, USER_INFO_ALL, USER_INFO_READ, USER_NO_PERMS, fake_session, get_auth_header
 
 client = TestClient(app)
 subapp.dependency_overrides[get_session] = fake_session

@@ -3,7 +3,7 @@ import json
 from fastapi import APIRouter
 from sqlalchemy import func
 
-from app.database import PublicFsData, BaseFsData, SessionDep
+from app.database import BaseFsData, PublicFsData, SessionDep
 from app.routers.fsen import PublicFsDataType
 
 router = APIRouter()

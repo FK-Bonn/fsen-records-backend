@@ -8,16 +8,31 @@ from fastapi.testclient import TestClient
 from sqlalchemy import select
 from time_machine import travel
 
-from app.database import get_session, AdminPermission, Proceedings, Document
-from app.main import app
-from app.main import subapp
+from app.database import AdminPermission, Document, Proceedings, get_session
+from app.main import app, subapp
 from app.routers.token import new_token
-from app.test.conftest import get_auth_header, USER_NO_PERMS, USER_INFO_READ, USER_INFO_GEO_ALL, USER_INFO_ALL, ADMIN, \
-    fake_session, get_token, EMPTY_PDF_PAGE, PDF_HASH
+from app.test.conftest import (
+    ADMIN,
+    EMPTY_PDF_PAGE,
+    PDF_HASH,
+    USER_INFO_ALL,
+    USER_INFO_GEO_ALL,
+    USER_INFO_READ,
+    USER_NO_PERMS,
+    fake_session,
+    get_auth_header,
+    get_token,
+)
 from app.test.test_elections import create_election
 from app.test.test_files import DEFAULT_AFSG_DATA, mask_list
-from app.test.test_fsdata import set_sample_base_data, SAMPLE_BASE_DATA, set_sample_public_data, SAMPLE_PUBLIC_DATA, \
-    set_sample_protected_data, SAMPLE_PROTECTED_DATA
+from app.test.test_fsdata import (
+    SAMPLE_BASE_DATA,
+    SAMPLE_PROTECTED_DATA,
+    SAMPLE_PUBLIC_DATA,
+    set_sample_base_data,
+    set_sample_protected_data,
+    set_sample_public_data,
+)
 from app.test.test_payout_requests import CREATE_PARAMS, CREATED_PAYOUT_REQUEST, SAMPLE_FULL_PAYOUT_REQUEST
 from app.test.test_proceedings import create_sample_proceedings
 

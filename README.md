@@ -5,7 +5,7 @@ Backend for fsen-records
 ## Setup
 
 ```shell
-virtualenv -p python3 venv
+python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
 ```
@@ -19,8 +19,16 @@ source venv/bin/activate
 
 ## Running tests
 
+Install the development dependencies (once):
 ```shell
-PYTHONPATH=. pytest
+source venv/bin/activate
+pip install -r requirements-dev.txt
+```
+
+Then run the test script:
+```shell
+source venv/bin/activate
+./test
 ```
 
 ## Running (development)

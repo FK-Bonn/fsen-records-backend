@@ -11,6 +11,7 @@ from app.routers.users import admin_only, get_current_user
 from app.util import to_json, ts
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 class FrequencyEnum(str, Enum):
@@ -68,7 +69,7 @@ async def list_email_templates(session: SessionDep):
 async def save_email_template(
     data: EmailTemplateData, session: SessionDep, current_user: User = Depends(get_current_user())
 ):
-    logging.info(f"save_email_template({data=}, {current_user.username=})")
+    logger.info(f"save_email_template({data=}, {current_user.username=})")
     now = ts()
     email_template = EmailTemplate()
     email_template.template_id = data.template_id

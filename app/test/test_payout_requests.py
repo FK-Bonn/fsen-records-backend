@@ -6,10 +6,21 @@ from time_machine import travel
 
 from app.database import get_session
 from app.main import app, subapp
-from app.routers.payout_requests import get_default_afsg_completion_deadline, get_default_bfsg_completion_deadline, \
-    get_default_vorankuendigung_completion_deadline
-from app.test.conftest import get_auth_header, ADMIN, USER_NO_PERMS, USER_INFO_READ, USER_INFO_GEO_READ, USER_INFO_ALL, \
-    USER_INFO_GEO_ALL, fake_session
+from app.routers.payout_requests import (
+    get_default_afsg_completion_deadline,
+    get_default_bfsg_completion_deadline,
+    get_default_vorankuendigung_completion_deadline,
+)
+from app.test.conftest import (
+    ADMIN,
+    USER_INFO_ALL,
+    USER_INFO_GEO_ALL,
+    USER_INFO_GEO_READ,
+    USER_INFO_READ,
+    USER_NO_PERMS,
+    fake_session,
+    get_auth_header,
+)
 
 DEFAULT_PARAMETERS: dict[str, str | int] = {
     'status': 'VOLLSTÄNDIG',

@@ -2,15 +2,16 @@ import logging
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
-from sqlalchemy import func, desc
+from sqlalchemy import desc, func
 from sqlalchemy.orm import Session
 from starlette import status
 
-from app.database import User, Election, SessionDep
-from app.routers.users import get_current_user, admin_only
+from app.database import Election, SessionDep, User
+from app.routers.users import admin_only, get_current_user
 from app.util import ts
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 class ElectionData(BaseModel):
@@ -50,7 +51,7 @@ async def list_elections(session: SessionDep):
 
 @router.post("/save", dependencies=[Depends(admin_only)])
 async def save_election_data(data: ElectionData, session: SessionDep, current_user: User = Depends(get_current_user())):
-    logging.info(f'save_election_data({data=}, {current_user.username=})')
+    logger.info(f'save_election_data({data=}, {current_user.username=})')
     now = ts()
     election = Election()
     election.election_id = data.election_id

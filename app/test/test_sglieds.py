@@ -1,5 +1,5 @@
 import json
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest import mock
@@ -9,7 +9,7 @@ from fastapi.testclient import TestClient
 
 from app.database import get_session
 from app.main import app, subapp
-from app.test.conftest import get_auth_header, USER_INFO_ALL, USER_INFO_READ, ADMIN, USER_NO_PERMS, fake_session
+from app.test.conftest import ADMIN, USER_INFO_ALL, USER_INFO_READ, USER_NO_PERMS, fake_session, get_auth_header
 
 client = TestClient(app)
 subapp.dependency_overrides[get_session] = fake_session
@@ -135,9 +135,9 @@ def create_mock_json(
             "subject": "Ökonomie"
         })
     if last_run_too_late:
-        now = datetime.now() - timedelta(days=1, hours=12)
+        now = datetime.now(tz=UTC) - timedelta(days=1, hours=12)
     else:
-        now = datetime.now()
+        now = datetime.now(tz=UTC)
     target_file = directory / 'crm-state.json'
     directory.mkdir(parents=True, exist_ok=True)
     target_file.write_text(json.dumps({

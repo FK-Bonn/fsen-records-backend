@@ -2,8 +2,8 @@ from fastapi.testclient import TestClient
 
 from app.database import get_session
 from app.main import app, subapp
-from app.test.conftest import get_auth_header, ADMIN, fake_session
-from app.test.test_fsdata import set_sample_public_data, SAMPLE_PUBLIC_DATA, set_sample_base_data, SAMPLE_BASE_DATA
+from app.test.conftest import ADMIN, fake_session, get_auth_header
+from app.test.test_fsdata import SAMPLE_BASE_DATA, SAMPLE_PUBLIC_DATA, set_sample_base_data, set_sample_public_data
 
 client = TestClient(app)
 subapp.dependency_overrides[get_session] = fake_session

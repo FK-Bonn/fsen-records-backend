@@ -9,9 +9,22 @@ from time_machine import travel
 
 from app.database import get_session
 from app.main import app, subapp
-from app.test.conftest import get_auth_header, USER_NO_PERMS, ADMIN, EMPTY_PDF_PAGE, USER_INFO_ALL, PDF_HASH, \
-    USER_INFO_GEO_READ, USER_INFO_GEO_ALL, USER_INFO_READ, EMPTY_PDF_PAGE_2, PDF_HASH_2, PDF_HASH_3, EMPTY_PDF_PAGE_3, \
-    fake_session
+from app.test.conftest import (
+    ADMIN,
+    EMPTY_PDF_PAGE,
+    EMPTY_PDF_PAGE_2,
+    EMPTY_PDF_PAGE_3,
+    PDF_HASH,
+    PDF_HASH_2,
+    PDF_HASH_3,
+    USER_INFO_ALL,
+    USER_INFO_GEO_ALL,
+    USER_INFO_GEO_READ,
+    USER_INFO_READ,
+    USER_NO_PERMS,
+    fake_session,
+    get_auth_header,
+)
 
 DEFAULT_AFSG_DATA = {
     'category': 'AFSG',
@@ -1823,7 +1836,7 @@ def test_list_files_for_individual_payout_request(mocked_base_dir, user):
 
 
 def mask(elements: dict[str, list[dict]]):
-    for key, value in elements.items():
+    for value in elements.values():
         mask_list(value)
     return elements
 
@@ -1831,6 +1844,6 @@ def mask(elements: dict[str, list[dict]]):
 def mask_list(value: list[dict]):
     for element in value:
         for key in ('created_timestamp', 'annotations_created_timestamp', 'deleted_timestamp', 'obsoleted_timestamp'):
-            if key in element and element[key]:
+            if element.get(key):
                 element[key] = '[masked]'
     return value

@@ -9,23 +9,24 @@ from collections import defaultdict
 from pathlib import Path
 from typing import Annotated, BinaryIO
 
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, Form
+from fastapi import APIRouter, Depends, Form, HTTPException, UploadFile
 from pydantic import BaseModel
-from sqlalchemy import select, or_, and_, desc, func
+from sqlalchemy import and_, desc, func, or_, select
 from sqlalchemy.orm import Session
 from starlette import status
 from starlette.responses import FileResponse
 
 from app.config import Config
-from app.database import User, Permission, Document, Annotation, SessionDep
-from app.routers.users import get_current_user, admin_only, is_admin
-from app.util import ts, to_json
+from app.database import Annotation, Document, Permission, SessionDep, User
+from app.routers.users import admin_only, get_current_user, is_admin
+from app.util import to_json, ts
 
 LAST_FS_DATA_FORMAT_UPDATE = '2023-01-01'
 
 ALLOWED_EXTENSIONS = ('pdf', 'odt', 'ods', 'txt', 'md', 'doc', 'docx', 'xls', 'xlsx')
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 class AnnotationLevel(enum.Enum):
@@ -416,7 +417,7 @@ async def upload_document(
         request_id: Annotated[str, Form()] = '',
         current_user: User = Depends(get_current_user()),
 ):
-    logging.info(f'upload_document({fs=}, {file.filename=}, {category=}, {base_name=}, {date_start=}, {date_end=}, '
+    logger.info(f'upload_document({fs=}, {file.filename=}, {category=}, {base_name=}, {date_start=}, {date_end=}, '
                  f'{request_id=}, {current_user.username=})')
     check_user_may_upload_document(current_user, fs, category)
     if not file.filename:
@@ -465,7 +466,7 @@ async def upload_document(
 @router.post("/{fs}/annotate", dependencies=[Depends(admin_only)])
 async def annotate(fs: str, data: AnnotateData, session: SessionDep,
                    current_user: User = Depends(get_current_user())):
-    logging.info(f'annotate({fs=}, {data=}, {current_user.username=})')
+    logger.info(f'annotate({fs=}, {data=}, {current_user.username=})')
     document_id = session.query(Document.id). \
         where(Document.fs == fs,
               Document.category == data.target.category.value,
@@ -499,7 +500,7 @@ async def annotate(fs: str, data: AnnotateData, session: SessionDep,
 @router.post("/{fs}/delete", dependencies=[Depends(admin_only)])
 async def delete(fs: str, data: DeleteData, session: SessionDep,
                    current_user: User = Depends(get_current_user())):
-    logging.info(f'delete({fs=}, {data=}, {current_user.username=})')
+    logger.info(f'delete({fs=}, {data=}, {current_user.username=})')
     now = ts()
     inner_subquery = select(Document.id). \
         where(Document.fs == fs,
@@ -530,7 +531,7 @@ async def delete(fs: str, data: DeleteData, session: SessionDep,
         update({'deleted_by': current_user.username, 'deleted_timestamp': now})
 
     if previous_document_id:
-        logging.info(f'restoring previous document with {previous_document_id=})')
+        logger.info(f'restoring previous document with {previous_document_id=})')
         session.query(Document). \
             where(Document.id == previous_document_id). \
             update({'deleted_by': None, 'deleted_timestamp': None})

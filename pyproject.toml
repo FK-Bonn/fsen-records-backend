@@ -1,6 +1,10 @@
 [tool.ruff]
 line-length = 120
 
+[tool.ruff.lint.flake8-bugbear]
+# Allow default arguments like, e.g., `data: List[str] = fastapi.Query(None)`.
+extend-immutable-calls = ["fastapi.Depends", "fastapi.Query", "app.routers.users.get_current_user"]
+
 [[tool.mypy.overrides]]
 module = 'sqlalchemy_utils'
 ignore_missing_imports = true

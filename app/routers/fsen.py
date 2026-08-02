@@ -8,9 +8,9 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 from starlette import status
 
-from app.database import User, Permission, PublicFsData, ProtectedFsData, BaseFsData, SessionDep
-from app.routers.users import get_current_user, admin_only, is_admin
-from app.util import ts, to_json
+from app.database import BaseFsData, Permission, ProtectedFsData, PublicFsData, SessionDep, User
+from app.routers.users import admin_only, get_current_user, is_admin
+from app.util import to_json, ts
 
 LAST_FS_DATA_FORMAT_UPDATE = '2023-01-01'
 
@@ -23,6 +23,7 @@ SUBFOLDERS = {
 }
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 class EmailAddress(BaseModel):
@@ -376,7 +377,7 @@ async def get_protected_fsdata_history(fs: str, session: SessionDep):
 @router.put("/{fs}/base", dependencies=[Depends(admin_only)])
 async def set_base_fsdata(data: BaseFsDataType, fs: str, session: SessionDep,
                           current_user: User = Depends(get_current_user())):
-    logging.info(f'set_base_fsdata({data=}, {fs=}, {current_user.username=})')
+    logger.info(f'set_base_fsdata({data=}, {fs=}, {current_user.username=})')
     db_data = BaseFsData()
     db_data.user = current_user.username
     db_data.fs = fs
@@ -392,7 +393,7 @@ async def set_base_fsdata(data: BaseFsDataType, fs: str, session: SessionDep,
 @router.put("/{fs}/public")
 async def set_public_fsdata(data: FsDataType, fs: str, session: SessionDep,
                             current_user: User = Depends(get_current_user())):
-    logging.info(f'set_public_fsdata({data=}, {fs=}, {current_user.username=})')
+    logger.info(f'set_public_fsdata({data=}, {fs=}, {current_user.username=})')
     check_permission(current_user, fs, session, write_public_data=True)
     db_data = PublicFsData()
     db_data.user = current_user.username
@@ -410,7 +411,7 @@ async def set_public_fsdata(data: FsDataType, fs: str, session: SessionDep,
 @router.put("/{fs}/protected")
 async def set_protected_fsdata(data: ProtectedFsDataType, fs: str, session: SessionDep,
                                current_user: User = Depends(get_current_user())):
-    logging.info(f'set_protected_fsdata({data=}, {current_user.username=})')
+    logger.info(f'set_protected_fsdata({data=}, {current_user.username=})')
     check_permission(current_user, fs, session, write_protected_data=True)
     db_data = ProtectedFsData()
     db_data.user = current_user.username
@@ -428,7 +429,7 @@ async def set_protected_fsdata(data: ProtectedFsDataType, fs: str, session: Sess
 
 @router.post("/approve/base/{id_}", dependencies=[Depends(admin_only)])
 async def approve_base_fs_data(id_: int, session: SessionDep, current_user: User = Depends(get_current_user())):
-    logging.info(f'approve_base_fs_data({id_=}, {current_user.username=})')
+    logger.info(f'approve_base_fs_data({id_=}, {current_user.username=})')
     data = session.get(BaseFsData, id_)
     if not data:
         raise HTTPException(
@@ -442,7 +443,7 @@ async def approve_base_fs_data(id_: int, session: SessionDep, current_user: User
 
 @router.post("/approve/public/{id_}", dependencies=[Depends(admin_only)])
 async def approve_public_fs_data(id_: int, session: SessionDep, current_user: User = Depends(get_current_user())):
-    logging.info(f'approve_public_fs_data({id_=}, {current_user.username=})')
+    logger.info(f'approve_public_fs_data({id_=}, {current_user.username=})')
     data = session.get(PublicFsData, id_)
     if not data:
         raise HTTPException(
@@ -457,7 +458,7 @@ async def approve_public_fs_data(id_: int, session: SessionDep, current_user: Us
 
 @router.post("/approve/protected/{id_}", dependencies=[Depends(admin_only)])
 async def approve_protected_fs_data(id_: int, session: SessionDep, current_user: User = Depends(get_current_user())):
-    logging.info(f'approve_protected_fs_data({id_=}, {current_user.username=})')
+    logger.info(f'approve_protected_fs_data({id_=}, {current_user.username=})')
     data = session.get(ProtectedFsData, id_)
     if not data:
         raise HTTPException(

@@ -1,6 +1,6 @@
 import logging
 import re
-from datetime import datetime, date, timedelta
+from datetime import date, datetime, timedelta
 from enum import Enum
 from zoneinfo import ZoneInfo
 
@@ -10,11 +10,12 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session, make_transient
 from starlette import status
 
-from app.database import User, PayoutRequest, SessionDep
-from app.routers.users import get_current_user, admin_only, is_admin
-from app.util import ts, get_europe_berlin_date
+from app.database import PayoutRequest, SessionDep, User
+from app.routers.users import admin_only, get_current_user, is_admin
+from app.util import get_europe_berlin_date, ts
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 class PayoutRequestType(Enum):
@@ -194,9 +195,9 @@ def get_default_afsg_completion_deadline(semester: str) -> str:
 
 
 def get_default_bfsg_completion_deadline(today: str) -> str:
-    parsedDate = datetime.strptime(today, '%Y-%m-%d').date()
-    year = parsedDate.year
-    month = parsedDate.month + 7
+    parsed_date = datetime.strptime(today, '%Y-%m-%d').date()  # noqa: DTZ007
+    year = parsed_date.year
+    month = parsed_date.month + 7
     day = 1
     while month > 12:
         month -= 12
@@ -285,7 +286,7 @@ async def list_requests_before_date(_type: PayoutRequestType, limit_date: date, 
 @router.post("/afsg/create", response_model=PayoutRequestData)
 async def create_afsg_request(data: PayoutRequestForCreation, session: SessionDep,
                               current_user: User = Depends(get_current_user())):
-    logging.info(f'create_afsg_request({data=}, {current_user.username=})')
+    logger.info(f'create_afsg_request({data=}, {current_user.username=})')
     check_semester_is_valid_format_afsg(data.semester)
     check_semester_is_open_for_afsg_submissions(data.semester)
     check_user_may_submit_payout_request(current_user, data.fs, session)
@@ -318,7 +319,7 @@ async def create_afsg_request(data: PayoutRequestForCreation, session: SessionDe
 @router.post("/bfsg/create", response_model=PayoutRequestData)
 async def create_bfsg_request(data: BfsgPayoutRequestForCreation, session: SessionDep,
                               current_user: User = Depends(get_current_user())):
-    logging.info(f'create_bfsg_request({data=}, {current_user.username=})')
+    logger.info(f'create_bfsg_request({data=}, {current_user.username=})')
     check_semester_is_valid_format(data.semester)
     check_semester_is_open_for_bfsg_submissions(data.semester)
     check_user_may_submit_payout_request(current_user, data.fs, session)
@@ -349,7 +350,7 @@ async def create_bfsg_request(data: BfsgPayoutRequestForCreation, session: Sessi
 @router.post("/vorankuendigung/create", response_model=PayoutRequestData)
 async def create_vorankuendigung_request(data: VorankuendigungPayoutRequestForCreation, session: SessionDep,
                                          current_user: User = Depends(get_current_user())):
-    logging.info(f'create_vorankuendigung_request({data=}, {current_user.username=})')
+    logger.info(f'create_vorankuendigung_request({data=}, {current_user.username=})')
     check_semester_is_valid_format(data.semester)
     check_user_may_submit_payout_request(current_user, data.fs, session)
     request_id = get_request_id(data.semester, 'V', session)
@@ -380,7 +381,7 @@ async def create_vorankuendigung_request(data: VorankuendigungPayoutRequestForCr
               response_model=PayoutRequestData)
 async def modify_request(_type: PayoutRequestType, request_id: str, data: ModifiablePayoutRequestProperties,
                          session: SessionDep, current_user: User = Depends(get_current_user())):
-    logging.info(f'modify_request({_type=}, {request_id=}, {data=}, {current_user.username=})')
+    logger.info(f'modify_request({_type=}, {request_id=}, {data=}, {current_user.username=})')
     payout_request = get_payout_request(session, request_id, _type)
     if not payout_request:
         raise HTTPException(
@@ -412,7 +413,7 @@ async def modify_request(_type: PayoutRequestType, request_id: str, data: Modifi
 @router.delete("/{_type}/{request_id}", dependencies=[Depends(admin_only)])
 async def delete_request(_type: PayoutRequestType, request_id: str,
                          session: SessionDep, current_user: User = Depends(get_current_user())):
-    logging.info(f'delete_request({_type=}, {request_id=}, {current_user.username=})')
+    logger.info(f'delete_request({_type=}, {request_id=}, {current_user.username=})')
     payout_request = get_payout_request(session, request_id, _type)
     if not payout_request:
         raise HTTPException(

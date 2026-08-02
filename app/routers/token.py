@@ -1,23 +1,21 @@
 import os
 import random
 import string
-from datetime import datetime, timedelta, UTC
+from datetime import UTC, datetime, timedelta
 from typing import Annotated
 
-from fastapi import HTTPException, Depends, APIRouter, Form
-from fastapi.responses import RedirectResponse
+from fastapi import APIRouter, Depends, Form, HTTPException
+from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.security import OAuth2PasswordRequestForm
-from jose import JWTError, jwt, ExpiredSignatureError, constants
+from jose import ExpiredSignatureError, JWTError, constants, jwt
 from jose.backends.rsa_backend import RSAKey
 from jose.exceptions import JWKError
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from starlette import status
-from fastapi.responses import HTMLResponse
 
-from app.config import Config, DUMMY_PRIVATE_KEY
-from app.database import SessionDep
-from app.database import User, verify_password, UserPassword
+from app.config import DUMMY_PRIVATE_KEY, Config
+from app.database import SessionDep, User, UserPassword, verify_password
 
 
 class Token(BaseModel):
