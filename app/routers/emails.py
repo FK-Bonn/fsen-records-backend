@@ -1,11 +1,15 @@
 import json
 import logging
+from datetime import datetime, timedelta, timezone
 from enum import Enum
 
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 from sqlalchemy import func
+from starlette.responses import JSONResponse
+from starlette.status import HTTP_200_OK, HTTP_500_INTERNAL_SERVER_ERROR
 
+from app.config import Config
 from app.database import EmailTemplate, SessionDep, User
 from app.routers.users import admin_only, get_current_user
 from app.util import to_json, ts
@@ -44,7 +48,7 @@ class EmailTemplateDataWithMeta(EmailTemplateData):
     last_modified_by: str
 
 
-@router.get("/", dependencies=[Depends(admin_only)], response_model=list[EmailTemplateDataWithMeta])
+@router.get("", dependencies=[Depends(admin_only)], response_model=list[EmailTemplateDataWithMeta])
 async def list_email_templates(session: SessionDep):
     subquery = (
         session.query(EmailTemplate.template_id, func.max(EmailTemplate.id).label("id"))
@@ -80,3 +84,18 @@ async def save_email_template(
     email_template.last_modified_by = current_user.username
     session.add(email_template)
     session.commit()
+
+@router.get("/state")
+async def email_state():
+    send_mails_last_run = '1970-01-01T00:00:00+00:00'
+    status = HTTP_500_INTERNAL_SERVER_ERROR
+    send_mails_last_run_file = get_base_dir() / 'send-mails-last-run'
+    if send_mails_last_run_file.is_file():
+        send_mails_last_run = send_mails_last_run_file.read_text()
+    one_hour_ago = datetime.now(tz=timezone.utc) - timedelta(hours=1)
+    if send_mails_last_run > one_hour_ago.isoformat():
+        status = HTTP_200_OK
+    return JSONResponse({"send-mails-last-run": send_mails_last_run}, status_code=status)
+
+def get_base_dir():
+    return Config.BASE_MAILS_DIR

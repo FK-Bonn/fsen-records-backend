@@ -1,3 +1,7 @@
+from pathlib import Path
+from tempfile import TemporaryDirectory
+from unittest import mock
+
 import pytest
 from fastapi.testclient import TestClient
 from time_machine import travel
@@ -42,7 +46,7 @@ def test_save_email_template_as_admin():
 def test_save_email_as_other_user(user):
     result = client.post("/api/v1/emails/save", json=DEFAULT_EMAIL_TEMPLATE, headers=get_auth_header(client, user))
     assert result.status_code == 401
-    result = client.get("/api/v1/emails/", headers=get_auth_header(client, ADMIN))
+    result = client.get("/api/v1/emails", headers=get_auth_header(client, ADMIN))
     assert result.status_code == 200
     assert result.json() == []
 
@@ -56,7 +60,7 @@ def test_email_templates_index_as_admin():
         create_email_template(id_="01234567", body="Geographie")
     with travel("2025-10-03T13:00:00Z", tick=False):
         create_email_template(id_="01234567", body="Geographie")
-    result = client.get("/api/v1/emails/", headers=get_auth_header(client, ADMIN))
+    result = client.get("/api/v1/emails", headers=get_auth_header(client, ADMIN))
     assert result.status_code == 200
     assert result.json() == [
         {
@@ -94,11 +98,60 @@ def test_email_templates_index_as_admin():
 )
 def test_email_templates_index_as_other_user(user):
     create_email_template(id_="deadbeef", text="Informatik")
-    result = client.get("/api/v1/emails/", headers=get_auth_header(client, user))
+    result = client.get("/api/v1/emails", headers=get_auth_header(client, user))
     assert result.status_code == 401
     assert (
         result.json() == {"detail": "Not authenticated"} if user is None else {"detail": "This requires admin rights"}
     )
+
+
+@mock.patch("app.routers.emails.get_base_dir", return_value=Path(TemporaryDirectory().name))
+def test_email_state_no_run_file_error(mocked_base_dir):
+    result = client.get("/api/v1/emails/state")
+    assert result.status_code == 500
+    assert result.json() == {"send-mails-last-run": "1970-01-01T00:00:00+00:00"}
+
+
+@mock.patch("app.routers.emails.get_base_dir", return_value=Path(TemporaryDirectory().name))
+@pytest.mark.parametrize(
+    "user",
+    [
+        None,
+        USER_NO_PERMS,
+        USER_INFO_READ,
+        USER_INFO_ALL,
+        ADMIN,
+    ],
+)
+@travel("2026-06-06T01:00:01+00:00", tick=False)
+def test_email_state_error(mocked_base_dir, user):
+    last_run = "2026-06-06T00:00:00+00:00"
+    mocked_base_dir.return_value.mkdir(parents=True, exist_ok=True)
+    (mocked_base_dir.return_value / "send-mails-last-run").write_text(last_run)
+    result = client.get("/api/v1/emails/state", headers=get_auth_header(client, user))
+    assert result.status_code == 500
+    assert result.json() == {"send-mails-last-run": last_run}
+
+
+@mock.patch("app.routers.emails.get_base_dir", return_value=Path(TemporaryDirectory().name))
+@pytest.mark.parametrize(
+    "user",
+    [
+        None,
+        USER_NO_PERMS,
+        USER_INFO_READ,
+        USER_INFO_ALL,
+        ADMIN,
+    ],
+)
+@travel("2026-06-06T01:00:00+00:00", tick=False)
+def test_email_state_ok(mocked_base_dir, user):
+    last_run = "2026-06-06T00:00:00+00:00"
+    mocked_base_dir.return_value.mkdir(parents=True, exist_ok=True)
+    (mocked_base_dir.return_value / "send-mails-last-run").write_text(last_run)
+    result = client.get("/api/v1/emails/state", headers=get_auth_header(client, user))
+    assert result.status_code == 500
+    assert result.json() == {"send-mails-last-run": last_run}
 
 
 def create_email_template(id_: str, **kwargs: str):

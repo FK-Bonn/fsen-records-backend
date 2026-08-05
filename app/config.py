@@ -61,6 +61,9 @@ class Config:
     BASE_DOCUMENTS_DIR = Path(os.environ["BASE_DOCUMENTS_DIR"]) \
         if "BASE_DOCUMENTS_DIR" in os.environ \
         else Path(__file__).parent.resolve().parent / 'data' / 'documents'
+    BASE_MAILS_DIR = Path(os.environ["BASE_MAILS_DIR"]) \
+        if "BASE_MAILS_DIR" in os.environ \
+        else Path(__file__).parent.resolve().parent / 'data' / 'mails'
     BASE_SGLIEDS_DIR = Path(os.environ["BASE_SGLIEDS_DIR"]) \
         if "BASE_SGLIEDS_DIR" in os.environ \
         else Path(__file__).parent.resolve().parent / 'data' / 'sglieds'
