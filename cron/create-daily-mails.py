@@ -6,13 +6,12 @@ import sys
 import uuid
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import datetime, date, timedelta
+from datetime import date, datetime, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
 import requests
 
-IGNORED_FS_IDS = ['Altkatholisches-Seminar', 'Griechische-und-Lateinische-Philologie']
 FINAL_STATUSES = ["ABGELEHNT", "GENUTZT", "FAILED", "ANGEWIESEN"]
 
 DB_PATH = "/data/db/data.db"
@@ -187,26 +186,25 @@ def get_fs_data() -> dict[str, dict[str, list[str]]]:
     db = sqlite3.connect(DB_PATH)
     db.row_factory = sqlite3.Row
     res = db.execute("""SELECT fs, data
-                        FROM protected_fs_data
-                        WHERE id IN (SELECT max(id) FROM protected_fs_data WHERE approved=1 GROUP BY fs)
-                        ORDER BY fs ASC""")
-    for line in res.fetchall():
-        if line["fs"] in IGNORED_FS_IDS:
-            continue
-        data = json.loads(line["data"])
-        fs_data[line["fs"]] = {
-            purpose: get_emails_for_purpose(data, purpose) for purpose in ["finanzen", "kontakt", "fsl"]
-        }
-    res = db.execute("""SELECT fs, data
                         FROM base_fs_data
                         WHERE id IN (SELECT max(id) FROM base_fs_data WHERE approved=1 GROUP BY fs)
                         ORDER BY fs ASC""")
     for line in res.fetchall():
-        if line["fs"] in IGNORED_FS_IDS:
-            continue
         data = json.loads(line["data"])
-        fs_data[line["fs"]]["name"] = data["name"]
+        if not data["active"]:
+            continue
+        fs_data[line["fs"]] =  {"name": data["name"]}
 
+    res = db.execute("""SELECT fs, data
+                        FROM protected_fs_data
+                        WHERE id IN (SELECT max(id) FROM protected_fs_data WHERE approved=1 GROUP BY fs)
+                        ORDER BY fs ASC""")
+    for line in res.fetchall():
+        if line["fs"] in fs_data:
+            data = json.loads(line["data"])
+            fs_data[line["fs"]] |= {
+                purpose: get_emails_for_purpose(data, purpose) for purpose in ["finanzen", "kontakt", "fsl"]
+            }
     return fs_data
 
 
