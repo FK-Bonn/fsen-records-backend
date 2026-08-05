@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest import mock
@@ -152,6 +153,88 @@ def test_email_state_ok(mocked_base_dir, user):
     result = client.get("/api/v1/emails/state", headers=get_auth_header(client, user))
     assert result.status_code == 500
     assert result.json() == {"send-mails-last-run": last_run}
+
+
+@mock.patch("app.routers.emails.get_base_dir", return_value=Path(TemporaryDirectory().name))
+def test_email_queues_as_admin_empty(mocked_base_dir):
+    result = client.get("/api/v1/emails/queues", headers=get_auth_header(client, ADMIN))
+    assert result.status_code == 200
+    assert result.json() == {"outbox": [], "sent": []}
+
+
+@mock.patch("app.routers.emails.get_base_dir", return_value=Path(TemporaryDirectory().name))
+def test_email_queues_as_admin(mocked_base_dir):
+    result_json = create_mail_files(mocked_base_dir.return_value)
+    for sublist in result_json.values():
+        for item in sublist:
+            item["not_before"] = item.get("not_before", None)
+    result = client.get("/api/v1/emails/queues", headers=get_auth_header(client, ADMIN))
+    assert result.status_code == 200
+    assert result.json() == result_json
+
+
+@mock.patch("app.routers.emails.get_base_dir", return_value=Path(TemporaryDirectory().name))
+@pytest.mark.parametrize(
+    "user",
+    [
+        None,
+        USER_NO_PERMS,
+        USER_INFO_READ,
+        USER_INFO_ALL,
+    ],
+)
+def test_email_queues_other_users_no_access(mocked_base_dir, user):
+    create_mail_files(mocked_base_dir.return_value)
+    result = client.get("/api/v1/emails/queues", headers=get_auth_header(client, user))
+    assert result.status_code == 401
+    assert result.json() == {"detail": "Not authenticated" if user is None else "This requires admin rights"}
+
+
+def create_mail_files(base_dir: Path) -> dict:
+    outbox = base_dir / "outbox"
+    sent = base_dir / "sent"
+    outbox.mkdir(parents=True, exist_ok=True)
+    sent.mkdir(parents=True, exist_ok=True)
+    outbox_0 = {
+        "to": ["test@example.org"],
+        "subject": "subject 0000",
+        "body": "body 0000",
+        "template_id": "template_id_0",
+        "created": "2026-08-02T11:11:11+00:00",
+        "not_before": "2026-08-02T12:12:12+00:00",
+    }
+    (outbox / "2026-08-02-deadbeef-1337-1337-0000-deadbeef.json").write_text(json.dumps(outbox_0, indent=2))
+    outbox_1 = {
+        "to": ["test@example.org"],
+        "subject": "subject 0001",
+        "body": "body 0001",
+        "template_id": "template_id_1",
+        "created": "2026-08-02T11:11:12+00:00",
+    }
+    (outbox / "2026-08-02-deadbeef-1337-1337-0001-deadbeef.json").write_text(json.dumps(outbox_1, indent=2))
+    sent_0 = {
+        "to": ["test@example.org"],
+        "subject": "subject 1000",
+        "body": "body 1000",
+        "template_id": "template_id_0",
+        "created": "2026-08-02T10:10:10+00:00",
+        "not_before": "2026-08-02T10:20:10+00:00",
+        "sent": "2026-08-02T10:33:33+00:00",
+    }
+    (sent / "2026-08-02-deadbeef-1337-1337-1000-deadbeef.json").write_text(json.dumps(sent_0, indent=2))
+    sent_1 = {
+        "to": ["test@example.org"],
+        "subject": "subject 1001",
+        "body": "body 1001",
+        "template_id": "template_id_1",
+        "created": "2026-08-02T10:10:10+00:00",
+        "sent": "2026-08-02T10:33:34+00:00",
+    }
+    (sent / "2026-08-02-deadbeef-1337-1337-1001-deadbeef.json").write_text(json.dumps(sent_1, indent=2))
+    return {
+        "outbox": [outbox_1, outbox_0],
+        "sent": [sent_1, sent_0],
+    }
 
 
 def create_email_template(id_: str, **kwargs: str):
