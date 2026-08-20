@@ -1,7 +1,5 @@
 import json
 from pathlib import Path
-from tempfile import TemporaryDirectory
-from unittest import mock
 
 import pytest
 from fastapi.testclient import TestClient
@@ -9,7 +7,14 @@ from time_machine import travel
 
 from app.database import get_session
 from app.main import app, subapp
-from app.test.conftest import ADMIN, USER_INFO_ALL, USER_INFO_READ, USER_NO_PERMS, fake_session, get_auth_header
+from app.test.conftest import (
+    ADMIN,
+    USER_INFO_ALL,
+    USER_INFO_READ,
+    USER_NO_PERMS,
+    fake_session,
+    get_auth_header,
+)
 
 client = TestClient(app)
 subapp.dependency_overrides[get_session] = fake_session
@@ -97,7 +102,7 @@ def test_email_templates_index_as_admin():
         USER_INFO_ALL,
     ],
 )
-def test_email_templates_index_as_other_user(user):
+def test_email_templates_index_as_other_user(user, fake_email_manager):
     create_email_template(id_="deadbeef", text="Informatik")
     result = client.get("/api/v1/emails", headers=get_auth_header(client, user))
     assert result.status_code == 401
@@ -106,14 +111,12 @@ def test_email_templates_index_as_other_user(user):
     )
 
 
-@mock.patch("app.routers.emails.get_base_dir", return_value=Path(TemporaryDirectory().name))
-def test_email_state_no_run_file_error(mocked_base_dir):
+def test_email_state_no_run_file_error(fake_email_manager):
     result = client.get("/api/v1/emails/state")
     assert result.status_code == 500
     assert result.json() == {"send-mails-last-run": "1970-01-01T00:00:00+00:00"}
 
 
-@mock.patch("app.routers.emails.get_base_dir", return_value=Path(TemporaryDirectory().name))
 @pytest.mark.parametrize(
     "user",
     [
@@ -125,16 +128,14 @@ def test_email_state_no_run_file_error(mocked_base_dir):
     ],
 )
 @travel("2026-06-06T01:00:01+00:00", tick=False)
-def test_email_state_error(mocked_base_dir, user):
+def test_email_state_error( user, fake_email_manager):
     last_run = "2026-06-06T00:00:00+00:00"
-    mocked_base_dir.return_value.mkdir(parents=True, exist_ok=True)
-    (mocked_base_dir.return_value / "send-mails-last-run").write_text(last_run)
+    (fake_email_manager.base_dir / "send-mails-last-run").write_text(last_run)
     result = client.get("/api/v1/emails/state", headers=get_auth_header(client, user))
     assert result.status_code == 500
     assert result.json() == {"send-mails-last-run": last_run}
 
 
-@mock.patch("app.routers.emails.get_base_dir", return_value=Path(TemporaryDirectory().name))
 @pytest.mark.parametrize(
     "user",
     [
@@ -146,25 +147,22 @@ def test_email_state_error(mocked_base_dir, user):
     ],
 )
 @travel("2026-06-06T01:00:00+00:00", tick=False)
-def test_email_state_ok(mocked_base_dir, user):
+def test_email_state_ok( user, fake_email_manager):
     last_run = "2026-06-06T00:00:00+00:00"
-    mocked_base_dir.return_value.mkdir(parents=True, exist_ok=True)
-    (mocked_base_dir.return_value / "send-mails-last-run").write_text(last_run)
+    (fake_email_manager.base_dir / "send-mails-last-run").write_text(last_run)
     result = client.get("/api/v1/emails/state", headers=get_auth_header(client, user))
     assert result.status_code == 500
     assert result.json() == {"send-mails-last-run": last_run}
 
 
-@mock.patch("app.routers.emails.get_base_dir", return_value=Path(TemporaryDirectory().name))
-def test_email_queues_as_admin_empty(mocked_base_dir):
+def test_email_queues_as_admin_empty(fake_email_manager):
     result = client.get("/api/v1/emails/queues", headers=get_auth_header(client, ADMIN))
     assert result.status_code == 200
     assert result.json() == {"outbox": [], "sent": []}
 
 
-@mock.patch("app.routers.emails.get_base_dir", return_value=Path(TemporaryDirectory().name))
-def test_email_queues_as_admin(mocked_base_dir):
-    result_json = create_mail_files(mocked_base_dir.return_value)
+def test_email_queues_as_admin(fake_email_manager):
+    result_json = create_mail_files(fake_email_manager.base_dir)
     for sublist in result_json.values():
         for item in sublist:
             item["not_before"] = item.get("not_before", None)
@@ -173,7 +171,6 @@ def test_email_queues_as_admin(mocked_base_dir):
     assert result.json() == result_json
 
 
-@mock.patch("app.routers.emails.get_base_dir", return_value=Path(TemporaryDirectory().name))
 @pytest.mark.parametrize(
     "user",
     [
@@ -183,8 +180,8 @@ def test_email_queues_as_admin(mocked_base_dir):
         USER_INFO_ALL,
     ],
 )
-def test_email_queues_other_users_no_access(mocked_base_dir, user):
-    create_mail_files(mocked_base_dir.return_value)
+def test_email_queues_other_users_no_access(user, fake_email_manager):
+    create_mail_files(fake_email_manager.base_dir)
     result = client.get("/api/v1/emails/queues", headers=get_auth_header(client, user))
     assert result.status_code == 401
     assert result.json() == {"detail": "Not authenticated" if user is None else "This requires admin rights"}

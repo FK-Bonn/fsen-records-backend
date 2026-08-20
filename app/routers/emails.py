@@ -9,8 +9,8 @@ from sqlalchemy import func
 from starlette.responses import JSONResponse
 from starlette.status import HTTP_200_OK, HTTP_500_INTERNAL_SERVER_ERROR
 
-from app.config import Config
 from app.database import EmailTemplate, SessionDep, User
+from app.emails import EmailsDep, QueuedEmailMessage, SentEmailMessage
 from app.routers.users import admin_only, get_current_user
 from app.util import to_json, ts
 
@@ -46,19 +46,6 @@ class EmailTemplateData(BaseModel):
 class EmailTemplateDataWithMeta(EmailTemplateData):
     last_modified_timestamp: str
     last_modified_by: str
-
-
-class QueuedEmailMessage(BaseModel):
-    to: list[str]
-    subject: str
-    body: str
-    template_id: str
-    created: str
-    not_before: str | None = None
-
-
-class SentEmailMessage(QueuedEmailMessage):
-    sent: str
 
 
 class EmailQueues(BaseModel):
@@ -110,29 +97,15 @@ async def save_email_template(
 
 
 @router.get("/state")
-async def email_state():
-    send_mails_last_run = "1970-01-01T00:00:00+00:00"
-    status = HTTP_500_INTERNAL_SERVER_ERROR
-    send_mails_last_run_file = get_base_dir() / "send-mails-last-run"
-    if send_mails_last_run_file.is_file():
-        send_mails_last_run = send_mails_last_run_file.read_text()
+async def email_state(emails: EmailsDep):
+    send_mails_last_run = emails.get_send_mails_last_run()
     one_hour_ago = datetime.now(tz=timezone.utc) - timedelta(hours=1)
-    if send_mails_last_run > one_hour_ago.isoformat():
-        status = HTTP_200_OK
+    status = HTTP_200_OK if send_mails_last_run > one_hour_ago.isoformat() else HTTP_500_INTERNAL_SERVER_ERROR
     return JSONResponse({"send-mails-last-run": send_mails_last_run}, status_code=status)
 
 
 @router.get("/queues", dependencies=[Depends(admin_only)], response_model=EmailQueues)
-async def email_queues():
-    base_dir = get_base_dir()
-    outbox_dir = base_dir / "outbox"
-    sent_dir = base_dir / "sent"
-    outbox = [json.loads(f.read_text()) for f in outbox_dir.glob("*.json")]
-    sent = [json.loads(f.read_text()) for f in sent_dir.glob("*.json")]
-    outbox.sort(key=lambda m: m["created"], reverse=True)
-    sent.sort(key=lambda m: (m["sent"], m["created"]), reverse=True)
+async def email_queues(emails: EmailsDep):
+    outbox = emails.get_outbox()
+    sent = emails.get_sent()
     return EmailQueues(outbox=outbox, sent=sent)
-
-
-def get_base_dir():
-    return Config.BASE_MAILS_DIR

@@ -8,6 +8,8 @@ from sqlalchemy_utils import create_database, database_exists
 from starlette.testclient import TestClient
 
 from app.database import AdminPermission, Base, PayoutRequest, Permission, User, UserPassword, get_password_hash
+from app.emails import EmailManager, get_email_manager
+from app.main import subapp
 
 ADMIN = 'admin'
 USER_NO_PERMS = 'user_no_perms'
@@ -230,3 +232,22 @@ def get_auth_header(client: TestClient, user: str | None = USER_INFO_READ):
         return {}
     token = get_token(client, user)
     return {'Authorization': f'Bearer {token}'}
+
+
+class TmpDirEmailManager(EmailManager):
+    def __init__(self, tmp_dir: Path):
+        self.base_dir = tmp_dir
+        self.outbox_dir = tmp_dir / "outbox"
+        self.sent_dir = tmp_dir / "sent"
+
+
+@pytest.fixture(scope="function")
+def fake_email_manager(tmp_path: Path):
+    tmp_dir_email_manager = TmpDirEmailManager(tmp_path)
+
+    def fake_get_email_manager():
+        yield tmp_dir_email_manager
+
+    subapp.dependency_overrides[get_email_manager] = fake_get_email_manager
+    yield tmp_dir_email_manager
+    subapp.dependency_overrides.pop(get_email_manager)
