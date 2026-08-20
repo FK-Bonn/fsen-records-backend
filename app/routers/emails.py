@@ -1,7 +1,6 @@
 import json
 import logging
 from datetime import datetime, timedelta, timezone
-from enum import Enum
 
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
@@ -10,42 +9,13 @@ from starlette.responses import JSONResponse
 from starlette.status import HTTP_200_OK, HTTP_500_INTERNAL_SERVER_ERROR
 
 from app.database import EmailTemplate, SessionDep, User
-from app.emails import EmailsDep, QueuedEmailMessage, SentEmailMessage
+from app.emails import EmailsDep, EmailTemplateData, EmailTemplateDataWithMeta, QueuedEmailMessage, SentEmailMessage
 from app.routers.users import admin_only, get_current_user
 from app.util import to_json, ts
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
-
-class FrequencyEnum(str, Enum):
-    daily = "daily"
-    weekly = "weekly"
-    monthly = "monthly"
-
-
-class MonthDay(BaseModel):
-    month: int
-    day: int
-
-
-class EmailTemplateMeta(BaseModel):
-    fixed_dates: None | list[MonthDay]
-    days_before: None | int
-    frequency: None | FrequencyEnum
-    targets: list[str]
-
-
-class EmailTemplateData(BaseModel):
-    template_id: str
-    meta: EmailTemplateMeta
-    subject: str
-    body: str
-
-
-class EmailTemplateDataWithMeta(EmailTemplateData):
-    last_modified_timestamp: str
-    last_modified_by: str
 
 
 class EmailQueues(BaseModel):

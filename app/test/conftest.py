@@ -1,4 +1,5 @@
 import base64
+import shutil
 from pathlib import Path
 
 import pytest
@@ -239,6 +240,12 @@ class TmpDirEmailManager(EmailManager):
         self.base_dir = tmp_dir
         self.outbox_dir = tmp_dir / "outbox"
         self.sent_dir = tmp_dir / "sent"
+
+    def clear(self):
+        shutil.rmtree(self.outbox_dir, ignore_errors=True)
+        shutil.rmtree(self.sent_dir, ignore_errors=True)
+        self.outbox_dir.mkdir(parents=True, exist_ok=False)
+        self.sent_dir.mkdir(parents=True, exist_ok=False)
 
 
 @pytest.fixture(scope="function")

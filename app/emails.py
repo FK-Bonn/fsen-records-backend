@@ -1,10 +1,49 @@
 import json
+import uuid
+from collections import defaultdict
+from datetime import datetime, timedelta, timezone
+from enum import Enum
+from pathlib import Path
 from typing import Annotated
 
 from fastapi import Depends
 from pydantic import BaseModel
+from sqlalchemy import func
+from sqlalchemy.orm import Session
 
 from app.config import Config
+from app.database import BaseFsData, Election, EmailTemplate, ProtectedFsData
+from app.util import get_europe_berlin_date
+
+
+class FrequencyEnum(str, Enum):
+    daily = "daily"
+    weekly = "weekly"
+    monthly = "monthly"
+
+
+class MonthDay(BaseModel):
+    month: int
+    day: int
+
+
+class EmailTemplateMeta(BaseModel):
+    fixed_dates: None | list[MonthDay]
+    days_before: None | int
+    frequency: None | FrequencyEnum
+    targets: list[str]
+
+
+class EmailTemplateData(BaseModel):
+    template_id: str
+    meta: EmailTemplateMeta
+    subject: str
+    body: str
+
+
+class EmailTemplateDataWithMeta(EmailTemplateData):
+    last_modified_timestamp: str
+    last_modified_by: str
 
 
 class QueuedEmailMessage(BaseModel):
@@ -14,6 +53,7 @@ class QueuedEmailMessage(BaseModel):
     template_id: str
     created: str
     not_before: str | None = None
+    meta: dict | None = None
 
 
 class SentEmailMessage(QueuedEmailMessage):
@@ -24,14 +64,16 @@ class EmailManager:
     outbox_dir = base_dir / "outbox"
     sent_dir = base_dir / "sent"
 
-    def get_outbox(self) -> list[QueuedEmailMessage]:
-        outbox = [json.loads(f.read_text()) for f in self.outbox_dir.glob("*.json")]
-        outbox.sort(key=lambda m: m["created"], reverse=True)
+    def get_outbox_files(self) -> dict[Path, QueuedEmailMessage]:
+        outbox = {f: QueuedEmailMessage.model_validate_json(f.read_text()) for f in self.outbox_dir.glob("*.json")}
         return outbox
 
+    def get_outbox(self) -> list[QueuedEmailMessage]:
+        return sorted(self.get_outbox_files().values(), key=lambda m: m.created, reverse=True)
+
     def get_sent(self) -> list[SentEmailMessage]:
-        sent = [json.loads(f.read_text()) for f in self.sent_dir.glob("*.json")]
-        sent.sort(key=lambda m: (m["sent"], m["created"]), reverse=True)
+        sent = [SentEmailMessage.model_validate_json(f.read_text()) for f in self.sent_dir.glob("*.json")]
+        sent.sort(key=lambda m: (m.sent, m.created), reverse=True)
         return sent
 
     def get_send_mails_last_run(self) -> str:
@@ -41,6 +83,174 @@ class EmailManager:
             send_mails_last_run = send_mails_last_run_file.read_text()
         return send_mails_last_run
 
+    def get_pending_outbox_mail(self, template_id: str, key: str) -> None | tuple[Path, QueuedEmailMessage]:
+        now = datetime.now(tz=timezone.utc)
+        cutoff = (now + timedelta(minutes=5)).isoformat()
+        for filepath, mail in self.get_outbox_files().items():
+            if (
+                mail.template_id == template_id
+                and mail.meta
+                and mail.meta["key"] == key
+                and mail.not_before
+                and mail.not_before > cutoff
+            ):
+                return filepath, mail
+        return None
+
+    def upsert_election(self, key: str, current: Election, previous: Election | None, session: Session):
+        template_key = "election_created" if previous is None else "election_updated"
+        today = get_europe_berlin_date()
+        now = datetime.now(tz=timezone.utc)
+        created = now.isoformat()
+        not_before = None if previous is None else (now + timedelta(minutes=10)).isoformat()
+        uuid_ = str(uuid.uuid4())
+        target_file = self.outbox_dir / f"{today}-{uuid_}.json"
+
+        template = get_template(template_id=template_key, session=session)
+        email_addresses = get_email_addresses(fs=current.fs, session=session)
+        fs_name = get_fs_name(fs_id=current.fs, session=session)
+        to = []
+        for target in template.meta.targets:
+            to.extend(email_addresses.get(target, []))
+        to = sorted(set(to))
+
+        previous_json = election_to_json(previous)
+        current_json = election_to_json(current)
+
+        outbox_email = self.get_pending_outbox_mail(template_id=template.template_id, key=key)
+        if outbox_email:
+            filepath, mail = outbox_email
+            target_file = filepath
+            created = mail.created
+            if mail.meta:
+                previous_json = mail.meta["base"]
+
+        diff = diff_elections(current_json, previous_json)
+        subject, body = render(template, {"fs_name": fs_name, "diff": diff, "election_id": current.election_id})
+        data = QueuedEmailMessage(
+            to=to,
+            subject=subject,
+            body=body,
+            template_id=template.template_id,
+            created=created,
+            not_before=not_before,
+            meta={
+                "key": key,
+                "base": previous_json,
+            },
+        )
+        self.outbox_dir.mkdir(parents=True, exist_ok=True)
+        target_file.write_text(
+            data.model_dump_json(
+                indent=2,
+            )
+        )
+
+
+def election_to_json(election: Election | None) -> dict | None:
+    if election is None:
+        return None
+    return {
+        "election_id": election.election_id,
+        "fs": election.fs,
+        "committee": election.committee,
+        "election_method": election.election_method,
+        "first_election_day": election.first_election_day,
+        "last_election_day": election.last_election_day,
+        "electoral_register_request_date": election.electoral_register_request_date,
+        "electoral_register_hand_out_date": election.electoral_register_hand_out_date,
+        "result_url": election.result_url,
+        "result_published_date": election.result_published_date,
+        "scrutiny_status": election.scrutiny_status,
+        "comments": election.comments,
+    }
+
+
+def diff_elections(current: dict | None, previous: dict | None) -> str:
+    assert current is not None
+
+    value = ""
+    if previous is None:
+        for key, current_value in current.items():
+            if current_value == "":
+                current_value = "–"
+            value += f"{key}: {current_value}\n"
+    else:
+        for key, current_value in current.items():
+            previous_value = previous.get(key, None)
+            if previous_value == "":
+                previous_value = "–"
+            if current_value == "":
+                current_value = "–"
+            if previous_value != current_value:
+                value += f"{key}: {previous_value} → {current_value}\n"
+    if not value:
+        return "Keine Änderungen"
+    return value
+
+
+def get_template(template_id: str, session: Session) -> EmailTemplateData:
+    subquery = (
+        session.query(EmailTemplate.template_id, func.max(EmailTemplate.id).label("id"))
+        .group_by(EmailTemplate.template_id)
+        .subquery()
+    )
+    item = (
+        session.query(EmailTemplate)
+        .join(subquery, EmailTemplate.id == subquery.c.id)
+        .where(EmailTemplate.template_id == template_id)
+        .first()
+    )
+    if item:
+        return EmailTemplateData(
+            meta=EmailTemplateMeta.model_validate_json(item.meta),
+            template_id=item.template_id,
+            subject=item.subject,
+            body=item.body,
+        )
+    return EmailTemplateData(
+        meta=EmailTemplateMeta(fixed_dates=None, days_before=None, frequency=None, targets=["fsk"]),
+        template_id=template_id,
+        subject=f"Fehlendes E-Mail-Template: {template_id}",
+        body="kwt",
+    )
+
+
+def get_email_addresses(fs: str, session: Session) -> dict:
+    subquery = (
+        session.query(func.max(ProtectedFsData.id).label("id"))
+        .where(ProtectedFsData.fs == fs, ProtectedFsData.approved.is_(True))
+        .subquery()
+    )
+    data = session.query(ProtectedFsData).filter(ProtectedFsData.id == subquery.c.id).first()
+    result = defaultdict(list)
+    result["fsk"].append(Config.FSK_EMAIL_ADDRESS)
+    if not data:
+        return dict(result)
+    content = json.loads(data.data)
+    for item in content["email_addresses"]:
+        for usage in item["usages"]:
+            result[usage].append(item["address"])
+    return dict(result)
+
+
+def get_fs_name(fs_id: str, session: Session) -> str:
+    subquery = (
+        session.query(func.max(BaseFsData.id).label("id"))
+        .where(BaseFsData.fs == fs_id, BaseFsData.approved.is_(True))
+        .subquery()
+    )
+    data = session.query(BaseFsData).filter(BaseFsData.id == subquery.c.id).first()
+    if not data:
+        return fs_id
+    content = json.loads(data.data)
+    return content.get("name", fs_id)
+
+
+def render(template: EmailTemplateData, items: dict) -> tuple[str, str]:
+    subject = template.subject.format(**items)
+    body = template.body.format(**items)
+    return subject, body
 
 def get_email_manager():
     yield EmailManager()

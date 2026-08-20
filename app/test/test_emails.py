@@ -166,6 +166,7 @@ def test_email_queues_as_admin(fake_email_manager):
     for sublist in result_json.values():
         for item in sublist:
             item["not_before"] = item.get("not_before", None)
+            item["meta"] = item.get("meta", None)
     result = client.get("/api/v1/emails/queues", headers=get_auth_header(client, ADMIN))
     assert result.status_code == 200
     assert result.json() == result_json

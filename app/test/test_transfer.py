@@ -496,7 +496,7 @@ def test_transfer_annotation(mocked_base_dir):
     ]
 
 
-def test_transfer_election():
+def test_transfer_election(fake_email_manager):
     create_election(id_='deadbeef')
 
     oidc_token = transfer(ADMIN, 'oidc_user')

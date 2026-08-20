@@ -70,3 +70,4 @@ class Config:
     JWKS = json.loads(Path(os.environ["JWKS_PATH"]).read_text()) \
         if "JWKS_PATH" in os.environ \
         else TEST_JWKS
+    FSK_EMAIL_ADDRESS = os.environ.get("FSK_EMAIL_ADDRESS", "fsk@example.org")

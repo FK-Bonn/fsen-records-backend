@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from starlette import status
 
 from app.database import Election, SessionDep, User
+from app.emails import EmailsDep
 from app.routers.users import admin_only, get_current_user
 from app.util import ts
 
@@ -50,9 +51,10 @@ async def list_elections(session: SessionDep):
 
 
 @router.post("/save", dependencies=[Depends(admin_only)])
-async def save_election_data(data: ElectionData, session: SessionDep, current_user: User = Depends(get_current_user())):
+async def save_election_data(data: ElectionData, session: SessionDep, emails: EmailsDep, current_user: User = Depends(get_current_user())):
     logger.info(f'save_election_data({data=}, {current_user.username=})')
     now = ts()
+    previous_election = next(iter(get_election_history(session, data.election_id)), None)
     election = Election()
     election.election_id = data.election_id
     election.fs = data.fs
@@ -70,6 +72,7 @@ async def save_election_data(data: ElectionData, session: SessionDep, current_us
     election.last_modified_by = current_user.username
     session.add(election)
     session.commit()
+    emails.upsert_election(key=data.election_id, current=election, previous=previous_election, session=session)
 
 
 @router.get("/{election_id}/history", dependencies=[Depends(admin_only)], response_model=list[ElectionDataWithMeta])
