@@ -258,3 +258,60 @@ def fake_email_manager(tmp_path: Path):
     subapp.dependency_overrides[get_email_manager] = fake_get_email_manager
     yield tmp_dir_email_manager
     subapp.dependency_overrides.pop(get_email_manager)
+
+
+def setup_templates_and_data(client):
+    templates = {
+        "election_created": "\n{diff}\nhttps://example.org/wahltermine/{election_id}",
+        "election_updated": "\n{diff}\nhttps://example.org/wahltermine/{election_id}",
+        "payout_request_created": "\n{request_data}\nhttps://example.org/payout-request/{request_id}",
+        "payout_request_updated": "\n{diff}\nhttps://example.org/payout-request/{request_id}",
+    }
+    for template_id, extra_body in templates.items():
+        template = {
+            "template_id": template_id,
+            "meta": {
+                "targets": ["kontakt"],
+                "fixed_dates": None,
+                "frequency": None,
+                "days_before": None,
+            },
+            "subject": f"{template_id} subject content",
+            "body": f"{template_id} body content\n{{fs_name}}{extra_body}",
+        }
+        result = client.post("/api/v1/emails/save", json=template, headers=get_auth_header(client, ADMIN))
+        assert result.status_code == 200
+    protected_data = {
+        "email_addresses": [
+            {
+                "address": "informatik@example.org",
+                "usages": ["kontakt", "finanzen"],
+            },
+            {
+                "address": "kasse@example.org",
+                "usages": ["finanzen"],
+            },
+        ],
+        "iban": "DE02120300000000202051",
+        "bic": "BYLADEM1001",
+        "other": {},
+    }
+    response = client.put(
+        "/api/v1/data/Informatik/protected", json=protected_data, headers=get_auth_header(client, ADMIN)
+    )
+    assert response.status_code == 200
+    base_data = {
+        "fs_id": "Informatik",
+        "name": "Infor Matik",
+        "statutes": "",
+        "financial_year_start": "01.07.",
+        "financial_year_override": None,
+        "proceedings_urls": [
+            {"url": "https://example.org/proceedings-a", "annotation": "Proceedings A"},
+            {"url": "https://example.org/proceedings-f", "annotation": ""},
+        ],
+        "annotation": "",
+        "active": True,
+    }
+    response = client.put("/api/v1/data/Informatik/base", json=base_data, headers=get_auth_header(client, ADMIN))
+    assert response.status_code == 200

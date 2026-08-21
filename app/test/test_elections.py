@@ -5,7 +5,15 @@ from time_machine import travel
 from app.database import get_session
 from app.emails import QueuedEmailMessage
 from app.main import app, subapp
-from app.test.conftest import ADMIN, USER_INFO_ALL, USER_INFO_READ, USER_NO_PERMS, fake_session, get_auth_header
+from app.test.conftest import (
+    ADMIN,
+    USER_INFO_ALL,
+    USER_INFO_READ,
+    USER_NO_PERMS,
+    fake_session,
+    get_auth_header,
+    setup_templates_and_data,
+)
 
 client = TestClient(app)
 subapp.dependency_overrides[get_session] = fake_session
@@ -27,7 +35,7 @@ DEFAULT_ELECTION = {
 
 
 def test_save_election_as_admin(fake_email_manager):
-    setup_templates_and_data()
+    setup_templates_and_data(client)
     result = client.post('/api/v1/elections/save',
                          json=DEFAULT_ELECTION,
                          headers=get_auth_header(client, ADMIN))
@@ -58,7 +66,7 @@ def test_save_election_as_other_user(user):
     USER_INFO_ALL,
 ])
 def test_elections_index(user, fake_email_manager):
-    setup_templates_and_data()
+    setup_templates_and_data(client)
     create_election(id_='deadbeef', fs='Informatik')
     create_election(id_='bedbedbe', fs='Agrarwissenschaft', first_election_day='2025-11-12')
     create_election(id_='01234567', fs='Geographie', first_election_day='2025-11-11')
@@ -73,7 +81,7 @@ def test_elections_index(user, fake_email_manager):
 
 
 def test_get_history_as_admin(fake_email_manager):
-    setup_templates_and_data()
+    setup_templates_and_data(client)
     election_id = 'deadbeef'
 
     with travel("2025-10-03T10:00:00Z", tick=False):
@@ -127,7 +135,7 @@ def test_get_history_as_other_user(user):
 
 
 def test_save_election_creates_email(fake_email_manager):
-    setup_templates_and_data()
+    setup_templates_and_data(client)
     with travel("2026-06-06T10:00:00Z", tick=False):
         result = client.post("/api/v1/elections/save", json=DEFAULT_ELECTION, headers=get_auth_header(client, ADMIN))
     assert result.status_code == 200
@@ -137,18 +145,18 @@ def test_save_election_creates_email(fake_email_manager):
             subject="election_created subject content",
             body="""election_created body content
 Infor Matik
-election_id: deadbeef
-fs: Informatik
-committee: FSR
-election_method: Urnenwahl
-first_election_day: 2025-11-11
-last_election_day: 2025-11-14
-electoral_register_request_date: –
-electoral_register_hand_out_date: –
-result_url: –
-result_published_date: –
-scrutiny_status: –
 comments: –
+committee: FSR
+election_id: deadbeef
+election_method: Urnenwahl
+electoral_register_hand_out_date: –
+electoral_register_request_date: –
+first_election_day: 2025-11-11
+fs: Informatik
+last_election_day: 2025-11-14
+result_published_date: –
+result_url: –
+scrutiny_status: –
 
 https://example.org/wahltermine/deadbeef""",
             template_id="election_created",
@@ -163,7 +171,7 @@ https://example.org/wahltermine/deadbeef""",
 
 
 def test_save_election_again_within_five_minutes_updates_email(fake_email_manager):
-    setup_templates_and_data()
+    setup_templates_and_data(client)
     with travel("2026-01-01:00:00Z", tick=False):
         result = client.post("/api/v1/elections/save", json=DEFAULT_ELECTION, headers=get_auth_header(client, ADMIN))
     fake_email_manager.clear()
@@ -198,7 +206,7 @@ def test_save_election_again_within_five_minutes_updates_email(fake_email_manage
 
 
 def test_save_election_again_after_five_minutes_creates_new_email(fake_email_manager):
-    setup_templates_and_data()
+    setup_templates_and_data(client)
     with travel("2026-01-01T10:00:00Z", tick=False):
         result = client.post("/api/v1/elections/save", json=DEFAULT_ELECTION, headers=get_auth_header(client, ADMIN))
     fake_email_manager.clear()
@@ -269,54 +277,3 @@ def create_election(id_: str, **kwargs: str):
                          json=data,
                          headers=get_auth_header(client, ADMIN))
     assert result.status_code == 200
-
-
-def setup_templates_and_data():
-    for template_id in ["election_created", "election_updated"]:
-        template = {
-            "template_id": template_id,
-            "meta": {
-                "targets": ["kontakt"],
-                "fixed_dates": None,
-                "frequency": None,
-                "days_before": None,
-            },
-            "subject": f"{template_id} subject content",
-            "body": f"{template_id} body content\n{{fs_name}}\n{{diff}}\nhttps://example.org/wahltermine/{{election_id}}",
-        }
-        result = client.post("/api/v1/emails/save", json=template, headers=get_auth_header(client, ADMIN))
-        assert result.status_code == 200
-    protected_data = {
-        "email_addresses": [
-            {
-                "address": "informatik@example.org",
-                "usages": ["kontakt", "finanzen"],
-            },
-            {
-                "address": "kasse@example.org",
-                "usages": ["finanzen"],
-            },
-        ],
-        "iban": "DE02120300000000202051",
-        "bic": "BYLADEM1001",
-        "other": {},
-    }
-    response = client.put(
-        "/api/v1/data/Informatik/protected", json=protected_data, headers=get_auth_header(client, ADMIN)
-    )
-    assert response.status_code == 200
-    base_data = {
-        "fs_id": "Informatik",
-        "name": "Infor Matik",
-        "statutes": "",
-        "financial_year_start": "01.07.",
-        "financial_year_override": None,
-        "proceedings_urls": [
-            {"url": "https://example.org/proceedings-a", "annotation": "Proceedings A"},
-            {"url": "https://example.org/proceedings-f", "annotation": ""},
-        ],
-        "annotation": "",
-        "active": True,
-    }
-    response = client.put("/api/v1/data/Informatik/base", json=base_data, headers=get_auth_header(client, ADMIN))
-    assert response.status_code == 200

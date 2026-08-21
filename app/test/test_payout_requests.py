@@ -5,6 +5,7 @@ from fastapi.testclient import TestClient
 from time_machine import travel
 
 from app.database import get_session
+from app.emails import QueuedEmailMessage, list_keys_and_values
 from app.main import app, subapp
 from app.routers.payout_requests import (
     get_default_afsg_completion_deadline,
@@ -20,6 +21,7 @@ from app.test.conftest import (
     USER_NO_PERMS,
     fake_session,
     get_auth_header,
+    setup_templates_and_data,
 )
 
 DEFAULT_PARAMETERS: dict[str, str | int] = {
@@ -211,7 +213,7 @@ def test_get_all_payout_requests_as_admin(_type):
     'vorankuendigung',
 ])
 @travel("2023-04-04T10:00:00Z", tick=False)
-def test_create_payout_requests_as_admin(_type):
+def test_create_payout_requests_as_admin(_type, fake_email_manager):
     response = client.post(f'/api/v1/payout-request/{_type}/create', json=CREATE_PARAMS[_type],
                            headers=get_auth_header(client, ADMIN))
     assert response.status_code == 200
@@ -259,7 +261,7 @@ def test_create_afsg_payout_requests_invalid_semester_format(semester):
     'vorankuendigung',
 ])
 @travel("2023-04-04T10:00:00Z", tick=False)
-def test_create_payout_requests_as_write_user_mocked(_type):
+def test_create_payout_requests_as_write_user_mocked(_type, fake_email_manager):
     response = client.post(f'/api/v1/payout-request/{_type}/create', json=CREATE_PARAMS[_type],
                            headers=get_auth_header(client, USER_INFO_ALL))
     assert response.status_code == 200
@@ -270,7 +272,7 @@ def test_create_payout_requests_as_write_user_mocked(_type):
     }
 
 @travel("2026-08-04T10:00:00Z", tick=False)
-def test_create_payout_requests_as_write_user_mocked_hhj():
+def test_create_payout_requests_as_write_user_mocked_hhj(fake_email_manager):
     response = client.post('/api/v1/payout-request/afsg/create',
                            json={**CREATE_PARAMS['afsg'], 'semester': '2026-HHJ'},
                            headers=get_auth_header(client, USER_INFO_ALL))
@@ -306,7 +308,7 @@ def test_create_afsg_payout_requests_as_write_user_fails_if_already_exists():
 ])
 @travel("2023-04-04T10:00:00Z", tick=False)
 @patch('app.routers.payout_requests.check_user_may_submit_payout_request')
-def test_create_payout_requests_as_write_user_does_not_fail_if_already_exists(mocked_func, _type):
+def test_create_payout_requests_as_write_user_does_not_fail_if_already_exists(mocked_func, _type, fake_email_manager):
     response = client.post(f'/api/v1/payout-request/{_type}/create', json=CREATE_PARAMS[_type],
                            headers=get_auth_header(client, USER_INFO_ALL))
     assert response.status_code == 200
@@ -343,7 +345,7 @@ def test_create_payout_requests_as_write_user_does_not_fail_if_already_exists(mo
     ['2029-06-30T23:59:59+02:00', '2028-HHJ', 200],
     ['2029-07-01T00:00:00+02:00', '2028-HHJ', 422],
 ])
-def test_create_afsg_payout_requests_checks_semester(timestamp, semester, status_code):
+def test_create_afsg_payout_requests_checks_semester(timestamp, semester, status_code, fake_email_manager):
     with travel(timestamp, tick=False):
         response = client.post('/api/v1/payout-request/afsg/create', json={
             'fs': 'Geographie',
@@ -370,7 +372,7 @@ def test_create_afsg_payout_requests_checks_semester(timestamp, semester, status
     ['2023-09-30T23:59:59+02:00', '2022-WiSe', 200],
     ['2023-09-30T23:59:59+02:00', '2022-SoSe', 422],
 ])
-def test_create_bfsg_payout_requests_checks_semester(timestamp, semester, status_code):
+def test_create_bfsg_payout_requests_checks_semester(timestamp, semester, status_code, fake_email_manager):
     with travel(timestamp, tick=False):
         response = client.post('/api/v1/payout-request/bfsg/create', json={
             'fs': 'Geographie',
@@ -399,7 +401,7 @@ def test_create_payout_requests_as_read_user_fails(_type):
     ['vorankuendigung', 'V22W-0023'],
 ])
 @travel("2023-04-04T10:00:00Z", tick=False)
-def test_modify_payout_requests_as_admin(_type, request_id):
+def test_modify_payout_requests_as_admin(_type, request_id, fake_email_manager):
     response = client.patch(f'/api/v1/payout-request/{_type}/{request_id}', json=DEFAULT_PARAMETERS,
                             headers=get_auth_header(client, ADMIN))
     assert response.status_code == 200
@@ -460,7 +462,7 @@ def test_delete_nonexistent_payout_request_as_admin_fails(_type, request_id):
     ['bfsg', 'B22W-0023'],
     ['vorankuendigung', 'V22W-0023'],
 ])
-def test_delete_payout_request_reveals_previous_state(_type, request_id):
+def test_delete_payout_request_reveals_previous_state(_type, request_id, fake_email_manager):
     assert client.patch(f'/api/v1/payout-request/{_type}/{request_id}', json=DEFAULT_PARAMETERS,
                         headers=get_auth_header(client, ADMIN)).status_code == 200
     assert len(client.get(f'/api/v1/payout-request/{_type}/{request_id}/history',
@@ -529,7 +531,7 @@ def test_modify_nonexisting_payout_requests_fails(_type, request_id):
     ['vorankuendigung', 'V22W-0023'],
 ])
 @travel("2023-04-04T10:00:00Z", tick=False)
-def test_modify_payout_requests_set_empty_values(_type, request_id):
+def test_modify_payout_requests_set_empty_values(_type, request_id, fake_email_manager):
     parameters = {
         'amount_cents': 0,
         'comment': '',
@@ -551,7 +553,7 @@ def test_modify_payout_requests_set_empty_values(_type, request_id):
     ['vorankuendigung', 'V22W-0023'],
 ])
 @travel("2023-04-04T10:00:00Z", tick=False)
-def test_modify_payout_requests_no_changes(_type, request_id):
+def test_modify_payout_requests_no_changes(_type, request_id, fake_email_manager):
     response = client.patch(f'/api/v1/payout-request/{_type}/{request_id}', json={},
                             headers=get_auth_header(client, ADMIN))
     assert response.status_code == 200
@@ -579,7 +581,7 @@ def test_modify_payout_requests_as_user_fails(_type, request_id):
     ['vorankuendigung', 'V22W-0023'],
 ])
 @travel("2023-04-04T10:00:00Z", tick=False)
-def test_get_payout_request_history_as_admin(_type, request_id):
+def test_get_payout_request_history_as_admin(_type, request_id, fake_email_manager):
     edit_request(_type, request_id)
     response = client.get(f'/api/v1/payout-request/{_type}/{request_id}/history',
                           headers=get_auth_header(client, ADMIN))
@@ -606,7 +608,7 @@ def test_get_payout_request_history_as_admin(_type, request_id):
     ['vorankuendigung', 'V22W-0023'],
 ])
 @travel("2023-04-04T10:00:00Z", tick=False)
-def test_get_payout_request_history_no_admin(username: str | None, _type, request_id):
+def test_get_payout_request_history_no_admin(username: str | None, _type, request_id, fake_email_manager):
     edit_request(_type, request_id)
     headers = {}
     if username:
@@ -644,7 +646,7 @@ def test_get_payout_request_history_not_found(_type, request_id):
     'vorankuendigung',
 ])
 @travel("2023-04-04T10:00:00Z", tick=False)
-def test_get_payout_request_with_date_filter(_type):
+def test_get_payout_request_with_date_filter(_type, fake_email_manager):
     response = client.post(f'/api/v1/payout-request/{_type}/create', json=CREATE_PARAMS[_type],
                            headers=get_auth_header(client, ADMIN))
     assert response.status_code == 200
@@ -726,3 +728,213 @@ def test_get_default_bfsg_completion_deadline(today: str, expiration_date: str):
 ])
 def test_get_default_vorankuendigung_completion_deadline(semester: str, expiration_date: str):
     assert get_default_vorankuendigung_completion_deadline(semester) == expiration_date
+
+
+@pytest.mark.parametrize(
+    "_type",
+    [
+        "afsg",
+        "bfsg",
+        "vorankuendigung",
+    ],
+)
+@travel("2023-04-04T10:00:00Z", tick=False)
+def test_create_payout_request_creates_email(_type, fake_email_manager):
+    setup_templates_and_data(client)
+    response = client.post(
+        f"/api/v1/payout-request/{_type}/create", json=CREATE_PARAMS[_type], headers=get_auth_header(client, ADMIN)
+    )
+    created_payout_request = CREATED_PAYOUT_REQUEST[_type]
+    assert response.status_code == 200
+    assert response.json() == created_payout_request
+    request_id = created_payout_request["request_id"]
+    base = {
+        k: v
+        for k, v in created_payout_request.items()
+        if k not in ("requester", "last_modified_timestamp", "last_modified_by")
+    }
+    formatted = list_keys_and_values(base)
+    assert fake_email_manager.get_outbox() == [
+        QueuedEmailMessage(
+            to=["informatik@example.org"],
+            subject="payout_request_created subject content",
+            body=f"""payout_request_created body content
+Infor Matik
+{formatted}
+https://example.org/payout-request/{request_id}""",
+            template_id="payout_request_created",
+            created="2023-04-04T10:00:00+00:00",
+            not_before=None,
+            meta=None,
+        ),
+    ]
+
+
+@pytest.mark.parametrize(
+    "_type",
+    [
+        "afsg",
+        "bfsg",
+        "vorankuendigung",
+    ],
+)
+def test_save_payout_request_again_within_five_minutes_updates_email(_type, fake_email_manager):
+    setup_templates_and_data(client)
+    with travel("2023-04-04T10:00:00Z", tick=False):
+        response = client.post(
+            f"/api/v1/payout-request/{_type}/create", json=CREATE_PARAMS[_type], headers=get_auth_header(client, ADMIN)
+        )
+    created_payout_request = CREATED_PAYOUT_REQUEST[_type]
+    assert response.status_code == 200
+    assert response.json() == created_payout_request
+    request_id = created_payout_request["request_id"]
+    fake_email_manager.clear()
+
+    with travel("2026-06-06T10:00:00Z", tick=False):
+        result = client.patch(
+            f"/api/v1/payout-request/{_type}/{request_id}",
+            json=DEFAULT_PARAMETERS,
+            headers=get_auth_header(client, ADMIN),
+        )
+    assert result.status_code == 200
+    with travel("2026-06-06T10:04:59Z", tick=False):
+        result = client.patch(
+            f"/api/v1/payout-request/{_type}/{request_id}",
+            json={**DEFAULT_PARAMETERS, "amount_cents": 99999},
+            headers=get_auth_header(client, ADMIN),
+        )
+    assert result.status_code == 200
+    old_amount_cents = created_payout_request["amount_cents"]
+    old_completion_deadline = created_payout_request["completion_deadline"]
+    old_status = created_payout_request["status"]
+    base = {k: v for k, v in created_payout_request.items() if
+           k not in ("requester", "last_modified_timestamp", "last_modified_by")}
+    assert fake_email_manager.get_outbox() == [
+        QueuedEmailMessage(
+            to=["informatik@example.org"],
+            subject="payout_request_updated subject content",
+            body=f"""payout_request_updated body content
+Infor Matik
+amount_cents: {old_amount_cents} → 99999
+comment: – → Endlich ist es fertig
+completion_deadline: {old_completion_deadline} → 2025-05-31
+reference: None → V22W-6969
+status: {old_status} → VOLLSTÄNDIG
+status_date: 2023-04-04 → 2023-05-05
+
+https://example.org/payout-request/{request_id}""",
+            template_id="payout_request_updated",
+            created="2026-06-06T10:00:00+00:00",
+            not_before="2026-06-06T10:14:59+00:00",
+            meta={
+                "key": request_id,
+                "base": base,
+            },
+        ),
+    ]
+
+
+@pytest.mark.parametrize(
+    "_type",
+    [
+        "afsg",
+        "bfsg",
+        "vorankuendigung",
+    ],
+)
+def test_save_election_again_after_five_minutes_creates_new_email(fake_email_manager, _type):
+    setup_templates_and_data(client)
+    with travel("2023-04-04T10:00:00Z", tick=False):
+        response = client.post(
+            f"/api/v1/payout-request/{_type}/create", json=CREATE_PARAMS[_type], headers=get_auth_header(client, ADMIN)
+        )
+    created_payout_request = CREATED_PAYOUT_REQUEST[_type]
+    assert response.status_code == 200
+    assert response.json() == created_payout_request
+    request_id = created_payout_request["request_id"]
+    fake_email_manager.clear()
+
+    with travel("2026-06-06T10:00:00Z", tick=False):
+        result = client.patch(
+            f"/api/v1/payout-request/{_type}/{request_id}",
+            json=DEFAULT_PARAMETERS,
+            headers=get_auth_header(client, ADMIN),
+        )
+    assert result.status_code == 200
+    with travel("2026-06-06T10:05:00Z", tick=False):
+        result = client.patch(
+            f"/api/v1/payout-request/{_type}/{request_id}",
+            json={**DEFAULT_PARAMETERS, "amount_cents": 99999},
+            headers=get_auth_header(client, ADMIN),
+        )
+    assert result.status_code == 200
+    old_amount_cents = created_payout_request["amount_cents"]
+    old_completion_deadline = created_payout_request["completion_deadline"]
+    old_status = created_payout_request["status"]
+    base = {k: v for k, v in created_payout_request.items() if
+           k not in ("requester", "last_modified_timestamp", "last_modified_by")}
+    assert fake_email_manager.get_outbox() == [
+        QueuedEmailMessage(
+            to=["informatik@example.org"],
+            subject="payout_request_updated subject content",
+            body=f"""payout_request_updated body content
+Infor Matik
+amount_cents: 100000 → 99999
+
+https://example.org/payout-request/{request_id}""",
+            template_id="payout_request_updated",
+            created="2026-06-06T10:05:00+00:00",
+            not_before="2026-06-06T10:15:00+00:00",
+            meta={
+                "key": request_id,
+                "base": {**base, **DEFAULT_PARAMETERS},
+            },
+        ),QueuedEmailMessage(
+            to=["informatik@example.org"],
+            subject="payout_request_updated subject content",
+            body=f"""payout_request_updated body content
+Infor Matik
+amount_cents: {old_amount_cents} → 100000
+comment: – → Endlich ist es fertig
+completion_deadline: {old_completion_deadline} → 2025-05-31
+reference: None → V22W-6969
+status: {old_status} → VOLLSTÄNDIG
+status_date: 2023-04-04 → 2023-05-05
+
+https://example.org/payout-request/{request_id}""",
+            template_id="payout_request_updated",
+            created="2026-06-06T10:00:00+00:00",
+            not_before="2026-06-06T10:10:00+00:00",
+            meta={
+                "key": request_id,
+                "base": base,
+            },
+        ),
+    ]
+
+
+@pytest.mark.parametrize(
+    "_type",
+    [
+        "afsg",
+        "bfsg",
+        "vorankuendigung",
+    ],
+)
+def test_missing_template_results_in_default_error_template(_type, fake_email_manager):
+    with travel("2023-04-04T10:00:00Z", tick=False):
+        result = client.post(
+            f"/api/v1/payout-request/{_type}/create", json=CREATE_PARAMS[_type], headers=get_auth_header(client, ADMIN)
+        )
+    assert result.status_code == 200
+    assert fake_email_manager.get_outbox() == [
+        QueuedEmailMessage(
+            to=["fsk@example.org"],
+            subject="Fehlendes E-Mail-Template: payout_request_created",
+            body="kwt",
+            template_id="payout_request_created",
+            created="2023-04-04T10:00:00+00:00",
+            not_before=None,
+            meta=None,
+        ),
+    ]

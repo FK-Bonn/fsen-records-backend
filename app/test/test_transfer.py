@@ -359,7 +359,7 @@ def test_transfer_protected_fs_data_approved_by():
     'vorankuendigung',
 ])
 @travel("2023-04-04T10:00:00Z", tick=False)
-def test_transfer_payout_requests(_type):
+def test_transfer_payout_requests(_type, fake_email_manager):
     response = client.post(f'/api/v1/payout-request/{_type}/create', json=CREATE_PARAMS[_type],
                            headers=get_auth_header(client, ADMIN))
     assert response.status_code == 200

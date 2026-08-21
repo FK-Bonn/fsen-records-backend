@@ -1,5 +1,6 @@
 import logging
 import re
+from copy import deepcopy
 from datetime import date, datetime, timedelta
 from enum import Enum
 from zoneinfo import ZoneInfo
@@ -11,6 +12,7 @@ from sqlalchemy.orm import Session, make_transient
 from starlette import status
 
 from app.database import PayoutRequest, SessionDep, User
+from app.emails import EmailsDep
 from app.routers.users import admin_only, get_current_user, is_admin
 from app.util import get_europe_berlin_date, ts
 
@@ -284,7 +286,7 @@ async def list_requests_before_date(_type: PayoutRequestType, limit_date: date, 
 
 
 @router.post("/afsg/create", response_model=PayoutRequestData)
-async def create_afsg_request(data: PayoutRequestForCreation, session: SessionDep,
+async def create_afsg_request(data: PayoutRequestForCreation, session: SessionDep, emails: EmailsDep,
                               current_user: User = Depends(get_current_user())):
     logger.info(f'create_afsg_request({data=}, {current_user.username=})')
     check_semester_is_valid_format_afsg(data.semester)
@@ -313,11 +315,13 @@ async def create_afsg_request(data: PayoutRequestForCreation, session: SessionDe
     payout_request.reference = None  # type: ignore
     session.add(payout_request)
     session.commit()
-    return get_payout_request(session, request_id, PayoutRequestType.AFSG)
+    created_payout_request = get_payout_request(session, request_id, PayoutRequestType.AFSG)
+    emails.payout_request_created(payout_request=created_payout_request, session=session)
+    return created_payout_request
 
 
 @router.post("/bfsg/create", response_model=PayoutRequestData)
-async def create_bfsg_request(data: BfsgPayoutRequestForCreation, session: SessionDep,
+async def create_bfsg_request(data: BfsgPayoutRequestForCreation, session: SessionDep, emails: EmailsDep,
                               current_user: User = Depends(get_current_user())):
     logger.info(f'create_bfsg_request({data=}, {current_user.username=})')
     check_semester_is_valid_format(data.semester)
@@ -344,12 +348,14 @@ async def create_bfsg_request(data: BfsgPayoutRequestForCreation, session: Sessi
     payout_request.reference = data.reference  # type: ignore
     session.add(payout_request)
     session.commit()
-    return get_payout_request(session, request_id, PayoutRequestType.BFSG)
+    created_payout_request = get_payout_request(session, request_id, PayoutRequestType.BFSG)
+    emails.payout_request_created(payout_request=created_payout_request, session=session)
+    return created_payout_request
 
 
 @router.post("/vorankuendigung/create", response_model=PayoutRequestData)
 async def create_vorankuendigung_request(data: VorankuendigungPayoutRequestForCreation, session: SessionDep,
-                                         current_user: User = Depends(get_current_user())):
+                                         emails: EmailsDep, current_user: User = Depends(get_current_user())):
     logger.info(f'create_vorankuendigung_request({data=}, {current_user.username=})')
     check_semester_is_valid_format(data.semester)
     check_user_may_submit_payout_request(current_user, data.fs, session)
@@ -374,13 +380,15 @@ async def create_vorankuendigung_request(data: VorankuendigungPayoutRequestForCr
     payout_request.reference = data.reference  # type: ignore
     session.add(payout_request)
     session.commit()
-    return get_payout_request(session, request_id, PayoutRequestType.VORANKUENDIGUNG)
+    created_payout_request = get_payout_request(session, request_id, PayoutRequestType.VORANKUENDIGUNG)
+    emails.payout_request_created(payout_request=created_payout_request, session=session)
+    return created_payout_request
 
 
 @router.patch("/{_type}/{request_id}", dependencies=[Depends(admin_only)],
               response_model=PayoutRequestData)
 async def modify_request(_type: PayoutRequestType, request_id: str, data: ModifiablePayoutRequestProperties,
-                         session: SessionDep, current_user: User = Depends(get_current_user())):
+                         session: SessionDep, emails: EmailsDep, current_user: User = Depends(get_current_user())):
     logger.info(f'modify_request({_type=}, {request_id=}, {data=}, {current_user.username=})')
     payout_request = get_payout_request(session, request_id, _type)
     if not payout_request:
@@ -390,6 +398,7 @@ async def modify_request(_type: PayoutRequestType, request_id: str, data: Modifi
         )
     session.expunge(payout_request)
     make_transient(payout_request)
+    initial_payout_request = deepcopy(payout_request)
     payout_request.id = None  # type: ignore
     if data.status_date is not None:
         payout_request.status_date = data.status_date.isoformat()
@@ -407,7 +416,9 @@ async def modify_request(_type: PayoutRequestType, request_id: str, data: Modifi
     payout_request.last_modified_timestamp = ts()
     session.add(payout_request)
     session.commit()
-    return get_payout_request(session, request_id, _type)
+    modified_payout_request = get_payout_request(session, request_id, _type)
+    emails.payout_request_modified(current=modified_payout_request, previous=initial_payout_request, session=session)
+    return modified_payout_request
 
 
 @router.delete("/{_type}/{request_id}", dependencies=[Depends(admin_only)])

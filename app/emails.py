@@ -12,8 +12,8 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.config import Config
-from app.database import BaseFsData, Election, EmailTemplate, ProtectedFsData
-from app.util import get_europe_berlin_date
+from app.database import BaseFsData, Election, EmailTemplate, PayoutRequest, ProtectedFsData
+from app.util import get_europe_berlin_date, ts
 
 
 class FrequencyEnum(str, Enum):
@@ -125,8 +125,102 @@ class EmailManager:
             if mail.meta:
                 previous_json = mail.meta["base"]
 
-        diff = diff_elections(current_json, previous_json)
+        diff = diff_dicts(current_json, previous_json)
         subject, body = render(template, {"fs_name": fs_name, "diff": diff, "election_id": current.election_id})
+        data = QueuedEmailMessage(
+            to=to,
+            subject=subject,
+            body=body,
+            template_id=template.template_id,
+            created=created,
+            not_before=not_before,
+            meta={
+                "key": key,
+                "base": previous_json,
+            },
+        )
+        self.outbox_dir.mkdir(parents=True, exist_ok=True)
+        target_file.write_text(
+            data.model_dump_json(
+                indent=2,
+            )
+        )
+
+    def payout_request_created(self, payout_request: PayoutRequest | None, session: Session):
+        if payout_request is None:
+            return
+        today = get_europe_berlin_date()
+        created = ts()
+        uuid_ = str(uuid.uuid4())
+        target_file = self.outbox_dir / f"{today}-{uuid_}.json"
+
+        template = get_template(template_id="payout_request_created", session=session)
+        email_addresses = get_email_addresses(fs=payout_request.fs, session=session)
+        fs_name = get_fs_name(fs_id=payout_request.fs, session=session)
+        to = []
+        for target in template.meta.targets:
+            to.extend(email_addresses.get(target, []))
+        to = sorted(set(to))
+
+        as_json = payout_request_to_json(payout_request)
+        request_data = list_keys_and_values(as_json)
+
+        subject, body = render(
+            template,
+            {"fs_name": fs_name, "request_data": request_data, "request_id": payout_request.request_id},
+        )
+        data = QueuedEmailMessage(
+            to=to,
+            subject=subject,
+            body=body,
+            template_id=template.template_id,
+            created=created,
+            not_before=None,
+            meta=None,
+        )
+        self.outbox_dir.mkdir(parents=True, exist_ok=True)
+        target_file.write_text(
+            data.model_dump_json(
+                indent=2,
+            )
+        )
+
+    def payout_request_modified(self, current: PayoutRequest | None, previous: PayoutRequest | None, session: Session):
+        if current is None or previous is None:
+            return
+        today = get_europe_berlin_date()
+        now = datetime.now(tz=timezone.utc)
+        created = now.isoformat()
+        not_before = (now + timedelta(minutes=10)).isoformat()
+        key = current.request_id
+        uuid_ = str(uuid.uuid4())
+        target_file = self.outbox_dir / f"{today}-{uuid_}.json"
+
+        template = get_template(template_id="payout_request_updated", session=session)
+        email_addresses = get_email_addresses(fs=current.fs, session=session)
+        fs_name = get_fs_name(fs_id=current.fs, session=session)
+        to = []
+        for target in template.meta.targets:
+            to.extend(email_addresses.get(target, []))
+        to = sorted(set(to))
+
+        previous_json = payout_request_to_json(previous)
+        current_json = payout_request_to_json(current)
+
+        outbox_email = self.get_pending_outbox_mail(template_id=template.template_id, key=key)
+        if outbox_email:
+            filepath, mail = outbox_email
+            target_file = filepath
+            created = mail.created
+            if mail.meta:
+                previous_json = mail.meta["base"]
+
+        diff = diff_dicts(current=current_json, previous=previous_json)
+
+        subject, body = render(
+            template,
+            {"fs_name": fs_name, "diff": diff, "request_id": current.request_id},
+        )
         data = QueuedEmailMessage(
             to=to,
             subject=subject,
@@ -166,17 +260,33 @@ def election_to_json(election: Election | None) -> dict | None:
     }
 
 
-def diff_elections(current: dict | None, previous: dict | None) -> str:
+def payout_request_to_json(payout_request: PayoutRequest | None) -> dict:
+    if payout_request is None:
+        return {}
+    return {
+        "request_id": payout_request.request_id,
+        "type": payout_request.type,
+        "category": payout_request.category,
+        "fs": payout_request.fs,
+        "semester": payout_request.semester,
+        "status": payout_request.status,
+        "status_date": payout_request.status_date,
+        "amount_cents": payout_request.amount_cents,
+        "comment": payout_request.comment,
+        "request_date": payout_request.request_date,
+        "completion_deadline": payout_request.completion_deadline,
+        "reference": payout_request.reference,
+    }
+
+
+def diff_dicts(current: dict | None, previous: dict | None) -> str:
     assert current is not None
 
     value = ""
     if previous is None:
-        for key, current_value in current.items():
-            if current_value == "":
-                current_value = "–"
-            value += f"{key}: {current_value}\n"
+        value = list_keys_and_values(current)
     else:
-        for key, current_value in current.items():
+        for key, current_value in sorted(current.items()):
             previous_value = previous.get(key, None)
             if previous_value == "":
                 previous_value = "–"
@@ -188,6 +298,13 @@ def diff_elections(current: dict | None, previous: dict | None) -> str:
         return "Keine Änderungen"
     return value
 
+def list_keys_and_values(item: dict) -> str:
+    value = ""
+    for key, current_value in sorted(item.items()):
+        if current_value == "":
+            current_value = "–"
+        value += f"{key}: {current_value}\n"
+    return value
 
 def get_template(template_id: str, session: Session) -> EmailTemplateData:
     subquery = (
