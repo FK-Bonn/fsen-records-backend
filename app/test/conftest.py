@@ -266,6 +266,9 @@ def setup_templates_and_data(client):
         "election_updated": "\n{diff}\nhttps://example.org/wahltermine/{election_id}",
         "payout_request_created": "\n{request_data}\nhttps://example.org/payout-request/{request_id}",
         "payout_request_updated": "\n{diff}\nhttps://example.org/payout-request/{request_id}",
+        "document_uploaded": "\n{document_data}\nhttps://example.org/payout-request/{request_id}",
+        "document_annotated": "\n{diff}\nhttps://example.org{url_fragment}",
+        "annotation_updated": "\n{diff}\nhttps://example.org{url_fragment}",
     }
     for template_id, extra_body in templates.items():
         template = {

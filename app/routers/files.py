@@ -1,13 +1,11 @@
 import datetime
 import enum
-import hashlib
 import json
 import logging
-import re
 import shutil
 from collections import defaultdict
 from pathlib import Path
-from typing import Annotated, BinaryIO
+from typing import Annotated
 
 from fastapi import APIRouter, Depends, Form, HTTPException, UploadFile
 from pydantic import BaseModel
@@ -18,8 +16,9 @@ from starlette.responses import FileResponse
 
 from app.config import Config
 from app.database import Annotation, Document, Permission, SessionDep, User
+from app.emails import EmailsDep
 from app.routers.users import admin_only, get_current_user, is_admin
-from app.util import to_json, ts
+from app.util import build_filename_str, calculate_sha256, to_json, ts
 
 LAST_FS_DATA_FORMAT_UPDATE = '2023-01-01'
 
@@ -409,6 +408,7 @@ async def document_history(fs: str, reference: DocumentReference, session: Sessi
 async def upload_document(
         fs: str,
         session: SessionDep,
+        emails: EmailsDep,
         file: UploadFile,
         category: Annotated[DocumentCategory, Form()],
         base_name: Annotated[str, Form()],
@@ -461,10 +461,11 @@ async def upload_document(
     document.uploaded_by = current_user.username
     session.add(document)
     session.commit()
+    emails.document_uploaded(document, session)
 
 
 @router.post("/{fs}/annotate", dependencies=[Depends(admin_only)])
-async def annotate(fs: str, data: AnnotateData, session: SessionDep,
+async def annotate(fs: str, data: AnnotateData, session: SessionDep, emails: EmailsDep,
                    current_user: User = Depends(get_current_user())):
     logger.info(f'annotate({fs=}, {data=}, {current_user.username=})')
     document_id = session.query(Document.id). \
@@ -479,6 +480,8 @@ async def annotate(fs: str, data: AnnotateData, session: SessionDep,
     if not document_id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
     now = ts()
+    previous = session.query(Annotation). \
+        where(Annotation.document == document_id, Annotation.obsoleted_by.is_(None)).first()
     session.query(Annotation). \
         where(Annotation.document == document_id, Annotation.obsoleted_by.is_(None)). \
         update({'obsoleted_by': current_user.username, 'obsoleted_timestamp': now})
@@ -496,6 +499,7 @@ async def annotate(fs: str, data: AnnotateData, session: SessionDep,
     annotation.created_by = current_user.username
     session.add(annotation)
     session.commit()
+    emails.document_annotated(current=annotation, previous=previous, session=session)
 
 @router.post("/{fs}/delete", dependencies=[Depends(admin_only)])
 async def delete(fs: str, data: DeleteData, session: SessionDep,
@@ -537,33 +541,12 @@ async def delete(fs: str, data: DeleteData, session: SessionDep,
             update({'deleted_by': None, 'deleted_timestamp': None})
     session.commit()
 
-
-def calculate_sha256(uploaded_file: BinaryIO):
-    file_hash = hashlib.sha256()
-    while chunk := uploaded_file.read(8192):
-        file_hash.update(chunk)
-    uploaded_file.seek(0)
-    return file_hash.hexdigest()
-
-
 def build_filename(request_id: str, category: DocumentCategory, base_name: str, date_start: datetime.date | None,
                    date_end: datetime.date | None, file_extension: str, sha256hash: str) -> str:
     date_start_str = date_start.isoformat() if date_start else None
     date_end_str = date_end.isoformat() if date_end else None
     return build_filename_str(request_id, category.value, base_name, date_start_str, date_end_str, file_extension,
                               sha256hash)
-
-
-def build_filename_str(request_id: str, category: str, base_name: str, date_start: str | None,
-                       date_end: str | None, file_extension: str, sha256hash: str) -> str:
-    base_name = re.sub(r'[^a-zA-Z0-9äöüÄÖÜßẞ]', '_', base_name)[:50]
-    filename = f'{category}-{request_id}-{base_name}'.replace('--', '-')
-    if date_start:
-        filename += f'-{date_start}'
-        if date_end:
-            filename += f'--{date_end}'
-    filename += f'-{sha256hash}.{file_extension}'
-    return filename
 
 
 def check_user_may_upload_document(current_user: User, fs: str, category: DocumentCategory):

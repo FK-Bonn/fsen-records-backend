@@ -164,7 +164,7 @@ https://example.org/wahltermine/deadbeef""",
             not_before=None,
             meta={
                 "key": "deadbeef",
-                "base": None,
+                "base": {},
             },
         ),
     ]
@@ -265,7 +265,7 @@ def test_missing_template_results_in_default_error_template(fake_email_manager):
             not_before=None,
             meta={
                 "key": "deadbeef",
-                "base": None,
+                "base": {},
             },
         ),
     ]

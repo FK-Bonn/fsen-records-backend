@@ -421,7 +421,7 @@ def test_transfer_file(mocked_base_dir):
 
 
 @mock.patch('app.routers.files.get_base_dir', return_value=Path(TemporaryDirectory().name))
-def test_transfer_annotation(mocked_base_dir):
+def test_transfer_annotation(mocked_base_dir, fake_email_manager):
     handle = BytesIO(EMPTY_PDF_PAGE)
     assert client.post('/api/v1/file/Informatik',
                        data=DEFAULT_AFSG_DATA,

@@ -8,6 +8,7 @@ from fastapi.testclient import TestClient
 from time_machine import travel
 
 from app.database import get_session
+from app.emails import QueuedEmailMessage
 from app.main import app, subapp
 from app.test.conftest import (
     ADMIN,
@@ -24,6 +25,7 @@ from app.test.conftest import (
     USER_NO_PERMS,
     fake_session,
     get_auth_header,
+    setup_templates_and_data,
 )
 
 DEFAULT_AFSG_DATA = {
@@ -106,7 +108,7 @@ def test_try_path_traversal(mocked_base_dir, mocked_hook):
 
 
 @mock.patch('app.routers.files.get_base_dir', return_value=Path(TemporaryDirectory().name))
-def test_upload_file_afsg(mocked_base_dir):
+def test_upload_file_afsg(mocked_base_dir, fake_email_manager):
     handle = BytesIO(EMPTY_PDF_PAGE)
     response = client.post('/api/v1/file/Informatik',
                            data=DEFAULT_AFSG_DATA,
@@ -114,6 +116,7 @@ def test_upload_file_afsg(mocked_base_dir):
                            headers=get_auth_header(client, ADMIN))
     assert response.status_code == 200
     assert (mocked_base_dir() / 'Informatik' / f'AFSG-HHP-2023-10-01--2024-09-30-{PDF_HASH}.pdf').is_file()
+    assert fake_email_manager.get_outbox() == []
 
 
 @mock.patch('app.routers.files.get_base_dir', return_value=Path(TemporaryDirectory().name))
@@ -199,7 +202,7 @@ def test_upload_file_afsg_forbidden(mocked_base_dir, user):
     USER_INFO_ALL,
     USER_INFO_GEO_ALL,
 ])
-def test_upload_file_bfsg(mocked_base_dir, user):
+def test_upload_file_bfsg(mocked_base_dir, fake_email_manager, user):
     handle = BytesIO(EMPTY_PDF_PAGE)
     response = client.post('/api/v1/file/Informatik',
                            data=DEFAULT_BFSG_DATA,
@@ -230,7 +233,7 @@ def test_upload_file_bfsg_forbidden(mocked_base_dir, user):
     USER_INFO_ALL,
     USER_INFO_GEO_ALL,
 ])
-def test_upload_file_vorankuendigung(mocked_base_dir, user):
+def test_upload_file_vorankuendigung(mocked_base_dir, fake_email_manager, user):
     handle = BytesIO(EMPTY_PDF_PAGE)
     response = client.post('/api/v1/file/Informatik',
                            data=DEFAULT_VORANKUENDIGUNG_DATA,
@@ -275,7 +278,7 @@ def test_upload_file_invalid_file_type(mocked_base_dir):
     None,
     ADMIN,
 ])
-def test_add_annotation(mocked_base_dir, user):
+def test_add_annotation(mocked_base_dir, fake_email_manager, user):
     handle = BytesIO(EMPTY_PDF_PAGE)
     client.post('/api/v1/file/Informatik',
                 data=DEFAULT_AFSG_DATA,
@@ -333,7 +336,7 @@ def test_add_annotation(mocked_base_dir, user):
     USER_INFO_GEO_READ,
     USER_INFO_GEO_ALL,
 ])
-def test_add_annotation_forbidden(mocked_base_dir, user):
+def test_add_annotation_forbidden(mocked_base_dir, fake_email_manager, user):
     handle = BytesIO(EMPTY_PDF_PAGE)
     client.post('/api/v1/file/Informatik',
                 data=DEFAULT_AFSG_DATA,
@@ -369,7 +372,7 @@ def test_add_annotation_document_not_found(mocked_base_dir):
     None,
     ADMIN,
 ])
-def test_update_annotation(mocked_base_dir, user):
+def test_update_annotation(mocked_base_dir, fake_email_manager, user):
     handle = BytesIO(EMPTY_PDF_PAGE)
     client.post('/api/v1/file/Informatik',
                 data=DEFAULT_AFSG_DATA,
@@ -431,7 +434,7 @@ def test_update_annotation(mocked_base_dir, user):
     USER_INFO_ALL,
     ADMIN,
 ])
-def test_retrieve_file_list(mocked_base_dir, user):
+def test_retrieve_file_list(mocked_base_dir, fake_email_manager, user):
     handle = BytesIO(EMPTY_PDF_PAGE)
     client.post('/api/v1/file/Informatik',
                 data={
@@ -630,7 +633,7 @@ def test_retrieve_file_list(mocked_base_dir, user):
     USER_INFO_ALL,
     ADMIN,
 ])
-def test_get_file_history(mocked_base_dir, user):
+def test_get_file_history(mocked_base_dir, fake_email_manager, user):
     handle = BytesIO(EMPTY_PDF_PAGE)
     handle2 = BytesIO(EMPTY_PDF_PAGE_2)
     handle3 = BytesIO(EMPTY_PDF_PAGE_3)
@@ -891,7 +894,7 @@ def test_get_file_history(mocked_base_dir, user):
 
 
 @mock.patch('app.routers.files.get_base_dir', return_value=Path(TemporaryDirectory().name))
-def test_use_file_twice_with_different_annotations(mocked_base_dir):
+def test_use_file_twice_with_different_annotations(mocked_base_dir, fake_email_manager):
     handle = BytesIO(EMPTY_PDF_PAGE)
     client.post('/api/v1/file/Informatik',
                 data={
@@ -1001,7 +1004,7 @@ def test_use_file_twice_with_different_annotations(mocked_base_dir):
 
 
 @mock.patch('app.routers.files.get_base_dir', return_value=Path(TemporaryDirectory().name))
-def test_fixed_date_annotations(mocked_base_dir):
+def test_fixed_date_annotations(mocked_base_dir, fake_email_manager):
     handle = BytesIO(EMPTY_PDF_PAGE)
     handle2 = BytesIO(EMPTY_PDF_PAGE_2)
     handle3 = BytesIO(EMPTY_PDF_PAGE_3)
@@ -1195,7 +1198,7 @@ def test_fixed_date_annotations(mocked_base_dir):
     USER_INFO_ALL,
     ADMIN,
 ])
-def test_delete_file(mocked_base_dir, user):
+def test_delete_file(mocked_base_dir, fake_email_manager, user):
     handle = BytesIO(EMPTY_PDF_PAGE)
     handle2 = BytesIO(EMPTY_PDF_PAGE_2)
     handle3 = BytesIO(EMPTY_PDF_PAGE_3)
@@ -1378,7 +1381,7 @@ def test_delete_file_not_allowed(mocked_base_dir, user):
 
 
 @mock.patch('app.routers.files.get_base_dir', return_value=Path(TemporaryDirectory().name))
-def test_delete_file_history(mocked_base_dir):
+def test_delete_file_history(mocked_base_dir, fake_email_manager):
     handle = BytesIO(EMPTY_PDF_PAGE)
     handle2 = BytesIO(EMPTY_PDF_PAGE_2)
     handle3 = BytesIO(EMPTY_PDF_PAGE_3)
@@ -1759,7 +1762,7 @@ def test_delete_file_history(mocked_base_dir):
     USER_INFO_ALL,
     ADMIN,
 ])
-def test_list_files_for_individual_payout_request(mocked_base_dir, user):
+def test_list_files_for_individual_payout_request(mocked_base_dir, fake_email_manager, user):
     handle = BytesIO(EMPTY_PDF_PAGE)
     response = client.post('/api/v1/file/Informatik',
                            data=DEFAULT_BFSG_DATA,
@@ -1833,6 +1836,687 @@ def test_list_files_for_individual_payout_request(mocked_base_dir, user):
         }
     ]
 
+@mock.patch("app.routers.files.get_base_dir", return_value=Path(TemporaryDirectory().name))
+def test_uploading_bfsg_document_creates_email(mocked_base_dir, fake_email_manager):
+    setup_templates_and_data(client)
+    handle = BytesIO(EMPTY_PDF_PAGE)
+    with travel("2026-06-06T10:00:00Z", tick=False):
+        response = client.post(
+            "/api/v1/file/Informatik",
+            data=DEFAULT_BFSG_DATA,
+            files={"file": ("kassenbon.pdf", handle, "application/pdf")},
+            headers=get_auth_header(client, ADMIN),
+        )
+    assert response.status_code == 200
+    assert fake_email_manager.get_outbox() == [
+        QueuedEmailMessage(
+            to=["informatik@example.org"],
+            subject="document_uploaded subject content",
+            body="""document_uploaded body content
+Infor Matik
+base_name: kassenbon
+category: BFSG
+date_end: None
+date_start: None
+file_extension: pdf
+fs: Informatik
+request_id: B24S-0001
+sha256hash: 1b318799de440475e51646b29c4c5a838d031548e0bdf6566802b6731082a23c
+
+https://example.org/payout-request/B24S-0001""",
+            template_id="document_uploaded",
+            created="2026-06-06T10:00:00+00:00",
+            not_before=None,
+            meta=None,
+        ),
+    ]
+
+
+@mock.patch("app.routers.files.get_base_dir", return_value=Path(TemporaryDirectory().name))
+def test_uploading_vorankuendigung_document_creates_email(mocked_base_dir, fake_email_manager):
+    setup_templates_and_data(client)
+    handle = BytesIO(EMPTY_PDF_PAGE)
+    with travel("2026-06-06T10:00:00Z", tick=False):
+        response = client.post(
+            "/api/v1/file/Informatik",
+            data=DEFAULT_VORANKUENDIGUNG_DATA,
+            files={"file": ("kassenbon.pdf", handle, "application/pdf")},
+            headers=get_auth_header(client, ADMIN),
+        )
+    assert response.status_code == 200
+    assert fake_email_manager.get_outbox() == [
+        QueuedEmailMessage(
+            to=["informatik@example.org"],
+            subject="document_uploaded subject content",
+            body="""document_uploaded body content
+Infor Matik
+base_name: ange~botäöüßÄÖÜẞ?/xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxyzzzzzzzz
+category: VORANKUENDIGUNG
+date_end: None
+date_start: None
+file_extension: pdf
+fs: Informatik
+request_id: V24S-0001
+sha256hash: 1b318799de440475e51646b29c4c5a838d031548e0bdf6566802b6731082a23c
+
+https://example.org/payout-request/V24S-0001""",
+            template_id="document_uploaded",
+            created="2026-06-06T10:00:00+00:00",
+            not_before=None,
+            meta=None,
+        ),
+    ]
+
+
+@mock.patch("app.routers.files.get_base_dir", return_value=Path(TemporaryDirectory().name))
+def test_annotating_afsg_document_creates_email_with_link_to_document(mocked_base_dir, fake_email_manager):
+    setup_templates_and_data(client)
+    handle = BytesIO(EMPTY_PDF_PAGE)
+    with travel("2026-06-06T10:00:00Z", tick=False):
+        response = client.post(
+            "/api/v1/file/Informatik",
+            data=DEFAULT_AFSG_DATA,
+            files={"file": ("hhp.pdf", handle, "application/pdf")},
+            headers=get_auth_header(client, ADMIN),
+        )
+    assert response.status_code == 200
+    fake_email_manager.clear()
+
+    with travel("2026-07-07T10:00:00Z", tick=False):
+        result = client.post(
+            "/api/v1/file/Informatik/annotate",
+            json={
+                "target": DEFAULT_AFSG_DATA,
+                "references": [
+                    {
+                        "category": "AFSG",
+                        "request_id": "",
+                        "base_name": "Prot",
+                        "date_start": "2021-05-11",
+                        "date_end": None,
+                    }
+                ],
+                "tags": [],
+                "url": None,
+                "annotations": [
+                    {"level": "Error", "text": "Ein Fehler"},
+                    {"level": "Warning", "text": "Eine Warnung"},
+                ],
+            },
+            headers=get_auth_header(client, ADMIN),
+        )
+    assert result.status_code == 200
+    assert fake_email_manager.get_outbox() == [
+        QueuedEmailMessage(
+            to=["informatik@example.org"],
+            subject="document_annotated subject content",
+            body="""document_annotated body content
+Infor Matik
+annotation_0: Error: Ein Fehler
+annotation_1: Warning: Eine Warnung
+reference_0: {"category": "AFSG", "request_id": "", "base_name": "Prot", "date_start": "2021-05-11", "date_end": null}
+tags: []
+url: None
+
+https://example.org/document/AFSG-HHP-2023-10-01--2024-09-30-1b318799de440475e51646b29c4c5a838d031548e0bdf6566802b6731082a23c.pdf""",
+            template_id="document_annotated",
+            created="2026-07-07T10:00:00+00:00",
+            not_before="2026-07-07T10:10:00+00:00",
+            meta={"key": "1", "base": {}},
+        ),
+    ]
+
+
+@mock.patch("app.routers.files.get_base_dir", return_value=Path(TemporaryDirectory().name))
+def test_annotating_bfsg_document_creates_email_with_link_to_payout_request(mocked_base_dir, fake_email_manager):
+    setup_templates_and_data(client)
+    handle = BytesIO(EMPTY_PDF_PAGE)
+    with travel("2026-06-06T10:00:00Z", tick=False):
+        response = client.post(
+            "/api/v1/file/Informatik",
+            data=DEFAULT_BFSG_DATA,
+            files={"file": ("kassenbon.pdf", handle, "application/pdf")},
+            headers=get_auth_header(client, ADMIN),
+        )
+    assert response.status_code == 200
+    fake_email_manager.clear()
+
+    with travel("2026-07-07T10:00:00Z", tick=False):
+        result = client.post(
+            "/api/v1/file/Informatik/annotate",
+            json={
+                "target": DEFAULT_BFSG_DATA,
+                "references": None,
+                "tags": ["Erstifahrt"],
+                "url": None,
+                "annotations": [
+                    {"level": "Error", "text": "Ein Fehler"},
+                    {"level": "Warning", "text": "Eine Warnung"},
+                ],
+            },
+            headers=get_auth_header(client, ADMIN),
+        )
+    assert result.status_code == 200
+    assert fake_email_manager.get_outbox() == [
+        QueuedEmailMessage(
+            to=["informatik@example.org"],
+            subject="document_annotated subject content",
+            body="""document_annotated body content
+Infor Matik
+annotation_0: Error: Ein Fehler
+annotation_1: Warning: Eine Warnung
+references: None
+tags: [
+  "Erstifahrt"
+]
+url: None
+
+https://example.org/payout-request/B24S-0001""",
+            template_id="document_annotated",
+            created="2026-07-07T10:00:00+00:00",
+            not_before="2026-07-07T10:10:00+00:00",
+            meta={"key": "1", "base": {}},
+        ),
+    ]
+
+
+@mock.patch("app.routers.files.get_base_dir", return_value=Path(TemporaryDirectory().name))
+def test_annotating_vorankuendigung_document_creates_email_with_link_to_payout_request(
+    mocked_base_dir, fake_email_manager
+):
+    setup_templates_and_data(client)
+    handle = BytesIO(EMPTY_PDF_PAGE)
+    with travel("2026-06-06T10:00:00Z", tick=False):
+        response = client.post(
+            "/api/v1/file/Informatik",
+            data=DEFAULT_VORANKUENDIGUNG_DATA,
+            files={"file": ("kassenbon.pdf", handle, "application/pdf")},
+            headers=get_auth_header(client, ADMIN),
+        )
+    assert response.status_code == 200
+    fake_email_manager.clear()
+
+    with travel("2026-07-07T10:00:00Z", tick=False):
+        result = client.post(
+            "/api/v1/file/Informatik/annotate",
+            json={
+                "target": DEFAULT_VORANKUENDIGUNG_DATA,
+                "references": None,
+                "tags": ["Erstifahrt"],
+                "url": None,
+                "annotations": [
+                    {"level": "Error", "text": "Ein Fehler"},
+                    {"level": "Warning", "text": "Eine Warnung"},
+                ],
+            },
+            headers=get_auth_header(client, ADMIN),
+        )
+    assert result.status_code == 200
+    assert fake_email_manager.get_outbox() == [
+        QueuedEmailMessage(
+            to=["informatik@example.org"],
+            subject="document_annotated subject content",
+            body="""document_annotated body content
+Infor Matik
+annotation_0: Error: Ein Fehler
+annotation_1: Warning: Eine Warnung
+references: None
+tags: [
+  "Erstifahrt"
+]
+url: None
+
+https://example.org/payout-request/V24S-0001""",
+            template_id="document_annotated",
+            created="2026-07-07T10:00:00+00:00",
+            not_before="2026-07-07T10:10:00+00:00",
+            meta={"key": "1", "base": {}},
+        ),
+    ]
+
+
+@mock.patch("app.routers.files.get_base_dir", return_value=Path(TemporaryDirectory().name))
+def test_add_annotation_edit_within_five_minutes_edits_email(mocked_base_dir, fake_email_manager):
+    setup_templates_and_data(client)
+    handle = BytesIO(EMPTY_PDF_PAGE)
+    with travel("2026-06-06T10:00:00Z", tick=False):
+        response = client.post(
+            "/api/v1/file/Informatik",
+            data=DEFAULT_AFSG_DATA,
+            files={"file": ("hhp.pdf", handle, "application/pdf")},
+            headers=get_auth_header(client, ADMIN),
+        )
+    assert response.status_code == 200
+    fake_email_manager.clear()
+
+    with travel("2026-07-07T10:00:00Z", tick=False):
+        result = client.post(
+            "/api/v1/file/Informatik/annotate",
+            json={
+                "target": DEFAULT_AFSG_DATA,
+                "references": [
+                    {
+                        "category": "AFSG",
+                        "request_id": "",
+                        "base_name": "Prot",
+                        "date_start": "2021-05-11",
+                        "date_end": None,
+                    }
+                ],
+                "tags": [],
+                "url": None,
+                "annotations": [
+                    {"level": "Error", "text": "Ein falscher Fehler"},
+                    {"level": "Warning", "text": "Eine falsche Warnung"},
+                ],
+            },
+            headers=get_auth_header(client, ADMIN),
+        )
+    assert result.status_code == 200
+    with travel("2026-07-07T10:04:59Z", tick=False):
+        result = client.post(
+            "/api/v1/file/Informatik/annotate",
+            json={
+                "target": DEFAULT_AFSG_DATA,
+                "references": [
+                    {
+                        "category": "AFSG",
+                        "request_id": "",
+                        "base_name": "Prot",
+                        "date_start": "2021-05-11",
+                        "date_end": None,
+                    }
+                ],
+                "tags": [],
+                "url": None,
+                "annotations": [
+                    {"level": "Error", "text": "Ein korrekter Fehler"},
+                    {"level": "Warning", "text": "Eine korrekte Warnung"},
+                    {"level": "Info", "text": "Noch eine Info"},
+                ],
+            },
+            headers=get_auth_header(client, ADMIN),
+        )
+    assert result.status_code == 200
+    assert fake_email_manager.get_outbox() == [
+        QueuedEmailMessage(
+            to=["informatik@example.org"],
+            subject="document_annotated subject content",
+            body="""document_annotated body content
+Infor Matik
+annotation_0: Error: Ein korrekter Fehler
+annotation_1: Warning: Eine korrekte Warnung
+annotation_2: Info: Noch eine Info
+reference_0: {"category": "AFSG", "request_id": "", "base_name": "Prot", "date_start": "2021-05-11", "date_end": null}
+tags: []
+url: None
+
+https://example.org/document/AFSG-HHP-2023-10-01--2024-09-30-1b318799de440475e51646b29c4c5a838d031548e0bdf6566802b6731082a23c.pdf""",
+            template_id="document_annotated",
+            created="2026-07-07T10:00:00+00:00",
+            not_before="2026-07-07T10:14:59+00:00",
+            meta={"key": "1", "base": {}},
+        ),
+    ]
+
+
+@mock.patch("app.routers.files.get_base_dir", return_value=Path(TemporaryDirectory().name))
+def test_add_annotation_edit_after_five_minutes_adds_another_email(mocked_base_dir, fake_email_manager):
+    setup_templates_and_data(client)
+    handle = BytesIO(EMPTY_PDF_PAGE)
+    with travel("2026-06-06T10:00:00Z", tick=False):
+        response = client.post(
+            "/api/v1/file/Informatik",
+            data=DEFAULT_AFSG_DATA,
+            files={"file": ("hhp.pdf", handle, "application/pdf")},
+            headers=get_auth_header(client, ADMIN),
+        )
+    assert response.status_code == 200
+    fake_email_manager.clear()
+
+    with travel("2026-07-07T10:00:00Z", tick=False):
+        result = client.post(
+            "/api/v1/file/Informatik/annotate",
+            json={
+                "target": DEFAULT_AFSG_DATA,
+                "references": [
+                    {
+                        "category": "AFSG",
+                        "request_id": "",
+                        "base_name": "Prot",
+                        "date_start": "2021-05-11",
+                        "date_end": None,
+                    }
+                ],
+                "tags": [],
+                "url": None,
+                "annotations": [
+                    {"level": "Error", "text": "Ein falscher Fehler"},
+                    {"level": "Warning", "text": "Eine falsche Warnung"},
+                ],
+            },
+            headers=get_auth_header(client, ADMIN),
+        )
+    assert result.status_code == 200
+    with travel("2026-07-07T10:05:00Z", tick=False):
+        result = client.post(
+            "/api/v1/file/Informatik/annotate",
+            json={
+                "target": DEFAULT_AFSG_DATA,
+                "references": [
+                    {
+                        "category": "AFSG",
+                        "request_id": "",
+                        "base_name": "Prot",
+                        "date_start": "2021-05-11",
+                        "date_end": None,
+                    }
+                ],
+                "tags": [],
+                "url": None,
+                "annotations": [
+                    {"level": "Error", "text": "Ein korrekter Fehler"},
+                    {"level": "Warning", "text": "Eine korrekte Warnung"},
+                    {"level": "Info", "text": "Noch eine Info"},
+                ],
+            },
+            headers=get_auth_header(client, ADMIN),
+        )
+    assert result.status_code == 200
+    assert fake_email_manager.get_outbox() == [
+        QueuedEmailMessage(
+            to=["informatik@example.org"],
+            subject="annotation_updated subject content",
+            body="""annotation_updated body content
+Infor Matik
+annotation_0: Error: Ein falscher Fehler → Error: Ein korrekter Fehler
+annotation_1: Warning: Eine falsche Warnung → Warning: Eine korrekte Warnung
+annotation_2: None → Info: Noch eine Info
+
+https://example.org/document/AFSG-HHP-2023-10-01--2024-09-30-1b318799de440475e51646b29c4c5a838d031548e0bdf6566802b6731082a23c.pdf""",
+            template_id="annotation_updated",
+            created="2026-07-07T10:05:00+00:00",
+            not_before="2026-07-07T10:15:00+00:00",
+            meta={
+                "key": "1",
+                "base": {
+                    "tags": "[]",
+                    "url": None,
+                    "reference_0": '{"category": "AFSG", "request_id": "", "base_name": "Prot", "date_start": "2021-05-11", "date_end": null}',
+                    "annotation_0": "Error: Ein falscher Fehler",
+                    "annotation_1": "Warning: Eine falsche Warnung",
+                },
+            },
+        ),
+        QueuedEmailMessage(
+            to=["informatik@example.org"],
+            subject="document_annotated subject content",
+            body="""document_annotated body content
+Infor Matik
+annotation_0: Error: Ein falscher Fehler
+annotation_1: Warning: Eine falsche Warnung
+reference_0: {"category": "AFSG", "request_id": "", "base_name": "Prot", "date_start": "2021-05-11", "date_end": null}
+tags: []
+url: None
+
+https://example.org/document/AFSG-HHP-2023-10-01--2024-09-30-1b318799de440475e51646b29c4c5a838d031548e0bdf6566802b6731082a23c.pdf""",
+            template_id="document_annotated",
+            created="2026-07-07T10:00:00+00:00",
+            not_before="2026-07-07T10:10:00+00:00",
+            meta={"key": "1", "base": {}},
+        ),
+    ]
+
+
+@mock.patch("app.routers.files.get_base_dir", return_value=Path(TemporaryDirectory().name))
+def test_edit_annotation_edit_again_within_five_minutes_edits_email(mocked_base_dir, fake_email_manager):
+    setup_templates_and_data(client)
+    handle = BytesIO(EMPTY_PDF_PAGE)
+    with travel("2026-06-06T10:00:00Z", tick=False):
+        response = client.post(
+            "/api/v1/file/Informatik",
+            data=DEFAULT_AFSG_DATA,
+            files={"file": ("hhp.pdf", handle, "application/pdf")},
+            headers=get_auth_header(client, ADMIN),
+        )
+    assert response.status_code == 200
+    with travel("2026-06-06T11:00:00Z", tick=False):
+        result = client.post(
+            "/api/v1/file/Informatik/annotate",
+            json={
+                "target": DEFAULT_AFSG_DATA,
+                "references": [
+                    {
+                        "category": "AFSG",
+                        "request_id": "",
+                        "base_name": "Prot",
+                        "date_start": "2021-05-11",
+                        "date_end": None,
+                    }
+                ],
+                "tags": [],
+                "url": None,
+                "annotations": [
+                    {"level": "Error", "text": "Ein alter Fehler"},
+                    {"level": "Warning", "text": "Eine alte Warnung"},
+                ],
+            },
+            headers=get_auth_header(client, ADMIN),
+        )
+    assert result.status_code == 200
+    fake_email_manager.clear()
+
+    with travel("2026-07-07T10:00:00Z", tick=False):
+        result = client.post(
+            "/api/v1/file/Informatik/annotate",
+            json={
+                "target": DEFAULT_AFSG_DATA,
+                "references": [
+                    {
+                        "category": "AFSG",
+                        "request_id": "",
+                        "base_name": "Prot",
+                        "date_start": "2021-05-11",
+                        "date_end": None,
+                    }
+                ],
+                "tags": [],
+                "url": None,
+                "annotations": [
+                    {"level": "Error", "text": "Ein falscher Fehler"},
+                    {"level": "Warning", "text": "Eine falsche Warnung"},
+                ],
+            },
+            headers=get_auth_header(client, ADMIN),
+        )
+    assert result.status_code == 200
+    with travel("2026-07-07T10:04:59Z", tick=False):
+        result = client.post(
+            "/api/v1/file/Informatik/annotate",
+            json={
+                "target": DEFAULT_AFSG_DATA,
+                "references": [
+                    {
+                        "category": "AFSG",
+                        "request_id": "",
+                        "base_name": "Prot",
+                        "date_start": "2021-05-11",
+                        "date_end": None,
+                    }
+                ],
+                "tags": [],
+                "url": None,
+                "annotations": [
+                    {"level": "Error", "text": "Ein korrekter Fehler"},
+                    {"level": "Warning", "text": "Eine korrekte Warnung"},
+                    {"level": "Info", "text": "Noch eine Info"},
+                ],
+            },
+            headers=get_auth_header(client, ADMIN),
+        )
+    assert result.status_code == 200
+    assert fake_email_manager.get_outbox() == [
+        QueuedEmailMessage(
+            to=["informatik@example.org"],
+            subject="annotation_updated subject content",
+            body="""annotation_updated body content
+Infor Matik
+annotation_0: Error: Ein alter Fehler → Error: Ein korrekter Fehler
+annotation_1: Warning: Eine alte Warnung → Warning: Eine korrekte Warnung
+annotation_2: None → Info: Noch eine Info
+
+https://example.org/document/AFSG-HHP-2023-10-01--2024-09-30-1b318799de440475e51646b29c4c5a838d031548e0bdf6566802b6731082a23c.pdf""",
+            template_id="annotation_updated",
+            created="2026-07-07T10:00:00+00:00",
+            not_before="2026-07-07T10:14:59+00:00",
+            meta={
+                "key": "1",
+                "base": {
+                    "tags": "[]",
+                    "url": None,
+                    "reference_0": '{"category": "AFSG", "request_id": "", "base_name": "Prot", "date_start": "2021-05-11", "date_end": null}',
+                    "annotation_0": "Error: Ein alter Fehler",
+                    "annotation_1": "Warning: Eine alte Warnung",
+                },
+            },
+        ),
+    ]
+
+
+@mock.patch("app.routers.files.get_base_dir", return_value=Path(TemporaryDirectory().name))
+def test_edit_annotation_edit_again_after_five_minutes_adds_another_email(mocked_base_dir, fake_email_manager):
+    setup_templates_and_data(client)
+    handle = BytesIO(EMPTY_PDF_PAGE)
+    with travel("2026-06-06T10:00:00Z", tick=False):
+        response = client.post(
+            "/api/v1/file/Informatik",
+            data=DEFAULT_AFSG_DATA,
+            files={"file": ("hhp.pdf", handle, "application/pdf")},
+            headers=get_auth_header(client, ADMIN),
+        )
+    assert response.status_code == 200
+    with travel("2026-06-06T11:00:00Z", tick=False):
+        result = client.post(
+            "/api/v1/file/Informatik/annotate",
+            json={
+                "target": DEFAULT_AFSG_DATA,
+                "references": [
+                    {
+                        "category": "AFSG",
+                        "request_id": "",
+                        "base_name": "Prot",
+                        "date_start": "2021-05-11",
+                        "date_end": None,
+                    }
+                ],
+                "tags": [],
+                "url": None,
+                "annotations": [
+                    {"level": "Error", "text": "Ein alter Fehler"},
+                    {"level": "Warning", "text": "Eine alte Warnung"},
+                ],
+            },
+            headers=get_auth_header(client, ADMIN),
+        )
+    assert result.status_code == 200
+    fake_email_manager.clear()
+
+    with travel("2026-07-07T10:00:00Z", tick=False):
+        result = client.post(
+            "/api/v1/file/Informatik/annotate",
+            json={
+                "target": DEFAULT_AFSG_DATA,
+                "references": [
+                    {
+                        "category": "AFSG",
+                        "request_id": "",
+                        "base_name": "Prot",
+                        "date_start": "2021-05-11",
+                        "date_end": None,
+                    }
+                ],
+                "tags": [],
+                "url": None,
+                "annotations": [
+                    {"level": "Error", "text": "Ein falscher Fehler"},
+                ],
+            },
+            headers=get_auth_header(client, ADMIN),
+        )
+    assert result.status_code == 200
+    with travel("2026-07-07T10:05:00Z", tick=False):
+        result = client.post(
+            "/api/v1/file/Informatik/annotate",
+            json={
+                "target": DEFAULT_AFSG_DATA,
+                "references": [
+                    {
+                        "category": "AFSG",
+                        "request_id": "",
+                        "base_name": "Prot",
+                        "date_start": "2021-05-11",
+                        "date_end": None,
+                    }
+                ],
+                "tags": [],
+                "url": None,
+                "annotations": [
+                    {"level": "Error", "text": "Ein korrekter Fehler"},
+                    {"level": "Warning", "text": "Eine korrekte Warnung"},
+                    {"level": "Info", "text": "Noch eine Info"},
+                ],
+            },
+            headers=get_auth_header(client, ADMIN),
+        )
+    assert result.status_code == 200
+    assert fake_email_manager.get_outbox() == [
+        QueuedEmailMessage(
+            to=["informatik@example.org"],
+            subject="annotation_updated subject content",
+            body="""annotation_updated body content
+Infor Matik
+annotation_0: Error: Ein falscher Fehler → Error: Ein korrekter Fehler
+annotation_1: None → Warning: Eine korrekte Warnung
+annotation_2: None → Info: Noch eine Info
+
+https://example.org/document/AFSG-HHP-2023-10-01--2024-09-30-1b318799de440475e51646b29c4c5a838d031548e0bdf6566802b6731082a23c.pdf""",
+            template_id="annotation_updated",
+            created="2026-07-07T10:05:00+00:00",
+            not_before="2026-07-07T10:15:00+00:00",
+            meta={
+                "key": "1",
+                "base": {
+                    "tags": "[]",
+                    "url": None,
+                    "reference_0": '{"category": "AFSG", "request_id": "", "base_name": "Prot", "date_start": "2021-05-11", "date_end": null}',
+                    "annotation_0": "Error: Ein falscher Fehler",
+                },
+            },
+        ),
+        QueuedEmailMessage(
+            to=["informatik@example.org"],
+            subject="annotation_updated subject content",
+            body="""annotation_updated body content
+Infor Matik
+annotation_0: Error: Ein alter Fehler → Error: Ein falscher Fehler
+annotation_1: Warning: Eine alte Warnung → None
+
+https://example.org/document/AFSG-HHP-2023-10-01--2024-09-30-1b318799de440475e51646b29c4c5a838d031548e0bdf6566802b6731082a23c.pdf""",
+            template_id="annotation_updated",
+            created="2026-07-07T10:00:00+00:00",
+            not_before="2026-07-07T10:10:00+00:00",
+            meta={
+                "key": "1",
+                "base": {
+                    "tags": "[]",
+                    "url": None,
+                    "reference_0": '{"category": "AFSG", "request_id": "", "base_name": "Prot", "date_start": "2021-05-11", "date_end": null}',
+                    "annotation_0": "Error: Ein alter Fehler",
+                    "annotation_1": "Warning: Eine alte Warnung",
+                },
+            },
+        ),
+    ]
 
 
 def mask(elements: dict[str, list[dict]]):
