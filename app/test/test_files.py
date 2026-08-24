@@ -1866,8 +1866,192 @@ sha256hash: 1b318799de440475e51646b29c4c5a838d031548e0bdf6566802b6731082a23c
 https://example.org/payout-request/B24S-0001""",
             template_id="document_uploaded",
             created="2026-06-06T10:00:00+00:00",
-            not_before=None,
-            meta=None,
+            not_before="2026-06-06T10:10:00+00:00",
+            meta={
+                "key": "B24S-0001",
+                "base": [
+                    {
+                        "fs": "Informatik",
+                        "category": "BFSG",
+                        "request_id": "B24S-0001",
+                        "base_name": "kassenbon",
+                        "date_start": None,
+                        "date_end": None,
+                        "file_extension": "pdf",
+                        "sha256hash": "1b318799de440475e51646b29c4c5a838d031548e0bdf6566802b6731082a23c",
+                    }
+                ],
+            },
+        ),
+    ]
+
+
+@mock.patch("app.routers.files.get_base_dir", return_value=Path(TemporaryDirectory().name))
+def test_uploading_another_bfsg_document_within_five_minutes_amends_email(mocked_base_dir, fake_email_manager):
+    setup_templates_and_data(client)
+    handle = BytesIO(EMPTY_PDF_PAGE)
+    with travel("2026-06-06T10:00:00Z", tick=False):
+        response = client.post(
+            "/api/v1/file/Informatik",
+            data=DEFAULT_BFSG_DATA,
+            files={"file": ("kassenbon.pdf", handle, "application/pdf")},
+            headers=get_auth_header(client, ADMIN),
+        )
+    assert response.status_code == 200
+    with travel("2026-06-06T10:04:59Z", tick=False):
+        response = client.post(
+            "/api/v1/file/Informatik",
+            data={**DEFAULT_BFSG_DATA, "base_name": "kassenbon 2"},
+            files={"file": ("kassenbon.pdf", handle, "application/pdf")},
+            headers=get_auth_header(client, ADMIN),
+        )
+    assert response.status_code == 200
+    assert fake_email_manager.get_outbox() == [
+        QueuedEmailMessage(
+            to=["informatik@example.org"],
+            subject="document_uploaded subject content",
+            body="""document_uploaded body content
+Infor Matik
+base_name: kassenbon
+category: BFSG
+date_end: None
+date_start: None
+file_extension: pdf
+fs: Informatik
+request_id: B24S-0001
+sha256hash: 1b318799de440475e51646b29c4c5a838d031548e0bdf6566802b6731082a23c
+
+
+base_name: kassenbon 2
+category: BFSG
+date_end: None
+date_start: None
+file_extension: pdf
+fs: Informatik
+request_id: B24S-0001
+sha256hash: 1b318799de440475e51646b29c4c5a838d031548e0bdf6566802b6731082a23c
+
+https://example.org/payout-request/B24S-0001""",
+            template_id="document_uploaded",
+            created="2026-06-06T10:00:00+00:00",
+            not_before="2026-06-06T10:14:59+00:00",
+            meta={
+                "key": "B24S-0001",
+                "base": [
+                    {
+                        "fs": "Informatik",
+                        "category": "BFSG",
+                        "request_id": "B24S-0001",
+                        "base_name": "kassenbon",
+                        "date_start": None,
+                        "date_end": None,
+                        "file_extension": "pdf",
+                        "sha256hash": "1b318799de440475e51646b29c4c5a838d031548e0bdf6566802b6731082a23c",
+                    },
+                    {
+                        "fs": "Informatik",
+                        "category": "BFSG",
+                        "request_id": "B24S-0001",
+                        "base_name": "kassenbon 2",
+                        "date_start": None,
+                        "date_end": None,
+                        "file_extension": "pdf",
+                        "sha256hash": "1b318799de440475e51646b29c4c5a838d031548e0bdf6566802b6731082a23c",
+                    },
+                ],
+            },
+        ),
+    ]
+
+
+@mock.patch("app.routers.files.get_base_dir", return_value=Path(TemporaryDirectory().name))
+def test_uploading_another_bfsg_document_after_five_minutes_creates_new_email(mocked_base_dir, fake_email_manager):
+    setup_templates_and_data(client)
+    handle = BytesIO(EMPTY_PDF_PAGE)
+    with travel("2026-06-06T10:00:00Z", tick=False):
+        response = client.post(
+            "/api/v1/file/Informatik",
+            data=DEFAULT_BFSG_DATA,
+            files={"file": ("kassenbon.pdf", handle, "application/pdf")},
+            headers=get_auth_header(client, ADMIN),
+        )
+    assert response.status_code == 200
+    with travel("2026-06-06T10:05:00Z", tick=False):
+        response = client.post(
+            "/api/v1/file/Informatik",
+            data={**DEFAULT_BFSG_DATA, "base_name": "kassenbon 2"},
+            files={"file": ("kassenbon.pdf", handle, "application/pdf")},
+            headers=get_auth_header(client, ADMIN),
+        )
+    assert response.status_code == 200
+    assert fake_email_manager.get_outbox() == [
+        QueuedEmailMessage(
+            to=["informatik@example.org"],
+            subject="document_uploaded subject content",
+            body="""document_uploaded body content
+Infor Matik
+base_name: kassenbon 2
+category: BFSG
+date_end: None
+date_start: None
+file_extension: pdf
+fs: Informatik
+request_id: B24S-0001
+sha256hash: 1b318799de440475e51646b29c4c5a838d031548e0bdf6566802b6731082a23c
+
+https://example.org/payout-request/B24S-0001""",
+            template_id="document_uploaded",
+            created="2026-06-06T10:05:00+00:00",
+            not_before="2026-06-06T10:15:00+00:00",
+            meta={
+                "key": "B24S-0001",
+                "base": [
+                    {
+                        "fs": "Informatik",
+                        "category": "BFSG",
+                        "request_id": "B24S-0001",
+                        "base_name": "kassenbon 2",
+                        "date_start": None,
+                        "date_end": None,
+                        "file_extension": "pdf",
+                        "sha256hash": "1b318799de440475e51646b29c4c5a838d031548e0bdf6566802b6731082a23c",
+                    }
+                ],
+            },
+        ),
+        QueuedEmailMessage(
+            to=["informatik@example.org"],
+            subject="document_uploaded subject content",
+            body="""document_uploaded body content
+Infor Matik
+base_name: kassenbon
+category: BFSG
+date_end: None
+date_start: None
+file_extension: pdf
+fs: Informatik
+request_id: B24S-0001
+sha256hash: 1b318799de440475e51646b29c4c5a838d031548e0bdf6566802b6731082a23c
+
+https://example.org/payout-request/B24S-0001""",
+            template_id="document_uploaded",
+            created="2026-06-06T10:00:00+00:00",
+            not_before="2026-06-06T10:10:00+00:00",
+            meta={
+                "key": "B24S-0001",
+                "base": [
+                    {
+                        "fs": "Informatik",
+                        "category": "BFSG",
+                        "request_id": "B24S-0001",
+                        "base_name": "kassenbon",
+                        "date_start": None,
+                        "date_end": None,
+                        "file_extension": "pdf",
+                        "sha256hash": "1b318799de440475e51646b29c4c5a838d031548e0bdf6566802b6731082a23c",
+                    }
+                ],
+            },
         ),
     ]
 
@@ -1902,8 +2086,196 @@ sha256hash: 1b318799de440475e51646b29c4c5a838d031548e0bdf6566802b6731082a23c
 https://example.org/payout-request/V24S-0001""",
             template_id="document_uploaded",
             created="2026-06-06T10:00:00+00:00",
-            not_before=None,
-            meta=None,
+            not_before="2026-06-06T10:10:00+00:00",
+            meta={
+                "key": "V24S-0001",
+                "base": [
+                    {
+                        "fs": "Informatik",
+                        "category": "VORANKUENDIGUNG",
+                        "request_id": "V24S-0001",
+                        "base_name": "ange~botäöüßÄÖÜẞ?/xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxyzzzzzzzz",
+                        "date_start": None,
+                        "date_end": None,
+                        "file_extension": "pdf",
+                        "sha256hash": "1b318799de440475e51646b29c4c5a838d031548e0bdf6566802b6731082a23c",
+                    }
+                ],
+            },
+        ),
+    ]
+
+
+@mock.patch("app.routers.files.get_base_dir", return_value=Path(TemporaryDirectory().name))
+def test_uploading_another_vorankuendigung_document_within_five_minutes_amends_email(
+    mocked_base_dir, fake_email_manager
+):
+    setup_templates_and_data(client)
+    handle = BytesIO(EMPTY_PDF_PAGE)
+    with travel("2026-06-06T10:00:00Z", tick=False):
+        response = client.post(
+            "/api/v1/file/Informatik",
+            data=DEFAULT_VORANKUENDIGUNG_DATA,
+            files={"file": ("kassenbon.pdf", handle, "application/pdf")},
+            headers=get_auth_header(client, ADMIN),
+        )
+    assert response.status_code == 200
+    with travel("2026-06-06T10:04:59Z", tick=False):
+        response = client.post(
+            "/api/v1/file/Informatik",
+            data={**DEFAULT_VORANKUENDIGUNG_DATA, "base_name": "angebot 2"},
+            files={"file": ("kassenbon.pdf", handle, "application/pdf")},
+            headers=get_auth_header(client, ADMIN),
+        )
+    assert response.status_code == 200
+    assert fake_email_manager.get_outbox() == [
+        QueuedEmailMessage(
+            to=["informatik@example.org"],
+            subject="document_uploaded subject content",
+            body="""document_uploaded body content
+Infor Matik
+base_name: ange~botäöüßÄÖÜẞ?/xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxyzzzzzzzz
+category: VORANKUENDIGUNG
+date_end: None
+date_start: None
+file_extension: pdf
+fs: Informatik
+request_id: V24S-0001
+sha256hash: 1b318799de440475e51646b29c4c5a838d031548e0bdf6566802b6731082a23c
+
+
+base_name: angebot 2
+category: VORANKUENDIGUNG
+date_end: None
+date_start: None
+file_extension: pdf
+fs: Informatik
+request_id: V24S-0001
+sha256hash: 1b318799de440475e51646b29c4c5a838d031548e0bdf6566802b6731082a23c
+
+https://example.org/payout-request/V24S-0001""",
+            template_id="document_uploaded",
+            created="2026-06-06T10:00:00+00:00",
+            not_before="2026-06-06T10:14:59+00:00",
+            meta={
+                "key": "V24S-0001",
+                "base": [
+                    {
+                        "fs": "Informatik",
+                        "category": "VORANKUENDIGUNG",
+                        "request_id": "V24S-0001",
+                        "base_name": "ange~botäöüßÄÖÜẞ?/xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxyzzzzzzzz",
+                        "date_start": None,
+                        "date_end": None,
+                        "file_extension": "pdf",
+                        "sha256hash": "1b318799de440475e51646b29c4c5a838d031548e0bdf6566802b6731082a23c",
+                    },
+                    {
+                        "fs": "Informatik",
+                        "category": "VORANKUENDIGUNG",
+                        "request_id": "V24S-0001",
+                        "base_name": "angebot 2",
+                        "date_start": None,
+                        "date_end": None,
+                        "file_extension": "pdf",
+                        "sha256hash": "1b318799de440475e51646b29c4c5a838d031548e0bdf6566802b6731082a23c",
+                    },
+                ],
+            },
+        ),
+    ]
+
+
+@mock.patch("app.routers.files.get_base_dir", return_value=Path(TemporaryDirectory().name))
+def test_uploading_another_vorankuendigung_document_after_five_minutes_creates_new_email(
+    mocked_base_dir, fake_email_manager
+):
+    setup_templates_and_data(client)
+    handle = BytesIO(EMPTY_PDF_PAGE)
+    with travel("2026-06-06T10:00:00Z", tick=False):
+        response = client.post(
+            "/api/v1/file/Informatik",
+            data=DEFAULT_VORANKUENDIGUNG_DATA,
+            files={"file": ("kassenbon.pdf", handle, "application/pdf")},
+            headers=get_auth_header(client, ADMIN),
+        )
+    assert response.status_code == 200
+    with travel("2026-06-06T10:05:00Z", tick=False):
+        response = client.post(
+            "/api/v1/file/Informatik",
+            data={**DEFAULT_VORANKUENDIGUNG_DATA, "base_name": "angebot 2"},
+            files={"file": ("kassenbon.pdf", handle, "application/pdf")},
+            headers=get_auth_header(client, ADMIN),
+        )
+    assert response.status_code == 200
+    assert fake_email_manager.get_outbox() == [
+        QueuedEmailMessage(
+            to=["informatik@example.org"],
+            subject="document_uploaded subject content",
+            body="""document_uploaded body content
+Infor Matik
+base_name: angebot 2
+category: VORANKUENDIGUNG
+date_end: None
+date_start: None
+file_extension: pdf
+fs: Informatik
+request_id: V24S-0001
+sha256hash: 1b318799de440475e51646b29c4c5a838d031548e0bdf6566802b6731082a23c
+
+https://example.org/payout-request/V24S-0001""",
+            template_id="document_uploaded",
+            created="2026-06-06T10:05:00+00:00",
+            not_before="2026-06-06T10:15:00+00:00",
+            meta={
+                "key": "V24S-0001",
+                "base": [
+                    {
+                        "fs": "Informatik",
+                        "category": "VORANKUENDIGUNG",
+                        "request_id": "V24S-0001",
+                        "base_name": "angebot 2",
+                        "date_start": None,
+                        "date_end": None,
+                        "file_extension": "pdf",
+                        "sha256hash": "1b318799de440475e51646b29c4c5a838d031548e0bdf6566802b6731082a23c",
+                    }
+                ],
+            },
+        ),
+        QueuedEmailMessage(
+            to=["informatik@example.org"],
+            subject="document_uploaded subject content",
+            body="""document_uploaded body content
+Infor Matik
+base_name: ange~botäöüßÄÖÜẞ?/xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxyzzzzzzzz
+category: VORANKUENDIGUNG
+date_end: None
+date_start: None
+file_extension: pdf
+fs: Informatik
+request_id: V24S-0001
+sha256hash: 1b318799de440475e51646b29c4c5a838d031548e0bdf6566802b6731082a23c
+
+https://example.org/payout-request/V24S-0001""",
+            template_id="document_uploaded",
+            created="2026-06-06T10:00:00+00:00",
+            not_before="2026-06-06T10:10:00+00:00",
+            meta={
+                "key": "V24S-0001",
+                "base": [
+                    {
+                        "fs": "Informatik",
+                        "category": "VORANKUENDIGUNG",
+                        "request_id": "V24S-0001",
+                        "base_name": "ange~botäöüßÄÖÜẞ?/xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxyzzzzzzzz",
+                        "date_start": None,
+                        "date_end": None,
+                        "file_extension": "pdf",
+                        "sha256hash": "1b318799de440475e51646b29c4c5a838d031548e0bdf6566802b6731082a23c",
+                    }
+                ],
+            },
         ),
     ]
 

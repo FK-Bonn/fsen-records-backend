@@ -55,6 +55,9 @@ class QueuedEmailMessage(BaseModel):
     not_before: str | None = None
     meta: dict | None = None
 
+    def __repr__(self):
+        return f'{self.__repr_name__()}({self.__repr_str__(",\n")})'
+
 
 class SentEmailMessage(QueuedEmailMessage):
     sent: str
@@ -243,8 +246,11 @@ class EmailManager:
     def document_uploaded(self, document: Document, session: Session):
         if document.category == "AFSG":
             return
+        key = document.request_id
         today = get_europe_berlin_date()
-        created = ts()
+        now = datetime.now(tz=timezone.utc)
+        created = now.isoformat()
+        not_before =(now + timedelta(minutes=10)).isoformat()
         uuid_ = str(uuid.uuid4())
         target_file = self.outbox_dir / f"{today}-{uuid_}.json"
 
@@ -256,12 +262,21 @@ class EmailManager:
             to.extend(email_addresses.get(target, []))
         to = sorted(set(to))
 
-        as_json = document_to_json(document)
-        document_data = list_keys_and_values(as_json)
+        as_json = []
+        outbox_email = self.get_pending_outbox_mail(template_id=template.template_id, key=key)
+        if outbox_email:
+            filepath, mail = outbox_email
+            target_file = filepath
+            created = mail.created
+            if mail.meta:
+                as_json = mail.meta["base"]
+
+        as_json.append(document_to_json(document))
+        document_data = '\n\n'.join(list_keys_and_values(item) for item in as_json)
 
         subject, body = render(
             template,
-            {"fs_name": fs_name, "document_data": document_data, "request_id": document.request_id},
+            {"fs_name": fs_name, "document_data": document_data, "request_id": key},
         )
         data = QueuedEmailMessage(
             to=to,
@@ -269,8 +284,11 @@ class EmailManager:
             body=body,
             template_id=template.template_id,
             created=created,
-            not_before=None,
-            meta=None,
+            not_before=not_before,
+            meta={
+                "key": key,
+                "base": as_json,
+            },
         )
         self.outbox_dir.mkdir(parents=True, exist_ok=True)
         target_file.write_text(
