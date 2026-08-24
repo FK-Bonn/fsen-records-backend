@@ -1,6 +1,7 @@
 import hashlib
 import json
 import re
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, BinaryIO
 from zoneinfo import ZoneInfo
@@ -12,12 +13,32 @@ def ts() -> str:
     return datetime.now(tz=timezone.utc).isoformat()
 
 
+def get_europe_berlin_date() -> str:
+    return datetime.now(tz=ZoneInfo("Europe/Berlin")).isoformat()[:10]
+
+
+@dataclass(frozen=True, slots=True)
+class TimeValues:
+    date: str
+    date_time: str
+    value: datetime
+
+
+class Now:
+    unixtime: int
+    utc: TimeValues
+    berlin: TimeValues
+
+    def __init__(self):
+        now = datetime.now(tz=timezone.utc)
+        self.unixtime = int(now.timestamp())
+        self.utc = TimeValues(date=now.date().isoformat(), date_time=now.isoformat(), value=now)
+        berlin = now.astimezone(ZoneInfo("Europe/Berlin"))
+        self.berlin = TimeValues(date=berlin.date().isoformat(), date_time=berlin.isoformat(), value=berlin)
+        
+
 def to_json(data: Any) -> str:
     return json.dumps(jsonable_encoder(data), indent=2)
-
-
-def get_europe_berlin_date() -> str:
-    return datetime.now(tz=ZoneInfo('Europe/Berlin')).isoformat()[:10]
 
 
 def calculate_sha256(uploaded_file: BinaryIO):

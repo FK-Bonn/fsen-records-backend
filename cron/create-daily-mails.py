@@ -450,10 +450,11 @@ def main():
         for fs_id in all_data.fs_data:
             emails = render_template(fs_id, template, all_data)
             for email in emails:
-                today = get_today().isoformat()
-                now = berlinnow().isoformat()
+                now = berlinnow()
+                today = now.date().isoformat()
+                unixtime = int(now.timestamp())
                 uuid_ = str(uuid.uuid4())
-                target = OUTBOX_PATH / f"{today}-{uuid_}.json"
+                target = OUTBOX_PATH / f"{unixtime}-{today}-{uuid_}.json"
                 target.write_text(
                     json.dumps(
                         {
@@ -461,7 +462,7 @@ def main():
                             "subject": email["subject"],
                             "body": email["body"],
                             "template_id": email["template_id"],
-                            "created": now,
+                            "created": now.isoformat(),
                         },
                         indent=2,
                         ensure_ascii=False,

@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session
 
 from app.config import Config
 from app.database import Annotation, BaseFsData, Document, Election, EmailTemplate, PayoutRequest, ProtectedFsData
-from app.util import build_filename_str, get_europe_berlin_date, ts
+from app.util import Now, build_filename_str
 
 
 class FrequencyEnum(str, Enum):
@@ -102,12 +102,11 @@ class EmailManager:
 
     def upsert_election(self, key: str, current: Election, previous: Election | None, session: Session):
         template_key = "election_created" if previous is None else "election_updated"
-        today = get_europe_berlin_date()
-        now = datetime.now(tz=timezone.utc)
-        created = now.isoformat()
-        not_before = None if previous is None else (now + timedelta(minutes=10)).isoformat()
+        t = Now()
+        created = t.utc.date_time
+        not_before = None if previous is None else (t.utc.value + timedelta(minutes=10)).isoformat()
         uuid_ = str(uuid.uuid4())
-        target_file = self.outbox_dir / f"{today}-{uuid_}.json"
+        target_file = self.outbox_dir / f"{t.unixtime}-{t.berlin.date}-{uuid_}.json"
 
         template = get_template(template_id=template_key, session=session)
         email_addresses = get_email_addresses(fs=current.fs, session=session)
@@ -152,10 +151,10 @@ class EmailManager:
     def payout_request_created(self, payout_request: PayoutRequest | None, session: Session):
         if payout_request is None:
             return
-        today = get_europe_berlin_date()
-        created = ts()
+        t = Now()
+        created = t.utc.date_time
         uuid_ = str(uuid.uuid4())
-        target_file = self.outbox_dir / f"{today}-{uuid_}.json"
+        target_file = self.outbox_dir / f"{t.unixtime}-{t.berlin.date}-{uuid_}.json"
 
         template = get_template(template_id="payout_request_created", session=session)
         email_addresses = get_email_addresses(fs=payout_request.fs, session=session)
@@ -191,13 +190,12 @@ class EmailManager:
     def payout_request_modified(self, current: PayoutRequest | None, previous: PayoutRequest | None, session: Session):
         if current is None or previous is None:
             return
-        today = get_europe_berlin_date()
-        now = datetime.now(tz=timezone.utc)
-        created = now.isoformat()
-        not_before = (now + timedelta(minutes=10)).isoformat()
+        t = Now()
+        created = t.utc.date_time
+        not_before = (t.utc.value + timedelta(minutes=10)).isoformat()
         key = current.request_id
         uuid_ = str(uuid.uuid4())
-        target_file = self.outbox_dir / f"{today}-{uuid_}.json"
+        target_file = self.outbox_dir / f"{t.unixtime}-{t.berlin.date}-{uuid_}.json"
 
         template = get_template(template_id="payout_request_updated", session=session)
         email_addresses = get_email_addresses(fs=current.fs, session=session)
@@ -247,12 +245,11 @@ class EmailManager:
         if document.category == "AFSG":
             return
         key = document.request_id
-        today = get_europe_berlin_date()
-        now = datetime.now(tz=timezone.utc)
-        created = now.isoformat()
-        not_before =(now + timedelta(minutes=10)).isoformat()
+        t = Now()
+        created = t.utc.date_time
+        not_before =(t.utc.value + timedelta(minutes=10)).isoformat()
         uuid_ = str(uuid.uuid4())
-        target_file = self.outbox_dir / f"{today}-{uuid_}.json"
+        target_file = self.outbox_dir / f"{t.unixtime}-{t.berlin.date}-{uuid_}.json"
 
         template = get_template(template_id="document_uploaded", session=session)
         email_addresses = get_email_addresses(fs=document.fs, session=session)
@@ -306,12 +303,11 @@ class EmailManager:
         elif template_key != "document_annotated":
             outbox_email = self.get_pending_outbox_mail(template_id=template_key, key=key)
         document = get_document(current.document, session)
-        today = get_europe_berlin_date()
-        now = datetime.now(tz=timezone.utc)
-        created = now.isoformat()
-        not_before = (now + timedelta(minutes=10)).isoformat()
+        t = Now()
+        created = t.utc.date_time
+        not_before = (t.utc.value + timedelta(minutes=10)).isoformat()
         uuid_ = str(uuid.uuid4())
-        target_file = self.outbox_dir / f"{today}-{uuid_}.json"
+        target_file = self.outbox_dir / f"{t.unixtime}-{t.berlin.date}-{uuid_}.json"
 
         template = get_template(template_id=template_key, session=session)
         email_addresses = get_email_addresses(fs=document.fs, session=session)
