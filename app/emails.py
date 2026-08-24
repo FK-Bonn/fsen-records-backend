@@ -102,22 +102,31 @@ class EmailManager:
 
     def upsert_election(self, key: str, current: Election, previous: Election | None, session: Session):
         template_key = "election_created" if previous is None else "election_updated"
-        t = Now()
-        created = t.utc.date_time
-        not_before = None if previous is None else (t.utc.value + timedelta(minutes=10)).isoformat()
-        uuid_ = str(uuid.uuid4())
-        target_file = self.outbox_dir / f"{t.unixtime}-{t.berlin.date}-{uuid_}.json"
-
-        template = get_template(template_id=template_key, session=session)
-        email_addresses = get_email_addresses(fs=current.fs, session=session)
-        fs_name = get_fs_name(fs_id=current.fs, session=session)
-        to = []
-        for target in template.meta.targets:
-            to.extend(email_addresses.get(target, []))
-        to = sorted(set(to))
 
         previous_json = election_to_json(previous)
         current_json = election_to_json(current)
+
+        self.generic_modified_mail(
+            key=key,
+            template_key=template_key,
+            fs_id=current.fs,
+            current_json=current_json,
+            previous_json=previous_json,
+            additional_items={"election_id": current.election_id},
+            session=session,
+        )
+
+    def generic_modified_mail(
+        self,
+        key: str,
+        template_key: str,
+        fs_id: str,
+        current_json: dict,
+        previous_json: dict,
+        additional_items: dict,
+        session: Session,
+    ):
+        fs_name, target_file, template, to, created, not_before = self.setup(fs_id, session, template_key)
 
         outbox_email = self.get_pending_outbox_mail(template_id=template.template_id, key=key)
         if outbox_email:
@@ -128,14 +137,15 @@ class EmailManager:
                 previous_json = mail.meta["base"]
 
         diff = diff_dicts(current_json, previous_json)
-        subject, body = render(template, {"fs_name": fs_name, "diff": diff, "election_id": current.election_id})
+        items = {"fs_name": fs_name, "diff": diff, **additional_items}
+        subject, body = render(template, items)
         data = QueuedEmailMessage(
             to=to,
             subject=subject,
             body=body,
             template_id=template.template_id,
             created=created,
-            not_before=not_before,
+            not_before=None if not previous_json else not_before,
             meta={
                 "key": key,
                 "base": previous_json,
@@ -148,21 +158,30 @@ class EmailManager:
             )
         )
 
-    def payout_request_created(self, payout_request: PayoutRequest | None, session: Session):
-        if payout_request is None:
-            return
+    def setup(
+        self, fs_id: str, session: Session, template_key: str
+    ) -> tuple[str, Path, EmailTemplateData, list[str], str, str]:
         t = Now()
         created = t.utc.date_time
+        not_before = (t.utc.value + timedelta(minutes=10)).isoformat()
         uuid_ = str(uuid.uuid4())
         target_file = self.outbox_dir / f"{t.unixtime}-{t.berlin.date}-{uuid_}.json"
 
-        template = get_template(template_id="payout_request_created", session=session)
-        email_addresses = get_email_addresses(fs=payout_request.fs, session=session)
-        fs_name = get_fs_name(fs_id=payout_request.fs, session=session)
+        template = get_template(template_id=template_key, session=session)
+        email_addresses = get_email_addresses(fs=fs_id, session=session)
+        fs_name = get_fs_name(fs_id=fs_id, session=session)
         to = []
         for target in template.meta.targets:
             to.extend(email_addresses.get(target, []))
         to = sorted(set(to))
+        return fs_name, target_file, template, to, created, not_before
+
+    def payout_request_created(self, payout_request: PayoutRequest | None, session: Session):
+        if payout_request is None:
+            return
+        template_id = "payout_request_created"
+        fs_id = payout_request.fs
+        fs_name, target_file, template, to, created, _ = self.setup(fs_id, session, template_id)
 
         as_json = payout_request_to_json(payout_request)
         request_data = list_keys_and_values(as_json)
@@ -187,77 +206,34 @@ class EmailManager:
             )
         )
 
-    def payout_request_modified(self, current: PayoutRequest | None, previous: PayoutRequest | None, session: Session):
+
+    def payout_request_modified(self,  current: PayoutRequest | None, previous: PayoutRequest | None, session: Session):
         if current is None or previous is None:
             return
-        t = Now()
-        created = t.utc.date_time
-        not_before = (t.utc.value + timedelta(minutes=10)).isoformat()
         key = current.request_id
-        uuid_ = str(uuid.uuid4())
-        target_file = self.outbox_dir / f"{t.unixtime}-{t.berlin.date}-{uuid_}.json"
-
-        template = get_template(template_id="payout_request_updated", session=session)
-        email_addresses = get_email_addresses(fs=current.fs, session=session)
-        fs_name = get_fs_name(fs_id=current.fs, session=session)
-        to = []
-        for target in template.meta.targets:
-            to.extend(email_addresses.get(target, []))
-        to = sorted(set(to))
+        template_key = "payout_request_updated"
 
         previous_json = payout_request_to_json(previous)
         current_json = payout_request_to_json(current)
 
-        outbox_email = self.get_pending_outbox_mail(template_id=template.template_id, key=key)
-        if outbox_email:
-            filepath, mail = outbox_email
-            target_file = filepath
-            created = mail.created
-            if mail.meta:
-                previous_json = mail.meta["base"]
+        self.generic_modified_mail(
+            key=key,
+            template_key=template_key,
+            fs_id=current.fs,
+            current_json=current_json,
+            previous_json=previous_json,
+            additional_items={"request_id": current.request_id},
+            session=session,
+        )
 
-        diff = diff_dicts(current=current_json, previous=previous_json)
-
-        subject, body = render(
-            template,
-            {"fs_name": fs_name, "diff": diff, "request_id": current.request_id},
-        )
-        data = QueuedEmailMessage(
-            to=to,
-            subject=subject,
-            body=body,
-            template_id=template.template_id,
-            created=created,
-            not_before=not_before,
-            meta={
-                "key": key,
-                "base": previous_json,
-            },
-        )
-        self.outbox_dir.mkdir(parents=True, exist_ok=True)
-        target_file.write_text(
-            data.model_dump_json(
-                indent=2,
-            )
-        )
 
     def document_uploaded(self, document: Document, session: Session):
         if document.category == "AFSG":
             return
+        template_id = "document_uploaded"
         key = document.request_id
-        t = Now()
-        created = t.utc.date_time
-        not_before =(t.utc.value + timedelta(minutes=10)).isoformat()
-        uuid_ = str(uuid.uuid4())
-        target_file = self.outbox_dir / f"{t.unixtime}-{t.berlin.date}-{uuid_}.json"
-
-        template = get_template(template_id="document_uploaded", session=session)
-        email_addresses = get_email_addresses(fs=document.fs, session=session)
-        fs_name = get_fs_name(fs_id=document.fs, session=session)
-        to = []
-        for target in template.meta.targets:
-            to.extend(email_addresses.get(target, []))
-        to = sorted(set(to))
+        fs_id = document.fs
+        fs_name, target_file, template, to, created, not_before = self.setup(fs_id, session, template_id)
 
         as_json = []
         outbox_email = self.get_pending_outbox_mail(template_id=template.template_id, key=key)
@@ -295,27 +271,16 @@ class EmailManager:
         )
 
     def document_annotated(self, current: Annotation, previous: Annotation | None, session: Session):
-        template_key = "document_annotated" if previous is None else "annotation_updated"
+        template_id = "document_annotated" if previous is None else "annotation_updated"
         key = str(current.document)
         outbox_email = self.get_pending_outbox_mail(template_id="document_annotated", key=key)
         if outbox_email:
-            template_key = "document_annotated"
-        elif template_key != "document_annotated":
-            outbox_email = self.get_pending_outbox_mail(template_id=template_key, key=key)
+            template_id = "document_annotated"
+        elif template_id != "document_annotated":
+            outbox_email = self.get_pending_outbox_mail(template_id=template_id, key=key)
         document = get_document(current.document, session)
-        t = Now()
-        created = t.utc.date_time
-        not_before = (t.utc.value + timedelta(minutes=10)).isoformat()
-        uuid_ = str(uuid.uuid4())
-        target_file = self.outbox_dir / f"{t.unixtime}-{t.berlin.date}-{uuid_}.json"
-
-        template = get_template(template_id=template_key, session=session)
-        email_addresses = get_email_addresses(fs=document.fs, session=session)
-        fs_name = get_fs_name(fs_id=document.fs, session=session)
-        to = []
-        for target in template.meta.targets:
-            to.extend(email_addresses.get(target, []))
-        to = sorted(set(to))
+        fs_id = document.fs
+        fs_name, target_file, template, to, created, not_before = self.setup(fs_id, session, template_id)
 
         previous_json = annotation_to_json(previous)
         current_json = annotation_to_json(current)
