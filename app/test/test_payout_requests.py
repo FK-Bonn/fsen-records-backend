@@ -2,6 +2,7 @@ from unittest.mock import patch
 
 import pytest
 from fastapi.testclient import TestClient
+from starlette.status import HTTP_409_CONFLICT
 from time_machine import travel
 
 from app.database import get_session
@@ -938,3 +939,210 @@ def test_missing_template_results_in_default_error_template(_type, fake_email_ma
             meta=None,
         ),
     ]
+
+
+@pytest.mark.parametrize(
+    "_type,request_id",
+    [
+        ["afsg", "A22W-0023"],
+        ["bfsg", "B22W-0023"],
+        ["vorankuendigung", "V22W-0023"],
+    ],
+)
+def test_add_message_as_admin_spawns_email(_type, request_id, fake_email_manager):
+    setup_templates_and_data(client)
+    with travel("2026-06-06T10:00:00Z", tick=False):
+        result = client.post(
+            f"/api/v1/payout-request/{_type}/{request_id}/messages",
+            json={"message": "Hi!", "previous_id": None},
+            headers=get_auth_header(client, ADMIN),
+        )
+    assert result.status_code == 200
+    assert fake_email_manager.get_outbox() == [
+        QueuedEmailMessage(
+            to=["informatik@example.org"],
+            subject="admin_message_for_payout_request subject content",
+            body=f"""admin_message_for_payout_request body content
+Infor Matik
+Hi!
+https://example.org/payout-request/{request_id}""",
+            template_id="admin_message_for_payout_request",
+            created="2026-06-06T10:00:00+00:00",
+            not_before=None,
+            meta=None,
+        ),
+    ]
+
+
+@pytest.mark.parametrize(
+    "_type,request_id",
+    [
+        ["afsg", "A22W-0023"],
+        ["bfsg", "B22W-0023"],
+        ["vorankuendigung", "V22W-0023"],
+    ],
+)
+def test_add_message_as_user_spawns_email(_type, request_id, fake_email_manager):
+    setup_templates_and_data(client)
+    with travel("2026-06-06T10:00:00Z", tick=False):
+        result = client.post(
+            f"/api/v1/payout-request/{_type}/{request_id}/messages",
+            json={"message": "Hi back!\nomg", "previous_id": None},
+            headers=get_auth_header(client, USER_INFO_ALL),
+        )
+    assert result.status_code == 200
+    assert fake_email_manager.get_outbox() == [
+        QueuedEmailMessage(
+            to=["informatik@example.org"],
+            subject="user_message_for_payout_request subject content",
+            body=f"""user_message_for_payout_request body content
+Infor Matik
+Hi back!
+omg
+https://example.org/payout-request/{request_id}""",
+            template_id="user_message_for_payout_request",
+            created="2026-06-06T10:00:00+00:00",
+            not_before=None,
+            meta=None,
+        ),
+    ]
+
+
+@pytest.mark.parametrize(
+    "_type,request_id",
+    [
+        ["afsg", "A22W-0023"],
+        ["bfsg", "B22W-0023"],
+        ["vorankuendigung", "V22W-0023"],
+    ],
+)
+@pytest.mark.parametrize(
+    "username",
+    [
+        None,
+        USER_NO_PERMS,
+        USER_INFO_READ,
+        USER_INFO_GEO_READ,
+    ],
+)
+def test_add_message_without_permission_does_not_work(username, _type, request_id, fake_email_manager):
+    result = client.post(
+        f"/api/v1/payout-request/{_type}/{request_id}/messages",
+        json={"message": "Hi!", "previous_id": None},
+        headers=get_auth_header(client, username),
+    )
+    assert result.status_code == 401
+    assert fake_email_manager.get_outbox() == []
+    assert client.get(f"/api/v1/payout-request/{_type}/{request_id}/messages").json() == []
+
+
+def test_add_message_for_nonexisting_request_id_does_not_work(fake_email_manager):
+    url = "/api/v1/payout-request/bfsg/B11H-0000/messages"
+    result = client.post(
+        url,
+        json={"message": "Hi!", "previous_id": None},
+        headers=get_auth_header(client, ADMIN),
+    )
+    assert result.status_code == 404
+    assert fake_email_manager.get_outbox() == []
+    assert client.get(url).status_code == 404
+
+
+def test_add_multiple_messages(fake_email_manager):
+    url = "/api/v1/payout-request/bfsg/B22W-0023/messages"
+    with travel("2026-06-06T10:00:00Z", tick=False):
+        result = client.post(
+            url,
+            json={"message": "Hi!", "previous_id": None},
+            headers=get_auth_header(client, ADMIN),
+        )
+    assert result.status_code == 200
+    first_message_id = client.get(url).json()[0]["message_id"]
+    with travel("2026-06-06T11:00:00Z", tick=False):
+        result = client.post(
+            url,
+            json={"message": "Hi bakc!", "previous_id": first_message_id},
+            headers=get_auth_header(client, USER_INFO_ALL),
+        )
+    assert result.status_code == 200
+    second_message_id = client.get(url).json()[0]["message_id"]
+    with travel("2026-06-06T12:00:00Z", tick=False):
+        result = client.post(
+            url,
+            json={"message": 'Of course I meant "back", not "bakc" lol\'', "previous_id": second_message_id},
+            headers=get_auth_header(client, USER_INFO_ALL),
+        )
+    assert result.status_code == 200
+    assert len(fake_email_manager.get_outbox()) == 3
+    for user in (ADMIN, None):
+        messages = client.get(url, headers=get_auth_header(client, user)).json()
+        third_message_id = messages[0]["message_id"]
+        assert messages == [
+            {
+                "message": 'Of course I meant "back", not "bakc" lol\'',
+                "message_id": third_message_id,
+                "author": "Informatik",
+                "username": USER_INFO_ALL if user == ADMIN else None,
+                "timestamp": "2026-06-06T12:00:00+00:00",
+            },
+            {
+                "message": "Hi bakc!",
+                "message_id": second_message_id,
+                "author": "Informatik",
+                "username": USER_INFO_ALL if user == ADMIN else None,
+                "timestamp": "2026-06-06T11:00:00+00:00",
+            },
+            {
+                "message": "Hi!",
+                "message_id": first_message_id,
+                "author": "FSK",
+                "username": ADMIN if user == ADMIN else None,
+                "timestamp": "2026-06-06T10:00:00+00:00",
+            },
+        ]
+
+
+def test_add_message_with_outdated_previous_yields_409_conflict(fake_email_manager):
+    url = "/api/v1/payout-request/bfsg/B22W-0023/messages"
+    with travel("2026-06-06T10:00:00Z", tick=False):
+        result = client.post(
+            url,
+            json={"message": "Hi!", "previous_id": None},
+            headers=get_auth_header(client, ADMIN),
+        )
+    assert result.status_code == 200
+    first_message_id = client.get(url).json()[0]["message_id"]
+    with travel("2026-06-06T11:00:00Z", tick=False):
+        result = client.post(
+            url,
+            json={"message": "Hi bakc!", "previous_id": first_message_id},
+            headers=get_auth_header(client, USER_INFO_ALL),
+        )
+    assert result.status_code == 200
+    second_message_id = client.get(url).json()[0]["message_id"]
+    with travel("2026-06-06T12:00:00Z", tick=False):
+        result = client.post(
+            url,
+            json={"message": "This will not work", "previous_id": first_message_id},
+            headers=get_auth_header(client, USER_INFO_ALL),
+        )
+    assert result.status_code == HTTP_409_CONFLICT
+    assert len(fake_email_manager.get_outbox()) == 2
+    for user in (ADMIN, None):
+        messages = client.get(url, headers=get_auth_header(client, user)).json()
+        assert messages == [
+            {
+                "message": "Hi bakc!",
+                "message_id": second_message_id,
+                "author": "Informatik",
+                "username": USER_INFO_ALL if user == ADMIN else None,
+                "timestamp": "2026-06-06T11:00:00+00:00",
+            },
+            {
+                "message": "Hi!",
+                "message_id": first_message_id,
+                "author": "FSK",
+                "username": ADMIN if user == ADMIN else None,
+                "timestamp": "2026-06-06T10:00:00+00:00",
+            },
+        ]

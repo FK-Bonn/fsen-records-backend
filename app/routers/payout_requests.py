@@ -1,5 +1,6 @@
 import logging
 import re
+import uuid
 from copy import deepcopy
 from datetime import date, datetime, timedelta
 from enum import Enum
@@ -11,7 +12,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session, make_transient
 from starlette import status
 
-from app.database import PayoutRequest, SessionDep, User
+from app.database import Message, PayoutRequest, SessionDep, User
 from app.emails import EmailsDep
 from app.routers.users import admin_only, get_current_user, is_admin
 from app.util import get_europe_berlin_date, ts
@@ -85,6 +86,23 @@ class PayoutRequestData(PublicPayoutRequest):
     last_modified_by: str | None = None
 
 
+class MessagePostData(BaseModel):
+    message: str
+    previous_id: str | None
+
+
+class PublicMessageData(BaseModel):
+    message: str
+    author: str
+    message_id: str
+    timestamp: str
+
+
+class MessageData(PublicMessageData):
+    username: str | None = None
+
+
+
 def check_user_may_submit_payout_request(current_user: User, fs: str, session: Session):
     if is_admin(current_user.username, session):
         return
@@ -94,6 +112,33 @@ def check_user_may_submit_payout_request(current_user: User, fs: str, session: S
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="User is not authorized to submit payout request for this fs",
+        )
+
+
+def check_user_may_add_message(current_user: User, fs: str, session: Session):
+    if is_admin(current_user.username, session):
+        return
+
+    creatorpermissions = {p.fs: p.submit_payout_request for p in current_user.permissions}
+    documentuploadpermissions = {p.fs: p.upload_documents for p in current_user.permissions}
+    if not creatorpermissions.get(fs, False) and not documentuploadpermissions.get(fs, False):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="User is not authorized to add message to this payout request",
+        )
+
+
+def check_user_has_seen_latest_message(
+    previous_id: str | None, request_id: str, _type: PayoutRequestType, session: Session
+):
+    last_message_id = None
+    history = get_messages(session, request_id, _type)
+    if history:
+        last_message_id = history[0].message_id
+    if previous_id != last_message_id:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Please reload to see the latest message",
         )
 
 
@@ -254,6 +299,16 @@ def get_payout_request_history(session: Session, request_id: str, _type: PayoutR
         filter(PayoutRequest.request_id == request_id). \
         filter(PayoutRequest.type == _type.value). \
         order_by(PayoutRequest.last_modified_timestamp.desc()).all()
+
+
+def get_messages(session: Session, request_id: str, _type: PayoutRequestType) -> list[Message]:
+    return (
+        session.query(Message)
+        .filter(Message.request_id == request_id)
+        .filter(Message.type == _type.value)
+        .order_by(Message.timestamp.desc(), Message.id.desc())
+        .all()
+    )
 
 
 @router.get("/{_type}", response_model=list[PayoutRequestData])
@@ -447,3 +502,54 @@ async def get_request_history(_type: PayoutRequestType, request_id: str, session
     if current_user and is_admin(current_user.username, session):
         return payout_request_history
     return [PublicPayoutRequest(**item.__dict__) for item in payout_request_history]
+
+@router.get("/{_type}/{request_id}/messages", response_model=list[MessageData])
+async def get_messages_for_payout_request(
+    _type: PayoutRequestType,
+    request_id: str,
+    session: SessionDep,
+    current_user: User = Depends(get_current_user(auto_error=False)),
+):
+    payout_request = get_payout_request(session, request_id, _type)
+    if not payout_request:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="PayoutRequest not found",
+        )
+    messages = get_messages(session, request_id, _type)
+    if current_user and is_admin(current_user.username, session):
+        return messages
+    return [PublicMessageData(**item.__dict__) for item in messages]
+
+
+@router.post("/{_type}/{request_id}/messages")
+async def add_message_for_payout_request(
+    data: MessagePostData,
+    _type: PayoutRequestType,
+    request_id: str,
+    session: SessionDep,
+    emails: EmailsDep,
+    current_user: User = Depends(get_current_user()),
+):
+    logger.info(f"add_message_for_payout_request({data=}, {request_id=}, {current_user.username=})")
+    payout_request = get_payout_request(session, request_id, _type)
+    if not payout_request:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="PayoutRequest not found",
+        )
+    check_user_may_add_message(current_user, payout_request.fs, session)
+    check_user_has_seen_latest_message(data.previous_id, request_id, _type, session)
+    now = ts()
+    message = Message()
+    message.request_id = request_id
+    message.type = _type.value
+    message.message = data.message
+    message.author = "FSK" if current_user.admin else payout_request.fs
+    message.username = current_user.username
+    message.message_id = str(uuid.uuid4())
+    message.timestamp = now
+    session.add(message)
+    session.commit()
+    template_id = "admin_message_for_payout_request" if current_user.admin else "user_message_for_payout_request"
+    emails.message_added(template_id=template_id, payout_request=payout_request, message=message, session=session)

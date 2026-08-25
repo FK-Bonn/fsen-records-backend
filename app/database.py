@@ -197,6 +197,17 @@ class EmailTemplate(Base):
     last_modified_timestamp: Mapped[str] = mapped_column(String(200), nullable=False)
     last_modified_by: Mapped[str] = mapped_column(String(200), nullable=False)
 
+class Message(Base):
+    __tablename__ = "messages"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    request_id: Mapped[str] = mapped_column(String(200), nullable=False)
+    type: Mapped[str] = mapped_column(String(200), nullable=False)
+    message: Mapped[str] = mapped_column(Text, nullable=False)
+    author: Mapped[str] = mapped_column(String(200), nullable=False)
+    username: Mapped[str] = mapped_column(String(200), nullable=False)
+    message_id: Mapped[str] = mapped_column(String(200), nullable=False)
+    timestamp: Mapped[str] = mapped_column(String(200), nullable=False)
+
 
 if not database_exists(Config.DB_CONNECTION_STRING):
     create_database(Config.DB_CONNECTION_STRING)

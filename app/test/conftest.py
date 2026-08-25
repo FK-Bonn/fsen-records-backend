@@ -269,6 +269,8 @@ def setup_templates_and_data(client):
         "document_uploaded": "\n{document_data}\nhttps://example.org/payout-request/{request_id}",
         "document_annotated": "\n{diff}\nhttps://example.org{url_fragment}",
         "annotation_updated": "\n{diff}\nhttps://example.org{url_fragment}",
+        "admin_message_for_payout_request": "\n{message}\nhttps://example.org/payout-request/{request_id}",
+        "user_message_for_payout_request": "\n{message}\nhttps://example.org/payout-request/{request_id}",
     }
     for template_id, extra_body in templates.items():
         template = {

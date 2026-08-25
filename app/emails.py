@@ -12,7 +12,16 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.config import Config
-from app.database import Annotation, BaseFsData, Document, Election, EmailTemplate, PayoutRequest, ProtectedFsData
+from app.database import (
+    Annotation,
+    BaseFsData,
+    Document,
+    Election,
+    EmailTemplate,
+    Message,
+    PayoutRequest,
+    ProtectedFsData,
+)
 from app.util import Now, build_filename_str
 
 
@@ -315,6 +324,30 @@ class EmailManager:
                 "key": key,
                 "base": previous_json,
             },
+        )
+        self.outbox_dir.mkdir(parents=True, exist_ok=True)
+        target_file.write_text(
+            data.model_dump_json(
+                indent=2,
+            )
+        )
+
+    def message_added(self, template_id: str, payout_request: PayoutRequest, message: Message, session: Session):
+        fs_id = payout_request.fs
+        fs_name, target_file, template, to, created, _ = self.setup(fs_id, session, template_id)
+
+        subject, body = render(
+            template,
+            {"fs_name": fs_name, "message": message.message, "request_id": payout_request.request_id},
+        )
+        data = QueuedEmailMessage(
+            to=to,
+            subject=subject,
+            body=body,
+            template_id=template.template_id,
+            created=created,
+            not_before=None,
+            meta=None,
         )
         self.outbox_dir.mkdir(parents=True, exist_ok=True)
         target_file.write_text(
