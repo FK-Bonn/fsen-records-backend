@@ -6,7 +6,7 @@ import sys
 import uuid
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, UTC
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
@@ -15,7 +15,9 @@ import requests
 FINAL_STATUSES = ["ABGELEHNT", "GENUTZT", "FAILED", "ANGEWIESEN"]
 
 DB_PATH = "/data/db/data.db"
-OUTBOX_PATH = Path("/data/mails/outbox")
+MAILS_PATH = Path("/data/mails")
+OUTBOX_PATH = MAILS_PATH / "outbox"
+LAST_RUN_PATH = MAILS_PATH / "create-daily-mails-last-run"
 
 PERMISSION_NAMES = {
     "read_files": "👀 Dateien anzeigen",
@@ -479,6 +481,7 @@ def main():
                 else:
                     target.write_text(content)
                 current_outbox.add(sha256_hash)
+    LAST_RUN_PATH.write_text(berlinnow().astimezone(tz=UTC).isoformat())
 
 
 def get_today() -> date:

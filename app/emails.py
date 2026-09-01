@@ -89,11 +89,17 @@ class EmailManager:
         return sent
 
     def get_send_mails_last_run(self) -> str:
-        send_mails_last_run = "1970-01-01T00:00:00+00:00"
-        send_mails_last_run_file = self.base_dir / "send-mails-last-run"
+        return self.get_last_run("send-mails-last-run")
+
+    def get_create_daily_mails_last_run(self) -> str:
+        return self.get_last_run("create-daily-mails-last-run")
+
+    def get_last_run(self, filename: str) -> str:
+        value = "1970-01-01T00:00:00+00:00"
+        send_mails_last_run_file = self.base_dir / filename
         if send_mails_last_run_file.is_file():
-            send_mails_last_run = send_mails_last_run_file.read_text()
-        return send_mails_last_run
+            value = send_mails_last_run_file.read_text()
+        return value
 
     def get_pending_outbox_mail(self, template_id: str, key: str) -> None | tuple[Path, QueuedEmailMessage]:
         now = datetime.now(tz=timezone.utc)

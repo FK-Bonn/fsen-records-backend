@@ -69,9 +69,24 @@ async def save_email_template(
 @router.get("/state")
 async def email_state(emails: EmailsDep):
     send_mails_last_run = emails.get_send_mails_last_run()
+    create_daily_mails_last_run = emails.get_create_daily_mails_last_run()
     one_hour_ago = datetime.now(tz=timezone.utc) - timedelta(hours=1)
-    status = HTTP_200_OK if send_mails_last_run > one_hour_ago.isoformat() else HTTP_500_INTERNAL_SERVER_ERROR
-    return JSONResponse({"send-mails-last-run": send_mails_last_run}, status_code=status)
+    twentyfive_hours_ago = datetime.now(tz=timezone.utc) - timedelta(hours=25)
+    status = (
+        HTTP_200_OK
+        if (
+            send_mails_last_run > one_hour_ago.isoformat()
+            and create_daily_mails_last_run > twentyfive_hours_ago.isoformat()
+        )
+        else HTTP_500_INTERNAL_SERVER_ERROR
+    )
+    return JSONResponse(
+        {
+            "send-mails-last-run": send_mails_last_run,
+            "create-daily-mails-last-run": create_daily_mails_last_run,
+        },
+        status_code=status,
+    )
 
 
 @router.get("/queues", dependencies=[Depends(admin_only)], response_model=EmailQueues)

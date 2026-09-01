@@ -114,7 +114,10 @@ def test_email_templates_index_as_other_user(user, fake_email_manager):
 def test_email_state_no_run_file_error(fake_email_manager):
     result = client.get("/api/v1/emails/state")
     assert result.status_code == 500
-    assert result.json() == {"send-mails-last-run": "1970-01-01T00:00:00+00:00"}
+    assert result.json() == {
+        "send-mails-last-run": "1970-01-01T00:00:00+00:00",
+        "create-daily-mails-last-run": "1970-01-01T00:00:00+00:00",
+    }
 
 
 @pytest.mark.parametrize(
@@ -125,34 +128,24 @@ def test_email_state_no_run_file_error(fake_email_manager):
         USER_INFO_READ,
         USER_INFO_ALL,
         ADMIN,
+    ],
+)
+@pytest.mark.parametrize(
+    "send_mails,create_daily_mails,status",
+    [
+        ["2026-06-06T00:00:00+00:00", "2026-06-05T00:00:00+00:00", 500],
+        ["2026-06-06T01:00:00+00:00", "2026-06-05T00:00:00+00:00", 500],
+        ["2026-06-06T00:00:00+00:00", "2026-06-05T01:00:00+00:00", 500],
+        ["2026-06-06T01:00:00+00:00", "2026-06-05T01:00:00+00:00", 200],
     ],
 )
 @travel("2026-06-06T01:00:01+00:00", tick=False)
-def test_email_state_error( user, fake_email_manager):
-    last_run = "2026-06-06T00:00:00+00:00"
-    (fake_email_manager.base_dir / "send-mails-last-run").write_text(last_run)
+def test_email_state_error(user, send_mails, create_daily_mails, status, fake_email_manager):
+    (fake_email_manager.base_dir / "send-mails-last-run").write_text(send_mails)
+    (fake_email_manager.base_dir / "create-daily-mails-last-run").write_text(create_daily_mails)
     result = client.get("/api/v1/emails/state", headers=get_auth_header(client, user))
-    assert result.status_code == 500
-    assert result.json() == {"send-mails-last-run": last_run}
-
-
-@pytest.mark.parametrize(
-    "user",
-    [
-        None,
-        USER_NO_PERMS,
-        USER_INFO_READ,
-        USER_INFO_ALL,
-        ADMIN,
-    ],
-)
-@travel("2026-06-06T01:00:00+00:00", tick=False)
-def test_email_state_ok( user, fake_email_manager):
-    last_run = "2026-06-06T00:00:00+00:00"
-    (fake_email_manager.base_dir / "send-mails-last-run").write_text(last_run)
-    result = client.get("/api/v1/emails/state", headers=get_auth_header(client, user))
-    assert result.status_code == 500
-    assert result.json() == {"send-mails-last-run": last_run}
+    assert result.status_code == status
+    assert result.json() == {"send-mails-last-run": send_mails, "create-daily-mails-last-run": create_daily_mails}
 
 
 def test_email_queues_as_admin_empty(fake_email_manager):
