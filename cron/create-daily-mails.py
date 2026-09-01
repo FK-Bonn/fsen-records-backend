@@ -1,5 +1,5 @@
 #! /usr/bin/env python3
-
+import hashlib
 import json
 import sqlite3
 import sys
@@ -247,7 +247,9 @@ def election_due_handler(fs_id: str, template: dict, all_data: AllData) -> list[
         next_semester_start = date(today.year, 4, 1)
     else:
         next_semester_start = date(today.year + 1, 4, 1)
-    send_date = next_semester_start - timedelta(days=template["meta"].get("days_before", 1))
+    days_before = template["meta"].get("days_before", 1)
+    days_before = 1 if days_before is None else days_before
+    send_date = next_semester_start - timedelta(days=days_before)
     if send_date.isoformat() != today.isoformat():
         return []
     search_period_start = next_semester_start - timedelta(days=183)
@@ -446,6 +448,11 @@ def main():
         fs_data=get_fs_data(),
     )
 
+    current_outbox = {
+        hashlib.sha256(mask_created_timestamp(filename.read_text()).encode("utf-8")).hexdigest()
+        for filename in OUTBOX_PATH.glob("*.json")
+    }
+
     for template in templates:
         for fs_id in all_data.fs_data:
             emails = render_template(fs_id, template, all_data)
@@ -455,19 +462,23 @@ def main():
                 unixtime = int(now.timestamp())
                 uuid_ = str(uuid.uuid4())
                 target = OUTBOX_PATH / f"{unixtime}-{today}-{uuid_}.json"
-                target.write_text(
-                    json.dumps(
-                        {
-                            "to": email["to"],
-                            "subject": email["subject"],
-                            "body": email["body"],
-                            "template_id": email["template_id"],
-                            "created": now.isoformat(),
-                        },
-                        indent=2,
-                        ensure_ascii=False,
-                    )
+                content = json.dumps(
+                    {
+                        "to": email["to"],
+                        "subject": email["subject"],
+                        "body": email["body"],
+                        "template_id": email["template_id"],
+                        "created": now.isoformat(),
+                    },
+                    indent=2,
+                    ensure_ascii=False,
                 )
+                sha256_hash = hashlib.sha256(mask_created_timestamp(content).encode()).hexdigest()
+                if sha256_hash in current_outbox:
+                    print(f"Skipping because this exact email for {email['template_id']} already exists")
+                else:
+                    target.write_text(content)
+                current_outbox.add(sha256_hash)
 
 
 def get_today() -> date:
@@ -480,6 +491,12 @@ def berlinnow() -> datetime:
         d = d.replace(tzinfo=ZoneInfo("Europe/Berlin"))
         return d
     return datetime.now(tz=ZoneInfo("Europe/Berlin"))
+
+
+def mask_created_timestamp(content: str) -> str:
+    data = json.loads(content)
+    data["created"] = data["created"][:10]
+    return json.dumps(data, indent=2, ensure_ascii=False)
 
 
 def mail(recipients: list[str], subject: str, body: str, template_id: str) -> dict:
