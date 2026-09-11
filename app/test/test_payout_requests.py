@@ -1146,3 +1146,22 @@ def test_add_message_with_outdated_previous_yields_409_conflict(fake_email_manag
                 "timestamp": "2026-06-06T10:00:00+00:00",
             },
         ]
+
+
+@travel("2023-04-04T10:00:00Z", tick=False)
+def test_submit_afsg_request_with_existing_allocation_sets_amount_and_status(fake_email_manager):
+    response = client.put(
+        "/api/v1/data/allocation/Informatik/2023-SoSe",
+        json={"amount_cents": 6767},
+        headers=get_auth_header(client, ADMIN),
+    )
+    assert response.status_code == 200
+    response = client.post(
+        "/api/v1/payout-request/afsg/create", json=CREATE_PARAMS["afsg"], headers=get_auth_header(client, ADMIN)
+    )
+    assert response.status_code == 200
+    assert response.json() == {
+        **CREATED_PAYOUT_REQUEST["afsg"],
+        "status": "GESTELLT",
+        "amount_cents": 6767,
+    }

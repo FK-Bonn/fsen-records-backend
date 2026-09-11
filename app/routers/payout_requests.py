@@ -12,7 +12,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session, make_transient
 from starlette import status
 
-from app.database import Message, PayoutRequest, SessionDep, User
+from app.database import Allocation, Message, PayoutRequest, SessionDep, User
 from app.emails import EmailsDep
 from app.routers.users import admin_only, get_current_user, is_admin
 from app.util import get_europe_berlin_date, ts
@@ -351,6 +351,11 @@ async def create_afsg_request(data: PayoutRequestForCreation, session: SessionDe
     request_id = get_request_id(data.semester, 'A', session)
     today = get_europe_berlin_date()
     now = ts()
+    request_status = PayoutRequestStatus.GESTELLT.value
+    amount_cents = get_amount_cents(data.semester, data.fs, session)
+    if amount_cents is None:
+        request_status = PayoutRequestStatus.EINGEREICHT.value
+        amount_cents = 0
 
     payout_request = PayoutRequest()
     payout_request.request_id = request_id
@@ -358,9 +363,9 @@ async def create_afsg_request(data: PayoutRequestForCreation, session: SessionDe
     payout_request.category = PayoutRequestType.AFSG.value.upper()
     payout_request.fs = data.fs
     payout_request.semester = data.semester
-    payout_request.status = PayoutRequestStatus.EINGEREICHT.value
+    payout_request.status = request_status
     payout_request.status_date = today
-    payout_request.amount_cents = 0
+    payout_request.amount_cents = amount_cents
     payout_request.comment = ''
     payout_request.request_date = today
     payout_request.requester = current_user.username
@@ -373,6 +378,16 @@ async def create_afsg_request(data: PayoutRequestForCreation, session: SessionDe
     created_payout_request = get_payout_request(session, request_id, PayoutRequestType.AFSG)
     emails.payout_request_created(payout_request=created_payout_request, session=session)
     return created_payout_request
+
+
+def get_amount_cents(semester: str, fs: str, session: Session) -> int | None:
+    subquery = (
+        session.query(func.max(Allocation.id).label("id"))
+        .where(Allocation.fs == fs, Allocation.period == semester)
+        .subquery()
+    )
+    data = session.query(Allocation).join(subquery, Allocation.id == subquery.c.id).one_or_none()
+    return data.amount_cents if data else None
 
 
 @router.post("/bfsg/create", response_model=PayoutRequestData)
