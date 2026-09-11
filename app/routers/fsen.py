@@ -1,14 +1,16 @@
 import json
 import logging
+import re
 from datetime import date, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
-from sqlalchemy import func
+from sqlalchemy import desc, func
 from sqlalchemy.orm import Session
 from starlette import status
+from starlette.status import HTTP_404_NOT_FOUND
 
-from app.database import BaseFsData, Permission, ProtectedFsData, PublicFsData, SessionDep, User
+from app.database import Allocation, BaseFsData, Permission, ProtectedFsData, PublicFsData, SessionDep, User
 from app.routers.users import admin_only, get_current_user, is_admin
 from app.util import to_json, ts
 
@@ -138,6 +140,15 @@ class FsDataTuple(BaseModel):
     public: PublicFsDataResponse | None
     protected: ProtectedFsDataResponse | None
 
+class AllocationItem(BaseModel):
+    fs: str
+    period: str
+    amount_cents: int
+
+
+class CreateAllocationData(BaseModel):
+    amount_cents: int
+
 
 def check_permission(current_user: User, fs: str, session: Session,
                      manage_permissions: bool = False,
@@ -163,6 +174,47 @@ def check_permission(current_user: User, fs: str, session: Session,
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Missing permission",
         )
+
+
+@router.get("/allocation", response_model=list[AllocationItem])
+async def get_allocations(session: SessionDep):
+    subquery = (
+        session.query(func.max(Allocation.id).label("id"), Allocation.fs, Allocation.period)
+        .group_by(Allocation.fs, Allocation.period)
+        .subquery()
+    )
+    data = (
+        session.query(Allocation)
+        .join(subquery, Allocation.id == subquery.c.id)
+        .order_by(desc(Allocation.period), Allocation.fs)
+        .all()
+    )
+    return data
+
+
+@router.put("/allocation/{fs}/{period}", dependencies=[Depends(admin_only)])
+async def put_allocation(
+    fs: str,
+    period: str,
+    data: CreateAllocationData,
+    session: SessionDep,
+    current_user: User = Depends(get_current_user()),
+):
+    logger.info(f"put_allocation({fs=}, {period=}, {data=}, {current_user.username=})")
+    check_period_format(period)
+    allocation = Allocation()
+    allocation.fs = fs
+    allocation.period = period
+    allocation.amount_cents = data.amount_cents
+    allocation.user = current_user.username
+    allocation.timestamp = ts()
+    session.add(allocation)
+    session.commit()
+
+
+def check_period_format(period: str):
+    if not re.fullmatch(r"\d\d\d\d-(HHJ|WiSe|SoSe)", period):
+        raise HTTPException(status_code=HTTP_404_NOT_FOUND)
 
 
 @router.get("", response_model=dict[str, FsDataTuple])
@@ -469,3 +521,4 @@ async def approve_protected_fs_data(id_: int, session: SessionDep, current_user:
     data.approved_by = current_user.username
     data.approval_timestamp = ts()
     session.commit()
+

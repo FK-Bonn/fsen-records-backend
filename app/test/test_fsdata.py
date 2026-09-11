@@ -569,6 +569,92 @@ def test_set_and_get_protected_fsdata(user: str):
     assert queryresponse.json() == {'data': SAMPLE_PROTECTED_DATA, 'is_latest': True}
 
 
+def test_add_afsg_allocation_as_admin_works():
+    response = client.put(
+        "/api/v1/data/allocation/Informatik/2026-HHJ",
+        json={"amount_cents": 6767},
+        headers=get_auth_header(client, ADMIN),
+    )
+    assert response.status_code == 200
+    response = client.get("/api/v1/data/allocation")
+    assert response.status_code == 200
+    assert response.json() == [{"fs": "Informatik", "period": "2026-HHJ", "amount_cents": 6767}]
+
+
+@pytest.mark.parametrize(
+    "user",
+    [
+        None,
+        USER_NO_PERMS,
+        USER_INFO_READ,
+        USER_INFO_ALL,
+    ],
+)
+def test_add_afsg_allocation_as_other_user_no_permission(user):
+    response = client.put(
+        "/api/v1/data/allocation/Informatik/2026-HHJ",
+        json={"amount_cents": 6767},
+        headers=get_auth_header(client, user),
+    )
+    assert response.status_code == 401
+    response = client.get("/api/v1/data/allocation")
+    assert response.status_code == 200
+    assert response.json() == []
+
+def test_add_afsg_allocation_invalid_period_yields_404():
+    response = client.put(
+        "/api/v1/data/allocation/Informatik/invalid",
+        json={"amount_cents": 6767},
+        headers=get_auth_header(client, ADMIN),
+    )
+    assert response.status_code == 404
+    response = client.get("/api/v1/data/allocation")
+    assert response.status_code == 200
+    assert response.json() == []
+
+
+def test_update_afsg_allocation():
+    test_add_afsg_allocation_as_admin_works()
+    response = client.put(
+        "/api/v1/data/allocation/Informatik/2026-HHJ",
+        json={"amount_cents": 1337},
+        headers=get_auth_header(client, ADMIN),
+    )
+    assert response.status_code == 200
+    response = client.get("/api/v1/data/allocation")
+    assert response.status_code == 200
+    assert response.json() == [{"fs": "Informatik", "period": "2026-HHJ", "amount_cents": 1337}]
+
+
+def test_get_afsg_allocation_sorted_by_period_desc_then_fs_asc():
+    items = [
+        ("Informatik", "2026-HHJ", 1),
+        ("Evangelische-Theologie", "2026-HHJ", 2),
+        ("Informatik", "2027-HHJ", 3),
+        ("Evangelische-Theologie", "2027-HHJ", 4),
+        ("Evangelische-Theologie", "2028-HHJ", 5),
+        ("Informatik", "2028-HHJ", 6),
+    ]
+    for item in items:
+        fs, period, amount = item
+        response = client.put(
+            f"/api/v1/data/allocation/{fs}/{period}",
+            json={"amount_cents": amount},
+            headers=get_auth_header(client, ADMIN),
+        )
+        assert response.status_code == 200
+    response = client.get("/api/v1/data/allocation")
+    assert response.status_code == 200
+    assert response.json() == [
+        {"fs": "Evangelische-Theologie", "period": "2028-HHJ", "amount_cents": 5},
+        {"fs": "Informatik", "period": "2028-HHJ", "amount_cents": 6},
+        {"fs": "Evangelische-Theologie", "period": "2027-HHJ", "amount_cents": 4},
+        {"fs": "Informatik", "period": "2027-HHJ", "amount_cents": 3},
+        {"fs": "Evangelische-Theologie", "period": "2026-HHJ", "amount_cents": 2},
+        {"fs": "Informatik", "period": "2026-HHJ", "amount_cents": 1},
+    ]
+
+
 def set_sample_base_data(fs='Informatik'):
     response = client.put(f'/api/v1/data/{fs}/base', json={**SAMPLE_BASE_DATA, 'fs_id': fs, 'name': fs},
                           headers=get_auth_header(client, ADMIN))

@@ -197,6 +197,7 @@ class EmailTemplate(Base):
     last_modified_timestamp: Mapped[str] = mapped_column(String(200), nullable=False)
     last_modified_by: Mapped[str] = mapped_column(String(200), nullable=False)
 
+
 class Message(Base):
     __tablename__ = "messages"
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -206,6 +207,16 @@ class Message(Base):
     author: Mapped[str] = mapped_column(String(200), nullable=False)
     username: Mapped[str] = mapped_column(String(200), nullable=False)
     message_id: Mapped[str] = mapped_column(String(200), nullable=False)
+    timestamp: Mapped[str] = mapped_column(String(200), nullable=False)
+
+
+class Allocation(Base):
+    __tablename__ = "allocations"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    fs: Mapped[str] = mapped_column(String(200), nullable=False)
+    period: Mapped[str] = mapped_column(String(200), nullable=False)
+    amount_cents: Mapped[int] = mapped_column(nullable=False)
+    user: Mapped[str] = mapped_column(String(200), nullable=False)
     timestamp: Mapped[str] = mapped_column(String(200), nullable=False)
 
 
