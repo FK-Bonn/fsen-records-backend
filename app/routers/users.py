@@ -207,7 +207,8 @@ async def create_user(userdata: UserForCreation, session: SessionDep, current_us
 
 def is_empty(p: DbPermission):
     return not (p.read_files or p.read_permissions or p.write_permissions or p.read_public_data or
-                p.write_public_data or p.read_protected_data or p.write_protected_data or p.submit_payout_request)
+                p.write_public_data or p.read_protected_data or p.write_protected_data or p.submit_payout_request
+                or p.upload_proceedings or p.delete_proceedings or p.upload_documents or p.locked)
 
 
 @router.post("/permissions", dependencies=[Depends(admin_only)], response_model=UserWithPermissions)
