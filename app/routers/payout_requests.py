@@ -553,6 +553,11 @@ async def add_message_for_payout_request(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="PayoutRequest not found",
         )
+    if not data.message:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="message must not be empty",
+        )
     check_user_may_add_message(current_user, payout_request.fs, session)
     check_user_has_seen_latest_message(data.previous_id, request_id, _type, session)
     now = ts()

@@ -2,7 +2,7 @@ from unittest.mock import patch
 
 import pytest
 from fastapi.testclient import TestClient
-from starlette.status import HTTP_409_CONFLICT
+from starlette.status import HTTP_400_BAD_REQUEST, HTTP_409_CONFLICT
 from time_machine import travel
 
 from app.database import get_session
@@ -1146,6 +1146,20 @@ def test_add_message_with_outdated_previous_yields_409_conflict(fake_email_manag
                 "timestamp": "2026-06-06T10:00:00+00:00",
             },
         ]
+
+
+def test_add_empty_message_yields_400_bad_request(fake_email_manager):
+    url = "/api/v1/payout-request/bfsg/B22W-0023/messages"
+    result = client.post(
+        url,
+        json={"message": "", "previous_id": None},
+        headers=get_auth_header(client, USER_INFO_ALL),
+    )
+    assert result.status_code == HTTP_400_BAD_REQUEST
+    assert result.json() == {"detail": "message must not be empty"}
+    assert len(fake_email_manager.get_outbox()) == 0
+    messages = client.get(url, headers=get_auth_header(client, ADMIN)).json()
+    assert messages == []
 
 
 @travel("2023-04-04T10:00:00Z", tick=False)
