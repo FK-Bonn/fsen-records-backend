@@ -1851,9 +1851,10 @@ def test_uploading_bfsg_document_creates_email(mocked_base_dir, fake_email_manag
     assert fake_email_manager.get_outbox() == [
         QueuedEmailMessage(
             to=["informatik@example.org"],
-            subject="document_uploaded subject content",
-            body="""document_uploaded body content
+            subject="payout_request_updated subject content",
+            body="""payout_request_updated body content
 Infor Matik
+Eine Datei wurde hochgeladen:
 base_name: kassenbon
 category: BFSG
 date_end: None
@@ -1864,13 +1865,13 @@ request_id: B24S-0001
 sha256hash: 1b318799de440475e51646b29c4c5a838d031548e0bdf6566802b6731082a23c
 
 https://example.org/payout-request/B24S-0001""",
-            template_id="document_uploaded",
+            template_id="payout_request_updated",
             created="2026-06-06T10:00:00+00:00",
-            not_before="2026-06-06T10:10:00+00:00",
+            not_before="2026-06-06T10:31:00+00:00",
             meta={
                 "key": "B24S-0001",
                 "base": [
-                    {
+                    {'update_type': 'document_created', 'data': {
                         "fs": "Informatik",
                         "category": "BFSG",
                         "request_id": "B24S-0001",
@@ -1879,7 +1880,7 @@ https://example.org/payout-request/B24S-0001""",
                         "date_end": None,
                         "file_extension": "pdf",
                         "sha256hash": "1b318799de440475e51646b29c4c5a838d031548e0bdf6566802b6731082a23c",
-                    }
+                    }}
                 ],
             },
         ),
@@ -1887,7 +1888,7 @@ https://example.org/payout-request/B24S-0001""",
 
 
 @mock.patch("app.routers.files.get_base_dir", return_value=Path(TemporaryDirectory().name))
-def test_uploading_another_bfsg_document_within_five_minutes_amends_email(mocked_base_dir, fake_email_manager):
+def test_uploading_another_bfsg_document_within_30_minutes_amends_email(mocked_base_dir, fake_email_manager):
     setup_templates_and_data(client)
     handle = BytesIO(EMPTY_PDF_PAGE)
     with travel("2026-06-06T10:00:00Z", tick=False):
@@ -1898,7 +1899,7 @@ def test_uploading_another_bfsg_document_within_five_minutes_amends_email(mocked
             headers=get_auth_header(client, ADMIN),
         )
     assert response.status_code == 200
-    with travel("2026-06-06T10:04:59Z", tick=False):
+    with travel("2026-06-06T10:29:59Z", tick=False):
         response = client.post(
             "/api/v1/file/Informatik",
             data={**DEFAULT_BFSG_DATA, "base_name": "kassenbon 2"},
@@ -1909,9 +1910,10 @@ def test_uploading_another_bfsg_document_within_five_minutes_amends_email(mocked
     assert fake_email_manager.get_outbox() == [
         QueuedEmailMessage(
             to=["informatik@example.org"],
-            subject="document_uploaded subject content",
-            body="""document_uploaded body content
+            subject="payout_request_updated subject content",
+            body="""payout_request_updated body content
 Infor Matik
+Eine Datei wurde hochgeladen:
 base_name: kassenbon
 category: BFSG
 date_end: None
@@ -1921,7 +1923,8 @@ fs: Informatik
 request_id: B24S-0001
 sha256hash: 1b318799de440475e51646b29c4c5a838d031548e0bdf6566802b6731082a23c
 
-
+~~~~~~~
+Eine Datei wurde hochgeladen:
 base_name: kassenbon 2
 category: BFSG
 date_end: None
@@ -1932,13 +1935,13 @@ request_id: B24S-0001
 sha256hash: 1b318799de440475e51646b29c4c5a838d031548e0bdf6566802b6731082a23c
 
 https://example.org/payout-request/B24S-0001""",
-            template_id="document_uploaded",
+            template_id="payout_request_updated",
             created="2026-06-06T10:00:00+00:00",
-            not_before="2026-06-06T10:14:59+00:00",
+            not_before="2026-06-06T11:00:59+00:00",
             meta={
                 "key": "B24S-0001",
                 "base": [
-                    {
+                    {'update_type': 'document_created', 'data': {
                         "fs": "Informatik",
                         "category": "BFSG",
                         "request_id": "B24S-0001",
@@ -1947,8 +1950,8 @@ https://example.org/payout-request/B24S-0001""",
                         "date_end": None,
                         "file_extension": "pdf",
                         "sha256hash": "1b318799de440475e51646b29c4c5a838d031548e0bdf6566802b6731082a23c",
-                    },
-                    {
+                    }},
+                    {'update_type': 'document_created', 'data': {
                         "fs": "Informatik",
                         "category": "BFSG",
                         "request_id": "B24S-0001",
@@ -1957,7 +1960,7 @@ https://example.org/payout-request/B24S-0001""",
                         "date_end": None,
                         "file_extension": "pdf",
                         "sha256hash": "1b318799de440475e51646b29c4c5a838d031548e0bdf6566802b6731082a23c",
-                    },
+                    }},
                 ],
             },
         ),
@@ -1965,7 +1968,7 @@ https://example.org/payout-request/B24S-0001""",
 
 
 @mock.patch("app.routers.files.get_base_dir", return_value=Path(TemporaryDirectory().name))
-def test_uploading_another_bfsg_document_after_five_minutes_creates_new_email(mocked_base_dir, fake_email_manager):
+def test_uploading_another_bfsg_document_after_30_minutes_creates_new_email(mocked_base_dir, fake_email_manager):
     setup_templates_and_data(client)
     handle = BytesIO(EMPTY_PDF_PAGE)
     with travel("2026-06-06T10:00:00Z", tick=False):
@@ -1976,7 +1979,7 @@ def test_uploading_another_bfsg_document_after_five_minutes_creates_new_email(mo
             headers=get_auth_header(client, ADMIN),
         )
     assert response.status_code == 200
-    with travel("2026-06-06T10:05:00Z", tick=False):
+    with travel("2026-06-06T10:30:00Z", tick=False):
         response = client.post(
             "/api/v1/file/Informatik",
             data={**DEFAULT_BFSG_DATA, "base_name": "kassenbon 2"},
@@ -1987,9 +1990,10 @@ def test_uploading_another_bfsg_document_after_five_minutes_creates_new_email(mo
     assert fake_email_manager.get_outbox() == [
         QueuedEmailMessage(
             to=["informatik@example.org"],
-            subject="document_uploaded subject content",
-            body="""document_uploaded body content
+            subject="payout_request_updated subject content",
+            body="""payout_request_updated body content
 Infor Matik
+Eine Datei wurde hochgeladen:
 base_name: kassenbon 2
 category: BFSG
 date_end: None
@@ -2000,13 +2004,13 @@ request_id: B24S-0001
 sha256hash: 1b318799de440475e51646b29c4c5a838d031548e0bdf6566802b6731082a23c
 
 https://example.org/payout-request/B24S-0001""",
-            template_id="document_uploaded",
-            created="2026-06-06T10:05:00+00:00",
-            not_before="2026-06-06T10:15:00+00:00",
+            template_id="payout_request_updated",
+            created="2026-06-06T10:30:00+00:00",
+            not_before="2026-06-06T11:01:00+00:00",
             meta={
                 "key": "B24S-0001",
                 "base": [
-                    {
+                    {'update_type': 'document_created', 'data': {
                         "fs": "Informatik",
                         "category": "BFSG",
                         "request_id": "B24S-0001",
@@ -2015,15 +2019,16 @@ https://example.org/payout-request/B24S-0001""",
                         "date_end": None,
                         "file_extension": "pdf",
                         "sha256hash": "1b318799de440475e51646b29c4c5a838d031548e0bdf6566802b6731082a23c",
-                    }
+                    }}
                 ],
             },
         ),
         QueuedEmailMessage(
             to=["informatik@example.org"],
-            subject="document_uploaded subject content",
-            body="""document_uploaded body content
+            subject="payout_request_updated subject content",
+            body="""payout_request_updated body content
 Infor Matik
+Eine Datei wurde hochgeladen:
 base_name: kassenbon
 category: BFSG
 date_end: None
@@ -2034,13 +2039,13 @@ request_id: B24S-0001
 sha256hash: 1b318799de440475e51646b29c4c5a838d031548e0bdf6566802b6731082a23c
 
 https://example.org/payout-request/B24S-0001""",
-            template_id="document_uploaded",
+            template_id="payout_request_updated",
             created="2026-06-06T10:00:00+00:00",
-            not_before="2026-06-06T10:10:00+00:00",
+            not_before="2026-06-06T10:31:00+00:00",
             meta={
                 "key": "B24S-0001",
                 "base": [
-                    {
+                    {'update_type': 'document_created', 'data': {
                         "fs": "Informatik",
                         "category": "BFSG",
                         "request_id": "B24S-0001",
@@ -2049,7 +2054,7 @@ https://example.org/payout-request/B24S-0001""",
                         "date_end": None,
                         "file_extension": "pdf",
                         "sha256hash": "1b318799de440475e51646b29c4c5a838d031548e0bdf6566802b6731082a23c",
-                    }
+                    }}
                 ],
             },
         ),
@@ -2071,9 +2076,10 @@ def test_uploading_vorankuendigung_document_creates_email(mocked_base_dir, fake_
     assert fake_email_manager.get_outbox() == [
         QueuedEmailMessage(
             to=["informatik@example.org"],
-            subject="document_uploaded subject content",
-            body="""document_uploaded body content
+            subject="payout_request_updated subject content",
+            body="""payout_request_updated body content
 Infor Matik
+Eine Datei wurde hochgeladen:
 base_name: ange~botäöüßÄÖÜẞ?/xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxyzzzzzzzz
 category: VORANKUENDIGUNG
 date_end: None
@@ -2084,13 +2090,13 @@ request_id: V24S-0001
 sha256hash: 1b318799de440475e51646b29c4c5a838d031548e0bdf6566802b6731082a23c
 
 https://example.org/payout-request/V24S-0001""",
-            template_id="document_uploaded",
+            template_id="payout_request_updated",
             created="2026-06-06T10:00:00+00:00",
-            not_before="2026-06-06T10:10:00+00:00",
+            not_before="2026-06-06T10:31:00+00:00",
             meta={
                 "key": "V24S-0001",
                 "base": [
-                    {
+                    {'update_type': 'document_created', 'data': {
                         "fs": "Informatik",
                         "category": "VORANKUENDIGUNG",
                         "request_id": "V24S-0001",
@@ -2099,7 +2105,7 @@ https://example.org/payout-request/V24S-0001""",
                         "date_end": None,
                         "file_extension": "pdf",
                         "sha256hash": "1b318799de440475e51646b29c4c5a838d031548e0bdf6566802b6731082a23c",
-                    }
+                    }}
                 ],
             },
         ),
@@ -2107,7 +2113,7 @@ https://example.org/payout-request/V24S-0001""",
 
 
 @mock.patch("app.routers.files.get_base_dir", return_value=Path(TemporaryDirectory().name))
-def test_uploading_another_vorankuendigung_document_within_five_minutes_amends_email(
+def test_uploading_another_vorankuendigung_document_within_30_minutes_amends_email(
     mocked_base_dir, fake_email_manager
 ):
     setup_templates_and_data(client)
@@ -2120,7 +2126,7 @@ def test_uploading_another_vorankuendigung_document_within_five_minutes_amends_e
             headers=get_auth_header(client, ADMIN),
         )
     assert response.status_code == 200
-    with travel("2026-06-06T10:04:59Z", tick=False):
+    with travel("2026-06-06T10:29:59Z", tick=False):
         response = client.post(
             "/api/v1/file/Informatik",
             data={**DEFAULT_VORANKUENDIGUNG_DATA, "base_name": "angebot 2"},
@@ -2131,9 +2137,10 @@ def test_uploading_another_vorankuendigung_document_within_five_minutes_amends_e
     assert fake_email_manager.get_outbox() == [
         QueuedEmailMessage(
             to=["informatik@example.org"],
-            subject="document_uploaded subject content",
-            body="""document_uploaded body content
+            subject="payout_request_updated subject content",
+            body="""payout_request_updated body content
 Infor Matik
+Eine Datei wurde hochgeladen:
 base_name: ange~botäöüßÄÖÜẞ?/xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxyzzzzzzzz
 category: VORANKUENDIGUNG
 date_end: None
@@ -2143,7 +2150,8 @@ fs: Informatik
 request_id: V24S-0001
 sha256hash: 1b318799de440475e51646b29c4c5a838d031548e0bdf6566802b6731082a23c
 
-
+~~~~~~~
+Eine Datei wurde hochgeladen:
 base_name: angebot 2
 category: VORANKUENDIGUNG
 date_end: None
@@ -2154,13 +2162,13 @@ request_id: V24S-0001
 sha256hash: 1b318799de440475e51646b29c4c5a838d031548e0bdf6566802b6731082a23c
 
 https://example.org/payout-request/V24S-0001""",
-            template_id="document_uploaded",
+            template_id="payout_request_updated",
             created="2026-06-06T10:00:00+00:00",
-            not_before="2026-06-06T10:14:59+00:00",
+            not_before="2026-06-06T11:00:59+00:00",
             meta={
                 "key": "V24S-0001",
                 "base": [
-                    {
+                    {'update_type': 'document_created', 'data': {
                         "fs": "Informatik",
                         "category": "VORANKUENDIGUNG",
                         "request_id": "V24S-0001",
@@ -2169,8 +2177,8 @@ https://example.org/payout-request/V24S-0001""",
                         "date_end": None,
                         "file_extension": "pdf",
                         "sha256hash": "1b318799de440475e51646b29c4c5a838d031548e0bdf6566802b6731082a23c",
-                    },
-                    {
+                    }},
+                    {'update_type': 'document_created', 'data': {
                         "fs": "Informatik",
                         "category": "VORANKUENDIGUNG",
                         "request_id": "V24S-0001",
@@ -2179,7 +2187,7 @@ https://example.org/payout-request/V24S-0001""",
                         "date_end": None,
                         "file_extension": "pdf",
                         "sha256hash": "1b318799de440475e51646b29c4c5a838d031548e0bdf6566802b6731082a23c",
-                    },
+                    }},
                 ],
             },
         ),
@@ -2187,7 +2195,7 @@ https://example.org/payout-request/V24S-0001""",
 
 
 @mock.patch("app.routers.files.get_base_dir", return_value=Path(TemporaryDirectory().name))
-def test_uploading_another_vorankuendigung_document_after_five_minutes_creates_new_email(
+def test_uploading_another_vorankuendigung_document_after_30_minutes_creates_new_email(
     mocked_base_dir, fake_email_manager
 ):
     setup_templates_and_data(client)
@@ -2200,7 +2208,7 @@ def test_uploading_another_vorankuendigung_document_after_five_minutes_creates_n
             headers=get_auth_header(client, ADMIN),
         )
     assert response.status_code == 200
-    with travel("2026-06-06T10:05:00Z", tick=False):
+    with travel("2026-06-06T10:30:00Z", tick=False):
         response = client.post(
             "/api/v1/file/Informatik",
             data={**DEFAULT_VORANKUENDIGUNG_DATA, "base_name": "angebot 2"},
@@ -2211,9 +2219,10 @@ def test_uploading_another_vorankuendigung_document_after_five_minutes_creates_n
     assert fake_email_manager.get_outbox() == [
         QueuedEmailMessage(
             to=["informatik@example.org"],
-            subject="document_uploaded subject content",
-            body="""document_uploaded body content
+            subject="payout_request_updated subject content",
+            body="""payout_request_updated body content
 Infor Matik
+Eine Datei wurde hochgeladen:
 base_name: angebot 2
 category: VORANKUENDIGUNG
 date_end: None
@@ -2224,13 +2233,13 @@ request_id: V24S-0001
 sha256hash: 1b318799de440475e51646b29c4c5a838d031548e0bdf6566802b6731082a23c
 
 https://example.org/payout-request/V24S-0001""",
-            template_id="document_uploaded",
-            created="2026-06-06T10:05:00+00:00",
-            not_before="2026-06-06T10:15:00+00:00",
+            template_id="payout_request_updated",
+            created="2026-06-06T10:30:00+00:00",
+            not_before="2026-06-06T11:01:00+00:00",
             meta={
                 "key": "V24S-0001",
                 "base": [
-                    {
+                   {'update_type': 'document_created', 'data':  {
                         "fs": "Informatik",
                         "category": "VORANKUENDIGUNG",
                         "request_id": "V24S-0001",
@@ -2239,15 +2248,16 @@ https://example.org/payout-request/V24S-0001""",
                         "date_end": None,
                         "file_extension": "pdf",
                         "sha256hash": "1b318799de440475e51646b29c4c5a838d031548e0bdf6566802b6731082a23c",
-                    }
+                    }}
                 ],
             },
         ),
         QueuedEmailMessage(
             to=["informatik@example.org"],
-            subject="document_uploaded subject content",
-            body="""document_uploaded body content
+            subject="payout_request_updated subject content",
+            body="""payout_request_updated body content
 Infor Matik
+Eine Datei wurde hochgeladen:
 base_name: ange~botäöüßÄÖÜẞ?/xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxyzzzzzzzz
 category: VORANKUENDIGUNG
 date_end: None
@@ -2258,13 +2268,13 @@ request_id: V24S-0001
 sha256hash: 1b318799de440475e51646b29c4c5a838d031548e0bdf6566802b6731082a23c
 
 https://example.org/payout-request/V24S-0001""",
-            template_id="document_uploaded",
+            template_id="payout_request_updated",
             created="2026-06-06T10:00:00+00:00",
-            not_before="2026-06-06T10:10:00+00:00",
+            not_before="2026-06-06T10:31:00+00:00",
             meta={
                 "key": "V24S-0001",
                 "base": [
-                    {
+                    {'update_type': 'document_created', 'data': {
                         "fs": "Informatik",
                         "category": "VORANKUENDIGUNG",
                         "request_id": "V24S-0001",
@@ -2273,7 +2283,7 @@ https://example.org/payout-request/V24S-0001""",
                         "date_end": None,
                         "file_extension": "pdf",
                         "sha256hash": "1b318799de440475e51646b29c4c5a838d031548e0bdf6566802b6731082a23c",
-                    }
+                    }}
                 ],
             },
         ),
@@ -2333,7 +2343,7 @@ url: None
 https://example.org/document/AFSG-HHP-2023-10-01--2024-09-30-1b318799de440475e51646b29c4c5a838d031548e0bdf6566802b6731082a23c.pdf""",
             template_id="document_annotated",
             created="2026-07-07T10:00:00+00:00",
-            not_before="2026-07-07T10:10:00+00:00",
+            not_before="2026-07-07T10:31:00+00:00",
             meta={"key": "1", "base": {}},
         ),
     ]
@@ -2386,7 +2396,7 @@ url: None
 https://example.org/payout-request/B24S-0001""",
             template_id="document_annotated",
             created="2026-07-07T10:00:00+00:00",
-            not_before="2026-07-07T10:10:00+00:00",
+            not_before="2026-07-07T10:31:00+00:00",
             meta={"key": "1", "base": {}},
         ),
     ]
@@ -2441,14 +2451,14 @@ url: None
 https://example.org/payout-request/V24S-0001""",
             template_id="document_annotated",
             created="2026-07-07T10:00:00+00:00",
-            not_before="2026-07-07T10:10:00+00:00",
+            not_before="2026-07-07T10:31:00+00:00",
             meta={"key": "1", "base": {}},
         ),
     ]
 
 
 @mock.patch("app.routers.files.get_base_dir", return_value=Path(TemporaryDirectory().name))
-def test_add_annotation_edit_within_five_minutes_edits_email(mocked_base_dir, fake_email_manager):
+def test_add_annotation_edit_within_30_minutes_edits_email(mocked_base_dir, fake_email_manager):
     setup_templates_and_data(client)
     handle = BytesIO(EMPTY_PDF_PAGE)
     with travel("2026-06-06T10:00:00Z", tick=False):
@@ -2485,7 +2495,7 @@ def test_add_annotation_edit_within_five_minutes_edits_email(mocked_base_dir, fa
             headers=get_auth_header(client, ADMIN),
         )
     assert result.status_code == 200
-    with travel("2026-07-07T10:04:59Z", tick=False):
+    with travel("2026-07-07T10:29:59Z", tick=False):
         result = client.post(
             "/api/v1/file/Informatik/annotate",
             json={
@@ -2526,14 +2536,14 @@ url: None
 https://example.org/document/AFSG-HHP-2023-10-01--2024-09-30-1b318799de440475e51646b29c4c5a838d031548e0bdf6566802b6731082a23c.pdf""",
             template_id="document_annotated",
             created="2026-07-07T10:00:00+00:00",
-            not_before="2026-07-07T10:14:59+00:00",
+            not_before="2026-07-07T11:00:59+00:00",
             meta={"key": "1", "base": {}},
         ),
     ]
 
 
 @mock.patch("app.routers.files.get_base_dir", return_value=Path(TemporaryDirectory().name))
-def test_add_annotation_edit_after_five_minutes_adds_another_email(mocked_base_dir, fake_email_manager):
+def test_add_annotation_edit_after_30_minutes_adds_another_email(mocked_base_dir, fake_email_manager):
     setup_templates_and_data(client)
     handle = BytesIO(EMPTY_PDF_PAGE)
     with travel("2026-06-06T10:00:00Z", tick=False):
@@ -2570,7 +2580,7 @@ def test_add_annotation_edit_after_five_minutes_adds_another_email(mocked_base_d
             headers=get_auth_header(client, ADMIN),
         )
     assert result.status_code == 200
-    with travel("2026-07-07T10:05:00Z", tick=False):
+    with travel("2026-07-07T10:30:00Z", tick=False):
         result = client.post(
             "/api/v1/file/Informatik/annotate",
             json={
@@ -2607,8 +2617,8 @@ annotation_2: None → Info: Noch eine Info
 
 https://example.org/document/AFSG-HHP-2023-10-01--2024-09-30-1b318799de440475e51646b29c4c5a838d031548e0bdf6566802b6731082a23c.pdf""",
             template_id="annotation_updated",
-            created="2026-07-07T10:05:00+00:00",
-            not_before="2026-07-07T10:15:00+00:00",
+            created="2026-07-07T10:30:00+00:00",
+            not_before="2026-07-07T11:01:00+00:00",
             meta={
                 "key": "1",
                 "base": {
@@ -2634,14 +2644,14 @@ url: None
 https://example.org/document/AFSG-HHP-2023-10-01--2024-09-30-1b318799de440475e51646b29c4c5a838d031548e0bdf6566802b6731082a23c.pdf""",
             template_id="document_annotated",
             created="2026-07-07T10:00:00+00:00",
-            not_before="2026-07-07T10:10:00+00:00",
+            not_before="2026-07-07T10:31:00+00:00",
             meta={"key": "1", "base": {}},
         ),
     ]
 
 
 @mock.patch("app.routers.files.get_base_dir", return_value=Path(TemporaryDirectory().name))
-def test_edit_annotation_edit_again_within_five_minutes_edits_email(mocked_base_dir, fake_email_manager):
+def test_edit_annotation_edit_again_within_30_minutes_edits_email(mocked_base_dir, fake_email_manager):
     setup_templates_and_data(client)
     handle = BytesIO(EMPTY_PDF_PAGE)
     with travel("2026-06-06T10:00:00Z", tick=False):
@@ -2702,7 +2712,7 @@ def test_edit_annotation_edit_again_within_five_minutes_edits_email(mocked_base_
             headers=get_auth_header(client, ADMIN),
         )
     assert result.status_code == 200
-    with travel("2026-07-07T10:04:59Z", tick=False):
+    with travel("2026-07-07T10:29:59Z", tick=False):
         result = client.post(
             "/api/v1/file/Informatik/annotate",
             json={
@@ -2740,7 +2750,7 @@ annotation_2: None → Info: Noch eine Info
 https://example.org/document/AFSG-HHP-2023-10-01--2024-09-30-1b318799de440475e51646b29c4c5a838d031548e0bdf6566802b6731082a23c.pdf""",
             template_id="annotation_updated",
             created="2026-07-07T10:00:00+00:00",
-            not_before="2026-07-07T10:14:59+00:00",
+            not_before="2026-07-07T11:00:59+00:00",
             meta={
                 "key": "1",
                 "base": {
@@ -2756,7 +2766,7 @@ https://example.org/document/AFSG-HHP-2023-10-01--2024-09-30-1b318799de440475e51
 
 
 @mock.patch("app.routers.files.get_base_dir", return_value=Path(TemporaryDirectory().name))
-def test_edit_annotation_edit_again_after_five_minutes_adds_another_email(mocked_base_dir, fake_email_manager):
+def test_edit_annotation_edit_again_after_30_minutes_adds_another_email(mocked_base_dir, fake_email_manager):
     setup_templates_and_data(client)
     handle = BytesIO(EMPTY_PDF_PAGE)
     with travel("2026-06-06T10:00:00Z", tick=False):
@@ -2816,7 +2826,7 @@ def test_edit_annotation_edit_again_after_five_minutes_adds_another_email(mocked
             headers=get_auth_header(client, ADMIN),
         )
     assert result.status_code == 200
-    with travel("2026-07-07T10:05:00Z", tick=False):
+    with travel("2026-07-07T10:30:00Z", tick=False):
         result = client.post(
             "/api/v1/file/Informatik/annotate",
             json={
@@ -2853,8 +2863,8 @@ annotation_2: None → Info: Noch eine Info
 
 https://example.org/document/AFSG-HHP-2023-10-01--2024-09-30-1b318799de440475e51646b29c4c5a838d031548e0bdf6566802b6731082a23c.pdf""",
             template_id="annotation_updated",
-            created="2026-07-07T10:05:00+00:00",
-            not_before="2026-07-07T10:15:00+00:00",
+            created="2026-07-07T10:30:00+00:00",
+            not_before="2026-07-07T11:01:00+00:00",
             meta={
                 "key": "1",
                 "base": {
@@ -2876,7 +2886,7 @@ annotation_1: Warning: Eine alte Warnung → None
 https://example.org/document/AFSG-HHP-2023-10-01--2024-09-30-1b318799de440475e51646b29c4c5a838d031548e0bdf6566802b6731082a23c.pdf""",
             template_id="annotation_updated",
             created="2026-07-07T10:00:00+00:00",
-            not_before="2026-07-07T10:10:00+00:00",
+            not_before="2026-07-07T10:31:00+00:00",
             meta={
                 "key": "1",
                 "base": {

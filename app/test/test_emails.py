@@ -1,4 +1,5 @@
 import json
+from io import BytesIO
 from pathlib import Path
 
 import pytest
@@ -6,14 +7,17 @@ from fastapi.testclient import TestClient
 from time_machine import travel
 
 from app.database import get_session
+from app.emails import QueuedEmailMessage
 from app.main import app, subapp
 from app.test.conftest import (
     ADMIN,
+    EMPTY_PDF_PAGE,
     USER_INFO_ALL,
     USER_INFO_READ,
     USER_NO_PERMS,
     fake_session,
     get_auth_header,
+    setup_templates_and_data,
 )
 
 client = TestClient(app)
@@ -180,6 +184,167 @@ def test_email_queues_other_users_no_access(user, fake_email_manager):
     assert result.status_code == 401
     assert result.json() == {"detail": "Not authenticated" if user is None else "This requires admin rights"}
 
+
+def test_email_submit_files_upload_and_message_are_aggregated(fake_email_manager):
+    setup_templates_and_data(client)
+    with travel("2026-10-10T10:00:00Z", tick=False):
+        data = {
+            "fs": "Informatik",
+            "semester": "2026-WiSe",
+            "category": "Erstiarbeit",
+            "amount_cents": 6969,
+        }
+        response = client.post(
+            "/api/v1/payout-request/bfsg/create", json=data, headers=get_auth_header(client, USER_INFO_ALL)
+        )
+        assert response.status_code == 200
+        request_id = response.json()["request_id"]
+
+    with travel("2026-10-10T10:10:00Z", tick=False):
+        handle = BytesIO(EMPTY_PDF_PAGE)
+        response = client.post(
+            "/api/v1/file/Informatik",
+            data={
+                "category": "BFSG",
+                "base_name": "kassenbon",
+                "date_start": None,
+                "date_end": None,
+                "request_id": request_id,
+            },
+            files={"file": ("kassenbon.pdf", handle, "application/pdf")},
+            headers=get_auth_header(client, USER_INFO_ALL),
+        )
+        assert response.status_code == 200
+
+    with travel("2026-10-10T10:20:00Z", tick=False):
+        handle = BytesIO(EMPTY_PDF_PAGE)
+        response = client.post(
+            "/api/v1/file/Informatik",
+            data={
+                "category": "BFSG",
+                "base_name": "kassenbon2",
+                "date_start": None,
+                "date_end": None,
+                "request_id": request_id,
+            },
+            files={"file": ("kassenbon2.pdf", handle, "application/pdf")},
+            headers=get_auth_header(client, USER_INFO_ALL),
+        )
+        assert response.status_code == 200
+    with travel("2026-10-10T10:30:00Z", tick=False):
+        response = client.post(
+            f"/api/v1/payout-request/bfsg/{request_id}/messages",
+            json={"message": "Hi back!\nomg", "previous_id": None},
+            headers=get_auth_header(client, USER_INFO_ALL),
+        )
+        assert response.status_code == 200
+
+    assert fake_email_manager.get_outbox() == [
+        QueuedEmailMessage(
+            to=["informatik@example.org"],
+            subject="payout_request_updated subject content",
+            body=f"""payout_request_updated body content
+Infor Matik
+Der Antrag wurde gestellt
+amount_cents: 6969
+category: Erstiarbeit
+comment: –
+completion_deadline: 2027-04-30
+fs: Informatik
+reference: None
+request_date: 2026-10-10
+request_id: B26W-0001
+semester: 2026-WiSe
+status: GESTELLT
+status_date: 2026-10-10
+type: bfsg
+
+~~~~~~~
+Eine Datei wurde hochgeladen:
+base_name: kassenbon
+category: BFSG
+date_end: None
+date_start: None
+file_extension: pdf
+fs: Informatik
+request_id: {request_id}
+sha256hash: 1b318799de440475e51646b29c4c5a838d031548e0bdf6566802b6731082a23c
+
+~~~~~~~
+Eine Datei wurde hochgeladen:
+base_name: kassenbon2
+category: BFSG
+date_end: None
+date_start: None
+file_extension: pdf
+fs: Informatik
+request_id: {request_id}
+sha256hash: 1b318799de440475e51646b29c4c5a838d031548e0bdf6566802b6731082a23c
+
+~~~~~~~
+Eine Nachricht wurde hinterlassen:
+Hi back!
+omg
+https://example.org/payout-request/{request_id}""",
+            template_id="payout_request_updated",
+            created="2026-10-10T10:00:00+00:00",
+            not_before="2026-10-10T11:01:00+00:00",
+            meta={
+                "key": request_id,
+                "base": [
+                    {
+                        "update_type": "payout_request_created",
+                        "data": {
+                            "request_id": "B26W-0001",
+                            "type": "bfsg",
+                            "category": "Erstiarbeit",
+                            "fs": "Informatik",
+                            "semester": "2026-WiSe",
+                            "status": "GESTELLT",
+                            "status_date": "2026-10-10",
+                            "amount_cents": 6969,
+                            "comment": "",
+                            "request_date": "2026-10-10",
+                            "completion_deadline": "2027-04-30",
+                            "reference": None,
+                        },
+                    },
+                    {
+                        "update_type": "document_created",
+                        "data": {
+                            "fs": "Informatik",
+                            "category": "BFSG",
+                            "request_id": request_id,
+                            "base_name": "kassenbon",
+                            "date_start": None,
+                            "date_end": None,
+                            "file_extension": "pdf",
+                            "sha256hash": "1b318799de440475e51646b29c4c5a838d031548e0bdf6566802b6731082a23c",
+                        },
+                    },
+                    {
+                        "update_type": "document_created",
+                        "data": {
+                            "fs": "Informatik",
+                            "category": "BFSG",
+                            "request_id": request_id,
+                            "base_name": "kassenbon2",
+                            "date_start": None,
+                            "date_end": None,
+                            "file_extension": "pdf",
+                            "sha256hash": "1b318799de440475e51646b29c4c5a838d031548e0bdf6566802b6731082a23c",
+                        },
+                    },
+                    {
+                        "update_type": "message_added",
+                        "data": {
+                            "message": "Hi back!\nomg",
+                        },
+                    },
+                ],
+            },
+        ),
+    ]
 
 def create_mail_files(base_dir: Path) -> dict:
     outbox = base_dir / "outbox"

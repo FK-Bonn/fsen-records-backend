@@ -265,12 +265,11 @@ def setup_templates_and_data(client):
         "election_created": "\n{diff}\nhttps://example.org/wahltermine/{election_id}",
         "election_updated": "\n{diff}\nhttps://example.org/wahltermine/{election_id}",
         "payout_request_created": "\n{request_data}\nhttps://example.org/payout-request/{request_id}",
+        "payout_request_modified": "\n{diff}\nhttps://example.org/payout-request/{request_id}",
         "payout_request_updated": "\n{diff}\nhttps://example.org/payout-request/{request_id}",
-        "document_uploaded": "\n{document_data}\nhttps://example.org/payout-request/{request_id}",
         "document_annotated": "\n{diff}\nhttps://example.org{url_fragment}",
         "annotation_updated": "\n{diff}\nhttps://example.org{url_fragment}",
         "admin_message_for_payout_request": "\n{message}\nhttps://example.org/payout-request/{request_id}",
-        "user_message_for_payout_request": "\n{message}\nhttps://example.org/payout-request/{request_id}",
     }
     for template_id, extra_body in templates.items():
         template = {

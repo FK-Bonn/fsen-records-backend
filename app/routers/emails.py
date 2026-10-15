@@ -1,6 +1,6 @@
 import json
 import logging
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
@@ -70,8 +70,8 @@ async def save_email_template(
 async def email_state(emails: EmailsDep):
     send_mails_last_run = emails.get_send_mails_last_run()
     create_daily_mails_last_run = emails.get_create_daily_mails_last_run()
-    one_hour_ago = datetime.now(tz=timezone.utc) - timedelta(hours=1)
-    twentyfive_hours_ago = datetime.now(tz=timezone.utc) - timedelta(hours=25)
+    one_hour_ago = datetime.now(tz=UTC) - timedelta(hours=1)
+    twentyfive_hours_ago = datetime.now(tz=UTC) - timedelta(hours=25)
     status = (
         HTTP_200_OK
         if (

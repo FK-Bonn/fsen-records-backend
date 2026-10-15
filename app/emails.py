@@ -1,7 +1,8 @@
 import json
 import uuid
 from collections import defaultdict
-from datetime import datetime, timedelta, timezone
+from dataclasses import asdict, dataclass
+from datetime import UTC, datetime, timedelta
 from enum import Enum
 from pathlib import Path
 from typing import Annotated
@@ -23,6 +24,9 @@ from app.database import (
     ProtectedFsData,
 )
 from app.util import Now, build_filename_str
+
+GRACE_PERIOD = 30
+CUTOFF_OFFSET = 1
 
 
 class FrequencyEnum(str, Enum):
@@ -71,6 +75,12 @@ class QueuedEmailMessage(BaseModel):
 class SentEmailMessage(QueuedEmailMessage):
     sent: str
 
+
+@dataclass
+class Update:
+    update_type: str
+    data: dict
+
 class EmailManager:
     base_dir = Config.BASE_MAILS_DIR
     outbox_dir = base_dir / "outbox"
@@ -102,8 +112,8 @@ class EmailManager:
         return value
 
     def get_pending_outbox_mail(self, template_id: str, key: str) -> None | tuple[Path, QueuedEmailMessage]:
-        now = datetime.now(tz=timezone.utc)
-        cutoff = (now + timedelta(minutes=5)).isoformat()
+        now = datetime.now(tz=UTC)
+        cutoff = (now + timedelta(minutes=CUTOFF_OFFSET)).isoformat()
         for filepath, mail in self.get_outbox_files().items():
             if (
                 mail.template_id == template_id
@@ -178,7 +188,7 @@ class EmailManager:
     ) -> tuple[str, Path, EmailTemplateData, list[str], str, str]:
         t = Now()
         created = t.utc.date_time
-        not_before = (t.utc.value + timedelta(minutes=10)).isoformat()
+        not_before = (t.utc.value + timedelta(minutes=GRACE_PERIOD + CUTOFF_OFFSET)).isoformat()
         uuid_ = str(uuid.uuid4())
         target_file = self.outbox_dir / f"{t.unixtime}-{t.berlin.date}-{uuid_}.json"
 
@@ -191,63 +201,9 @@ class EmailManager:
         to = sorted(set(to))
         return fs_name, target_file, template, to, created, not_before
 
-    def payout_request_created(self, payout_request: PayoutRequest | None, session: Session):
-        if payout_request is None:
-            return
-        template_id = "payout_request_created"
-        fs_id = payout_request.fs
-        fs_name, target_file, template, to, created, _ = self.setup(fs_id, session, template_id)
-
-        as_json = payout_request_to_json(payout_request)
-        request_data = list_keys_and_values(as_json)
-
-        subject, body = render(
-            template,
-            {"fs_name": fs_name, "request_data": request_data, "request_id": payout_request.request_id},
-        )
-        data = QueuedEmailMessage(
-            to=to,
-            subject=subject,
-            body=body,
-            template_id=template.template_id,
-            created=created,
-            not_before=None,
-            meta=None,
-        )
-        self.outbox_dir.mkdir(parents=True, exist_ok=True)
-        target_file.write_text(
-            data.model_dump_json(
-                indent=2,
-            )
-        )
-
-
-    def payout_request_modified(self,  current: PayoutRequest | None, previous: PayoutRequest | None, session: Session):
-        if current is None or previous is None:
-            return
-        key = current.request_id
-        template_key = "payout_request_updated"
-
-        previous_json = payout_request_to_json(previous)
-        current_json = payout_request_to_json(current)
-
-        self.generic_modified_mail(
-            key=key,
-            template_key=template_key,
-            fs_id=current.fs,
-            current_json=current_json,
-            previous_json=previous_json,
-            additional_items={"request_id": current.request_id},
-            session=session,
-        )
-
-
-    def document_uploaded(self, document: Document, session: Session):
-        if document.category == "AFSG":
-            return
-        template_id = "document_uploaded"
-        key = document.request_id
-        fs_id = document.fs
+    def _payout_request_updated(self, request_id: str, fs_id, item: Update, session: Session):
+        template_id = "payout_request_updated"
+        key = request_id
         fs_name, target_file, template, to, created, not_before = self.setup(fs_id, session, template_id)
 
         as_json = []
@@ -259,12 +215,12 @@ class EmailManager:
             if mail.meta:
                 as_json = mail.meta["base"]
 
-        as_json.append(document_to_json(document))
-        document_data = '\n\n'.join(list_keys_and_values(item) for item in as_json)
+        as_json.append(asdict(item))
+        diff = "\n~~~~~~~\n".join(stringify_update(item) for item in as_json)
 
         subject, body = render(
             template,
-            {"fs_name": fs_name, "document_data": document_data, "request_id": key},
+            {"fs_name": fs_name, "diff": diff, "request_id": key},
         )
         data = QueuedEmailMessage(
             to=to,
@@ -284,6 +240,39 @@ class EmailManager:
                 indent=2,
             )
         )
+
+    def payout_request_created(self, payout_request: PayoutRequest | None, session: Session):
+        if payout_request is None:
+            return
+        update = Update(update_type="payout_request_created", data=payout_request_to_json(payout_request))
+        self._payout_request_updated(payout_request.request_id, payout_request.fs, update, session)
+
+
+    def payout_request_modified(self,  current: PayoutRequest | None, previous: PayoutRequest | None, session: Session):
+        if current is None or previous is None:
+            return
+        key = current.request_id
+        template_key = "payout_request_modified"
+
+        previous_json = payout_request_to_json(previous)
+        current_json = payout_request_to_json(current)
+
+        self.generic_modified_mail(
+            key=key,
+            template_key=template_key,
+            fs_id=current.fs,
+            current_json=current_json,
+            previous_json=previous_json,
+            additional_items={"request_id": current.request_id},
+            session=session,
+        )
+
+
+    def document_uploaded(self, document: Document, session: Session):
+        if document.category == "AFSG":
+            return
+        update = Update(update_type="document_created", data=document_to_json(document))
+        self._payout_request_updated(document.request_id, document.fs, update, session)
 
     def document_annotated(self, current: Annotation, previous: Annotation | None, session: Session):
         template_id = "document_annotated" if previous is None else "annotation_updated"
@@ -340,6 +329,10 @@ class EmailManager:
 
     def message_added(self, template_id: str, payout_request: PayoutRequest, message: Message, session: Session):
         fs_id = payout_request.fs
+        if template_id == "payout_request_updated":
+            update = Update(update_type="message_added", data={"message": message.message})
+            self._payout_request_updated(payout_request.request_id, fs_id, update, session)
+            return
         fs_name, target_file, template, to, created, _ = self.setup(fs_id, session, template_id)
 
         subject, body = render(
@@ -531,5 +524,17 @@ def render(template: EmailTemplateData, items: dict) -> tuple[str, str]:
 def get_email_manager():
     yield EmailManager()
 
+def stringify_update(item: dict) -> str:
+    registry = {
+        "payout_request_created": ("Der Antrag wurde gestellt", list_keys_and_values),
+        "document_created": ("Eine Datei wurde hochgeladen:", list_keys_and_values),
+        "message_added": ("Eine Nachricht wurde hinterlassen:", lambda x: x["message"]),
+    }
+    title, transform_func = registry.get(item["update_type"], ("???", nothing))
+    return f"{title}\n{transform_func(item['data'])}"
+
+
+def nothing(param: dict):
+    return ""
 
 EmailsDep = Annotated[EmailManager, Depends(get_email_manager)]

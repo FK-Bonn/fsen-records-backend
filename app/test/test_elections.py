@@ -170,7 +170,7 @@ https://example.org/wahltermine/deadbeef""",
     ]
 
 
-def test_save_election_again_within_five_minutes_updates_email(fake_email_manager):
+def test_save_election_again_within_30_minutes_updates_email(fake_email_manager):
     setup_templates_and_data(client)
     with travel("2026-01-01:00:00Z", tick=False):
         result = client.post("/api/v1/elections/save", json=DEFAULT_ELECTION, headers=get_auth_header(client, ADMIN))
@@ -182,7 +182,7 @@ def test_save_election_again_within_five_minutes_updates_email(fake_email_manage
             json={**DEFAULT_ELECTION, "result_url": "wrong_result_url"},
             headers=get_auth_header(client, ADMIN),
         )
-    with travel("2026-06-06T10:04:59Z", tick=False):
+    with travel("2026-06-06T10:29:59Z", tick=False):
         result = client.post(
             "/api/v1/elections/save",
             json={**DEFAULT_ELECTION, "result_url": "correct_result_url"},
@@ -196,7 +196,7 @@ def test_save_election_again_within_five_minutes_updates_email(fake_email_manage
             body="election_updated body content\nInfor Matik\nresult_url: – → correct_result_url\n\nhttps://example.org/wahltermine/deadbeef",
             template_id="election_updated",
             created="2026-06-06T10:00:00+00:00",
-            not_before="2026-06-06T10:14:59+00:00",
+            not_before="2026-06-06T11:00:59+00:00",
             meta={
                 "key": "deadbeef",
                 "base": DEFAULT_ELECTION,
@@ -205,7 +205,7 @@ def test_save_election_again_within_five_minutes_updates_email(fake_email_manage
     ]
 
 
-def test_save_election_again_after_five_minutes_creates_new_email(fake_email_manager):
+def test_save_election_again_after_30_minutes_creates_new_email(fake_email_manager):
     setup_templates_and_data(client)
     with travel("2026-01-01T10:00:00Z", tick=False):
         result = client.post("/api/v1/elections/save", json=DEFAULT_ELECTION, headers=get_auth_header(client, ADMIN))
@@ -217,7 +217,7 @@ def test_save_election_again_after_five_minutes_creates_new_email(fake_email_man
             json={**DEFAULT_ELECTION, "result_url": "wrong_result_url"},
             headers=get_auth_header(client, ADMIN),
         )
-    with travel("2026-06-06T10:05:00Z", tick=False):
+    with travel("2026-06-06T10:30:00Z", tick=False):
         result = client.post(
             "/api/v1/elections/save",
             json={**DEFAULT_ELECTION, "result_url": "correct_result_url"},
@@ -230,8 +230,8 @@ def test_save_election_again_after_five_minutes_creates_new_email(fake_email_man
             subject="election_updated subject content",
             body="election_updated body content\nInfor Matik\nresult_url: wrong_result_url → correct_result_url\n\nhttps://example.org/wahltermine/deadbeef",
             template_id="election_updated",
-            created="2026-06-06T10:05:00+00:00",
-            not_before="2026-06-06T10:15:00+00:00",
+            created="2026-06-06T10:30:00+00:00",
+            not_before="2026-06-06T11:01:00+00:00",
             meta={
                 "key": "deadbeef",
                 "base": {**DEFAULT_ELECTION, "result_url": "wrong_result_url"},
@@ -243,7 +243,7 @@ def test_save_election_again_after_five_minutes_creates_new_email(fake_email_man
             body="election_updated body content\nInfor Matik\nresult_url: – → wrong_result_url\n\nhttps://example.org/wahltermine/deadbeef",
             template_id="election_updated",
             created="2026-06-06T10:00:00+00:00",
-            not_before="2026-06-06T10:10:00+00:00",
+            not_before="2026-06-06T10:31:00+00:00",
             meta={
                 "key": "deadbeef",
                 "base": DEFAULT_ELECTION,

@@ -242,7 +242,7 @@ def get_default_afsg_completion_deadline(semester: str) -> str:
 
 
 def get_default_bfsg_completion_deadline(today: str) -> str:
-    parsed_date = datetime.strptime(today, '%Y-%m-%d').date()  # noqa: DTZ007
+    parsed_date = datetime.strptime(today, '%Y-%m-%d').date()
     year = parsed_date.year
     month = parsed_date.month + 7
     day = 1
@@ -571,5 +571,5 @@ async def add_message_for_payout_request(
     message.timestamp = now
     session.add(message)
     session.commit()
-    template_id = "admin_message_for_payout_request" if current_user.admin else "user_message_for_payout_request"
+    template_id = "admin_message_for_payout_request" if current_user.admin else "payout_request_updated"
     emails.message_added(template_id=template_id, payout_request=payout_request, message=message, session=session)

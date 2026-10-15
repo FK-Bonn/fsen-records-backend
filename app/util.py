@@ -2,7 +2,7 @@ import hashlib
 import json
 import re
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any, BinaryIO
 from zoneinfo import ZoneInfo
 
@@ -10,7 +10,7 @@ from fastapi.encoders import jsonable_encoder
 
 
 def ts() -> str:
-    return datetime.now(tz=timezone.utc).isoformat()
+    return datetime.now(tz=UTC).isoformat()
 
 
 def get_europe_berlin_date() -> str:
@@ -30,7 +30,7 @@ class Now:
     berlin: TimeValues
 
     def __init__(self):
-        now = datetime.now(tz=timezone.utc)
+        now = datetime.now(tz=UTC)
         self.unixtime = int(now.timestamp())
         self.utc = TimeValues(date=now.date().isoformat(), date_time=now.isoformat(), value=now)
         berlin = now.astimezone(ZoneInfo("Europe/Berlin"))

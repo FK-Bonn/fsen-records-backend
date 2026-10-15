@@ -758,15 +758,24 @@ def test_create_payout_request_creates_email(_type, fake_email_manager):
     assert fake_email_manager.get_outbox() == [
         QueuedEmailMessage(
             to=["informatik@example.org"],
-            subject="payout_request_created subject content",
-            body=f"""payout_request_created body content
+            subject="payout_request_updated subject content",
+            body=f"""payout_request_updated body content
 Infor Matik
+Der Antrag wurde gestellt
 {formatted}
 https://example.org/payout-request/{request_id}""",
-            template_id="payout_request_created",
+            template_id="payout_request_updated",
             created="2023-04-04T10:00:00+00:00",
-            not_before=None,
-            meta=None,
+            not_before="2023-04-04T10:31:00+00:00",
+            meta={
+                "key": request_id,
+                "base": [
+                    {
+                        "update_type": "payout_request_created",
+                        "data": base,
+                    }
+                ],
+            },
         ),
     ]
 
@@ -779,7 +788,7 @@ https://example.org/payout-request/{request_id}""",
         "vorankuendigung",
     ],
 )
-def test_save_payout_request_again_within_five_minutes_updates_email(_type, fake_email_manager):
+def test_save_payout_request_again_within_30_minutes_updates_email(_type, fake_email_manager):
     setup_templates_and_data(client)
     with travel("2023-04-04T10:00:00Z", tick=False):
         response = client.post(
@@ -798,7 +807,7 @@ def test_save_payout_request_again_within_five_minutes_updates_email(_type, fake
             headers=get_auth_header(client, ADMIN),
         )
     assert result.status_code == 200
-    with travel("2026-06-06T10:04:59Z", tick=False):
+    with travel("2026-06-06T10:29:59Z", tick=False):
         result = client.patch(
             f"/api/v1/payout-request/{_type}/{request_id}",
             json={**DEFAULT_PARAMETERS, "amount_cents": 99999},
@@ -813,8 +822,8 @@ def test_save_payout_request_again_within_five_minutes_updates_email(_type, fake
     assert fake_email_manager.get_outbox() == [
         QueuedEmailMessage(
             to=["informatik@example.org"],
-            subject="payout_request_updated subject content",
-            body=f"""payout_request_updated body content
+            subject="payout_request_modified subject content",
+            body=f"""payout_request_modified body content
 Infor Matik
 amount_cents: {old_amount_cents} → 99999
 comment: – → Endlich ist es fertig
@@ -824,9 +833,9 @@ status: {old_status} → VOLLSTÄNDIG
 status_date: 2023-04-04 → 2023-05-05
 
 https://example.org/payout-request/{request_id}""",
-            template_id="payout_request_updated",
+            template_id="payout_request_modified",
             created="2026-06-06T10:00:00+00:00",
-            not_before="2026-06-06T10:14:59+00:00",
+            not_before="2026-06-06T11:00:59+00:00",
             meta={
                 "key": request_id,
                 "base": base,
@@ -843,7 +852,7 @@ https://example.org/payout-request/{request_id}""",
         "vorankuendigung",
     ],
 )
-def test_save_election_again_after_five_minutes_creates_new_email(fake_email_manager, _type):
+def test_modify_payout_request_again_after_30_minutes_creates_new_email(fake_email_manager, _type):
     setup_templates_and_data(client)
     with travel("2023-04-04T10:00:00Z", tick=False):
         response = client.post(
@@ -862,7 +871,7 @@ def test_save_election_again_after_five_minutes_creates_new_email(fake_email_man
             headers=get_auth_header(client, ADMIN),
         )
     assert result.status_code == 200
-    with travel("2026-06-06T10:05:00Z", tick=False):
+    with travel("2026-06-06T10:30:00Z", tick=False):
         result = client.patch(
             f"/api/v1/payout-request/{_type}/{request_id}",
             json={**DEFAULT_PARAMETERS, "amount_cents": 99999},
@@ -877,23 +886,23 @@ def test_save_election_again_after_five_minutes_creates_new_email(fake_email_man
     assert fake_email_manager.get_outbox() == [
         QueuedEmailMessage(
             to=["informatik@example.org"],
-            subject="payout_request_updated subject content",
-            body=f"""payout_request_updated body content
+            subject="payout_request_modified subject content",
+            body=f"""payout_request_modified body content
 Infor Matik
 amount_cents: 100000 → 99999
 
 https://example.org/payout-request/{request_id}""",
-            template_id="payout_request_updated",
-            created="2026-06-06T10:05:00+00:00",
-            not_before="2026-06-06T10:15:00+00:00",
+            template_id="payout_request_modified",
+            created="2026-06-06T10:30:00+00:00",
+            not_before="2026-06-06T11:01:00+00:00",
             meta={
                 "key": request_id,
                 "base": {**base, **DEFAULT_PARAMETERS},
             },
         ),QueuedEmailMessage(
             to=["informatik@example.org"],
-            subject="payout_request_updated subject content",
-            body=f"""payout_request_updated body content
+            subject="payout_request_modified subject content",
+            body=f"""payout_request_modified body content
 Infor Matik
 amount_cents: {old_amount_cents} → 100000
 comment: – → Endlich ist es fertig
@@ -903,9 +912,9 @@ status: {old_status} → VOLLSTÄNDIG
 status_date: 2023-04-04 → 2023-05-05
 
 https://example.org/payout-request/{request_id}""",
-            template_id="payout_request_updated",
+            template_id="payout_request_modified",
             created="2026-06-06T10:00:00+00:00",
-            not_before="2026-06-06T10:10:00+00:00",
+            not_before="2026-06-06T10:31:00+00:00",
             meta={
                 "key": request_id,
                 "base": base,
@@ -928,15 +937,18 @@ def test_missing_template_results_in_default_error_template(_type, fake_email_ma
             f"/api/v1/payout-request/{_type}/create", json=CREATE_PARAMS[_type], headers=get_auth_header(client, ADMIN)
         )
     assert result.status_code == 200
+    created_payout_request = CREATED_PAYOUT_REQUEST[_type]
+    base = {k: v for k, v in created_payout_request.items() if
+           k not in ("requester", "last_modified_timestamp", "last_modified_by")}
     assert fake_email_manager.get_outbox() == [
         QueuedEmailMessage(
             to=["fsk@example.org"],
-            subject="Fehlendes E-Mail-Template: payout_request_created",
+            subject="Fehlendes E-Mail-Template: payout_request_updated",
             body="kwt",
-            template_id="payout_request_created",
+            template_id="payout_request_updated",
             created="2023-04-04T10:00:00+00:00",
-            not_before=None,
-            meta=None,
+            not_before="2023-04-04T10:31:00+00:00",
+            meta={"key": base["request_id"], "base": [{"update_type": "payout_request_created", "data": base}]},
         ),
     ]
 
@@ -994,16 +1006,17 @@ def test_add_message_as_user_spawns_email(_type, request_id, fake_email_manager)
     assert fake_email_manager.get_outbox() == [
         QueuedEmailMessage(
             to=["informatik@example.org"],
-            subject="user_message_for_payout_request subject content",
-            body=f"""user_message_for_payout_request body content
+            subject="payout_request_updated subject content",
+            body=f"""payout_request_updated body content
 Infor Matik
+Eine Nachricht wurde hinterlassen:
 Hi back!
 omg
 https://example.org/payout-request/{request_id}""",
-            template_id="user_message_for_payout_request",
+            template_id="payout_request_updated",
             created="2026-06-06T10:00:00+00:00",
-            not_before=None,
-            meta=None,
+            not_before="2026-06-06T10:31:00+00:00",
+            meta={"key": request_id, "base": [{"update_type": "message_added", "data": {"message": "Hi back!\nomg"}}]},
         ),
     ]
 
