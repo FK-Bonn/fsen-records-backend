@@ -78,11 +78,11 @@ class PublicPayoutRequest(PayoutRequestForCreation):
     request_date: str
     completion_deadline: str
     reference: str | None
+    last_modified_timestamp: str
 
 
 class PayoutRequestData(PublicPayoutRequest):
     requester: str | None = None
-    last_modified_timestamp: str | None = None
     last_modified_by: str | None = None
 
 
@@ -321,8 +321,7 @@ async def list_requests(_type: PayoutRequestType, session: SessionDep,
     if current_user and is_admin(current_user.username, session):
         return data
     else:
-        return [PublicPayoutRequest(**item.__dict__) for item in data]
-
+        return truncate_last_modified([PublicPayoutRequest(**item.__dict__) for item in data])
 
 @router.get("/{_type}/{limit_date}", response_model=list[PayoutRequestData])
 async def list_requests_before_date(_type: PayoutRequestType, limit_date: date, session: SessionDep,
@@ -337,7 +336,7 @@ async def list_requests_before_date(_type: PayoutRequestType, limit_date: date, 
     if current_user and is_admin(current_user.username, session):
         return data
     else:
-        return [PublicPayoutRequest(**item.__dict__) for item in data]
+        return truncate_last_modified([PublicPayoutRequest(**item.__dict__) for item in data])
 
 
 @router.post("/afsg/create", response_model=PayoutRequestData)
@@ -516,7 +515,7 @@ async def get_request_history(_type: PayoutRequestType, request_id: str, session
         )
     if current_user and is_admin(current_user.username, session):
         return payout_request_history
-    return [PublicPayoutRequest(**item.__dict__) for item in payout_request_history]
+    return truncate_last_modified([PublicPayoutRequest(**item.__dict__) for item in payout_request_history])
 
 @router.get("/{_type}/{request_id}/messages", response_model=list[MessageData])
 async def get_messages_for_payout_request(
@@ -573,3 +572,9 @@ async def add_message_for_payout_request(
     session.commit()
     template_id = "admin_message_for_payout_request" if current_user.admin else "payout_request_updated"
     emails.message_added(template_id=template_id, payout_request=payout_request, message=message, session=session)
+
+
+def truncate_last_modified(items: list[PublicPayoutRequest]) -> list[PublicPayoutRequest]:
+    for item in items:
+        item.last_modified_timestamp = item.last_modified_timestamp[:10]
+    return items

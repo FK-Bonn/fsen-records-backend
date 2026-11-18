@@ -52,7 +52,7 @@ SAMPLE_PAYOUT_REQUEST: dict[str, dict[str, str | int | None]] = {
         'completion_deadline': '2025-03-31',
         'reference': None,
         'last_modified_by': None,
-        'last_modified_timestamp': None,
+        'last_modified_timestamp': '2023-01-07',
         'requester': None,
     },
     'bfsg': {
@@ -69,7 +69,7 @@ SAMPLE_PAYOUT_REQUEST: dict[str, dict[str, str | int | None]] = {
         'completion_deadline': '2023-07-07',
         'reference': None,
         'last_modified_by': None,
-        'last_modified_timestamp': None,
+        'last_modified_timestamp': '2023-01-07',
         'requester': None,
     },
     'vorankuendigung': {
@@ -86,7 +86,7 @@ SAMPLE_PAYOUT_REQUEST: dict[str, dict[str, str | int | None]] = {
         'completion_deadline': '',
         'reference': None,
         'last_modified_by': None,
-        'last_modified_timestamp': None,
+        'last_modified_timestamp': '2023-01-07',
         'requester': None,
     }
 }
@@ -619,6 +619,7 @@ def test_get_payout_request_history_no_admin(username: str | None, _type, reques
         {
             **SAMPLE_PAYOUT_REQUEST[_type],
             **DEFAULT_PARAMETERS,
+            "last_modified_timestamp": "2023-04-04",
         },
         SAMPLE_PAYOUT_REQUEST[_type],
     ]
@@ -663,7 +664,7 @@ def test_get_payout_request_with_date_filter(_type, fake_email_manager):
         {
             **CREATED_PAYOUT_REQUEST[_type],
             'last_modified_by': None,
-            'last_modified_timestamp': None,
+            'last_modified_timestamp': '2023-04-04',
             'requester': None,
         }
     ]
